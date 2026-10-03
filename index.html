@@ -43,9 +43,9 @@
     <div id="root">
       <!-- Static copy of the landing page, for crawlers that don't run scripts and for
            first paint. React replaces everything inside #root on mount. Keep the wording
-           in sync with Header.tsx, EmptyState.tsx and the help section of PreviewState.tsx. -->
+           in sync with Header.tsx, EmptyState.tsx and src/lib/printerTips.ts. -->
       <div class="app" style="--ink: #1e3a5f">
-        <div class="no-print" style="min-height: 100vh">
+        <div class="no-print">
           <header class="header">
             <div class="brand">
               <div class="brand-square" aria-hidden="true"></div>
@@ -74,23 +74,25 @@
                 Your file never leaves your device — everything happens in your browser.
               </span>
             </div>
+            <details class="printer-tips">
+              <summary>For HP, Epson, Canon and most other color printers · <span class="printer-tips-link">Printer still refusing? See tips</span></summary>
+              <dl class="printer-tips-list">
+                <div>
+                  <dt>HP</dt>
+                  <dd>HP printers may block printing when any cartridge reads empty. In the HP Smart app, set the black cartridge to “ignore,” or look for ink backup mode.</dd>
+                </div>
+                <div>
+                  <dt>Epson</dt>
+                  <dd>Press and hold Stop/Cancel while the ink light is on to print in backup mode (varies by model).</dd>
+                </div>
+                <div>
+                  <dt>Canon</dt>
+                  <dd>Press and hold Stop for 5+ seconds to disable the ink level check.</dd>
+                </div>
+              </dl>
+            </details>
           </div>
         </div>
-        <section class="static-help">
-          <h2>If it still won't print</h2>
-          <h3>HP</h3>
-          <p>
-            HP printers may block printing when any cartridge reads empty. In the HP Smart app,
-            set the black cartridge to “ignore,” or look for ink backup mode.
-          </p>
-          <h3>Epson</h3>
-          <p>
-            Press and hold Stop/Cancel while the ink light is on to print in backup mode (varies
-            by model).
-          </p>
-          <h3>Canon</h3>
-          <p>Press and hold Stop for 5+ seconds to disable the ink level check.</p>
-        </section>
       </div>
     </div>
     <script type="module" src="/src/main.tsx"></script>

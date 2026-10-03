@@ -260,6 +260,52 @@ button {
   color: var(--ink-50);
 }
 
+/* One quiet line under the privacy note; opens to the per-brand tips. */
+.printer-tips {
+  padding-top: 8px;
+  font-size: 12.5px;
+  color: var(--ink-50);
+  text-align: center;
+}
+
+.printer-tips summary {
+  list-style: none;
+  cursor: pointer;
+}
+
+.printer-tips summary::-webkit-details-marker {
+  display: none;
+}
+
+.printer-tips-link {
+  white-space: nowrap;
+  color: var(--ink);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.printer-tips-list {
+  margin: 14px auto 0;
+  max-width: 540px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  text-align: left;
+}
+
+.printer-tips-list dt {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.printer-tips-list dd {
+  margin: 2px 0 0;
+  line-height: 1.5;
+  color: var(--ink-65);
+}
+
 .error-card {
   background: #ffffff;
   border: 2px solid var(--ink);
@@ -619,37 +665,6 @@ button {
   line-height: 1.5;
   color: var(--ink-65);
   padding-top: 6px;
-}
-
-/* ---------- Static fallback (index.html) ---------- */
-
-/* Printer tips repeated below the fold in index.html's static copy, so crawlers
-   that don't run scripts can read them. React removes the block on mount. */
-.static-help {
-  padding: 26px 26px 36px;
-  border-top: 1px solid var(--ink-18);
-}
-
-.static-help h2 {
-  margin: 0 0 8px;
-  font-size: 19px;
-  font-weight: 800;
-  color: var(--ink);
-}
-
-.static-help h3 {
-  margin: 14px 0 4px;
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--ink);
-}
-
-.static-help p {
-  margin: 0;
-  max-width: 540px;
-  font-size: 12.5px;
-  line-height: 1.5;
-  color: var(--ink-65);
 }
 
 /* ---------- Print reminder overlay ---------- */

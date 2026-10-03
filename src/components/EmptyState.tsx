@@ -1,3 +1,4 @@
+import { PRINTER_TIPS } from '../lib/printerTips';
 import { DropZone } from './DropZone';
 
 interface Props {
@@ -26,6 +27,20 @@ export function EmptyState({ onFile, onChoose }: Props) {
           Your file never leaves your device — everything happens in your browser.
         </span>
       </div>
+      <details className="printer-tips">
+        <summary>
+          For HP, Epson, Canon and most other color printers ·{' '}
+          <span className="printer-tips-link">Printer still refusing? See tips</span>
+        </summary>
+        <dl className="printer-tips-list">
+          {PRINTER_TIPS.map((t) => (
+            <div key={t.brand}>
+              <dt>{t.brand}</dt>
+              <dd>{t.tip}</dd>
+            </div>
+          ))}
+        </dl>
+      </details>
     </div>
   );
 }

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { INKS } from '../lib/inks';
+import { PRINTER_TIPS } from '../lib/printerTips';
 import { PageCanvas } from './PageCanvas';
 import { PrintReminder } from './PrintReminder';
 
@@ -217,26 +218,12 @@ export function PreviewState({
 
           <div className="help-section">
             <div className="side-label">If it still won't print</div>
-            <details className="help-item" open>
-              <summary>HP</summary>
-              <div className="help-body">
-                HP printers may block printing when any cartridge reads empty. In the HP Smart
-                app, set the black cartridge to “ignore,” or look for ink backup mode.
-              </div>
-            </details>
-            <details className="help-item">
-              <summary>Epson</summary>
-              <div className="help-body">
-                Press and hold Stop/Cancel while the ink light is on to print in backup mode
-                (varies by model).
-              </div>
-            </details>
-            <details className="help-item">
-              <summary>Canon</summary>
-              <div className="help-body">
-                Press and hold Stop for 5+ seconds to disable the ink level check.
-              </div>
-            </details>
+            {PRINTER_TIPS.map((t, i) => (
+              <details className="help-item" key={t.brand} open={i === 0}>
+                <summary>{t.brand}</summary>
+                <div className="help-body">{t.tip}</div>
+              </details>
+            ))}
           </div>
         </aside>
       </div>
