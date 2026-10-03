@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://courier6.github.io/PrintAnywayApp/sitemap.xml
+Sitemap: https://printanyway.app/sitemap.xml
