@@ -13,3 +13,6 @@ printanything-design-brief.md
 printanything-design-brief-v2.md
 design_handoff_printanything-new/
 .claude/
+
+# Local DNS zone files for manual import
+dns/
