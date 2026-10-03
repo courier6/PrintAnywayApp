@@ -13,7 +13,14 @@
       property="og:description"
       content="PrintAnyway App re-inks your PDF or photo in a dark color your printer can still print. Free and private — files never leave your browser."
     />
-    <meta name="twitter:card" content="summary" />
+    <meta property="og:image" content="https://printanyway.app/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta
+      property="og:image:alt"
+      content="PrintAnyway App: a page printed in black ink next to the same page re-inked in dark navy."
+    />
+    <meta name="twitter:card" content="summary_large_image" />
     <script type="application/ld+json">
       {
         "@context": "https://schema.org",
@@ -33,7 +40,59 @@
     />
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <!-- Static copy of the landing page, for crawlers that don't run scripts and for
+           first paint. React replaces everything inside #root on mount. Keep the wording
+           in sync with Header.tsx, EmptyState.tsx and the help section of PreviewState.tsx. -->
+      <div class="app" style="--ink: #1e3a5f">
+        <div class="no-print" style="min-height: 100vh">
+          <header class="header">
+            <div class="brand">
+              <div class="brand-square" aria-hidden="true"></div>
+              <span class="wordmark">PrintAnyway App</span>
+              <span class="tagline">&thinsp;&mdash; even when the black runs out.</span>
+            </div>
+            <span class="header-formats">Works with PDF · PNG · JPG · HEIC</span>
+          </header>
+          <div class="state-pad">
+            <div class="drop-zone">
+              <h1 class="hero-headline">Out of black ink? Drop your document here.</h1>
+              <p class="hero-subline">
+                It gets re-inked in a dark color your printer can still print — every page, every
+                photo, still readable.
+              </p>
+              <div class="hero-actions">
+                <button class="btn-primary" type="button">Choose a file</button>
+                <span class="hero-formats">PDF, PNG, JPG, or HEIC</span>
+              </div>
+              <noscript>
+                <p class="hero-subline">PrintAnyway App needs JavaScript to open your file.</p>
+              </noscript>
+            </div>
+            <div class="below-zone">
+              <span class="privacy-line">
+                Your file never leaves your device — everything happens in your browser.
+              </span>
+            </div>
+          </div>
+        </div>
+        <section class="static-help">
+          <h2>If it still won't print</h2>
+          <h3>HP</h3>
+          <p>
+            HP printers may block printing when any cartridge reads empty. In the HP Smart app,
+            set the black cartridge to “ignore,” or look for ink backup mode.
+          </p>
+          <h3>Epson</h3>
+          <p>
+            Press and hold Stop/Cancel while the ink light is on to print in backup mode (varies
+            by model).
+          </p>
+          <h3>Canon</h3>
+          <p>Press and hold Stop for 5+ seconds to disable the ink level check.</p>
+        </section>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

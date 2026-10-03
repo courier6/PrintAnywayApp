@@ -621,6 +621,37 @@ button {
   padding-top: 6px;
 }
 
+/* ---------- Static fallback (index.html) ---------- */
+
+/* Printer tips repeated below the fold in index.html's static copy, so crawlers
+   that don't run scripts can read them. React removes the block on mount. */
+.static-help {
+  padding: 26px 26px 36px;
+  border-top: 1px solid var(--ink-18);
+}
+
+.static-help h2 {
+  margin: 0 0 8px;
+  font-size: 19px;
+  font-weight: 800;
+  color: var(--ink);
+}
+
+.static-help h3 {
+  margin: 14px 0 4px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.static-help p {
+  margin: 0;
+  max-width: 540px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--ink-65);
+}
+
 /* ---------- Print reminder overlay ---------- */
 
 .print-reminder {

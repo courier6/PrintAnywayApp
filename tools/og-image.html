@@ -1,0 +1,193 @@
+<!doctype html>
+<!-- Source for public/og-image.png, the link-preview card (1200x630).
+     To regenerate: open this file in a browser window sized 1200x630 and take a
+     full-viewport screenshot, or render it with a headless browser at that size.
+     Colors and type follow src/app.css. -->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>PrintAnyway App — share card</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        --ink: #1e3a5f;
+        --ink-70: color-mix(in oklab, var(--ink) 70%, white);
+        --ink-55: color-mix(in oklab, var(--ink) 55%, white);
+        --ink-38: color-mix(in oklab, var(--ink) 38%, white);
+        --ink-18: color-mix(in oklab, var(--ink) 18%, white);
+        --ink-4: color-mix(in oklab, var(--ink) 4%, white);
+        margin: 0;
+        width: 1200px;
+        height: 630px;
+        overflow: hidden;
+        background: var(--ink-4);
+        color: var(--ink);
+        font-family: Helvetica, Arial, sans-serif;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      .card {
+        position: absolute;
+        inset: 24px;
+        border: 3px dashed var(--ink-38);
+        display: flex;
+        align-items: center;
+        gap: 36px;
+        padding: 0 48px;
+      }
+
+      .copy {
+        flex: 1;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 26px;
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        font-size: 30px;
+        font-weight: 800;
+        letter-spacing: -0.4px;
+      }
+
+      .brand-square {
+        width: 22px;
+        height: 22px;
+        background: var(--ink);
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 72px;
+        font-weight: 800;
+        letter-spacing: -1.6px;
+        line-height: 1.08;
+        white-space: nowrap;
+      }
+
+      .sub {
+        margin: 0;
+        font-size: 28px;
+        line-height: 1.35;
+        color: var(--ink-70);
+        max-width: 520px;
+      }
+
+      .meta {
+        font: 700 17px ui-monospace, Menlo, monospace;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: var(--ink-55);
+      }
+
+      .pages {
+        flex: none;
+        display: flex;
+        align-items: center;
+        gap: 14px;
+      }
+
+      .page-col {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 14px;
+      }
+
+      .caption {
+        font: 700 14px ui-monospace, Menlo, monospace;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: var(--ink-55);
+      }
+
+      .page {
+        --c: #1a1a1a;
+        width: 184px;
+        height: 240px;
+        background: #ffffff;
+        box-shadow: 0 12px 36px rgba(20, 30, 50, 0.15);
+        padding: 22px 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 9px;
+      }
+
+      .page.after {
+        --c: var(--ink);
+      }
+
+      .bar {
+        height: 6px;
+        background: color-mix(in oklab, var(--c) 78%, white);
+      }
+
+      .bar.title {
+        height: 15px;
+        width: 72%;
+        background: var(--c);
+        margin-bottom: 6px;
+      }
+
+      .block {
+        height: 62px;
+        margin: 6px 0;
+        background: var(--c);
+      }
+
+      .arrow {
+        font-size: 44px;
+        font-weight: 800;
+        line-height: 1;
+        margin-top: -28px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <div class="copy">
+        <div class="brand"><div class="brand-square"></div>PrintAnyway App</div>
+        <h1>Out of black ink?<br />Print anyway.</h1>
+        <p class="sub">Re-ink any PDF or photo in a dark color your printer can still print.</p>
+        <div class="meta">Free · Private · In your browser</div>
+      </div>
+      <div class="pages">
+        <div class="page-col">
+          <div class="page">
+            <div class="bar title"></div>
+            <div class="bar"></div>
+            <div class="bar" style="width: 92%"></div>
+            <div class="bar" style="width: 64%"></div>
+            <div class="block"></div>
+            <div class="bar"></div>
+            <div class="bar" style="width: 88%"></div>
+            <div class="bar" style="width: 95%"></div>
+            <div class="bar" style="width: 48%"></div>
+          </div>
+          <div class="caption">Black ink</div>
+        </div>
+        <div class="arrow">→</div>
+        <div class="page-col">
+          <div class="page after">
+            <div class="bar title"></div>
+            <div class="bar"></div>
+            <div class="bar" style="width: 92%"></div>
+            <div class="bar" style="width: 64%"></div>
+            <div class="block"></div>
+            <div class="bar"></div>
+            <div class="bar" style="width: 88%"></div>
+            <div class="bar" style="width: 95%"></div>
+            <div class="bar" style="width: 48%"></div>
+          </div>
+          <div class="caption">Re-inked</div>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
