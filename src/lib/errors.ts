@@ -55,7 +55,7 @@ export function classifyError(err: unknown): ErrorCode {
 export function logAppError(code: ErrorCode, err: unknown, file: File | null): void {
   const shaped = err as { name?: unknown; message?: unknown } | null;
   console.error(
-    '[PrintAnything]',
+    '[PrintAnyway App]',
     {
       code,
       errorName: typeof shaped?.name === 'string' ? shaped.name : typeof err,

@@ -22,7 +22,7 @@ interface Props {
 const COPY: Record<ErrorKind, { title: string; body: string; retry: boolean }> = {
   unsupported: {
     title: "This file type isn't supported yet.",
-    body: 'PrintAnything works with PDF, PNG, JPG, and HEIC (iPhone photos).',
+    body: 'PrintAnyway App works with PDF, PNG, JPG, and HEIC (iPhone photos).',
     retry: false,
   },
   password: {
