@@ -1,9 +1,18 @@
 import { createElement, Fragment, type ReactNode } from 'react';
-import en from './en.properties';
+import { DEFAULT_LOCALE, LOCALES } from './locales';
 
-// Only English for now; later, pick by navigator.language with English fallback.
-const strings = en;
-const plural = new Intl.PluralRules('en');
+// Every <code>.properties file in this folder, keyed by path.
+const files = import.meta.glob<Record<string, string>>('./*.properties', {
+  eager: true,
+  import: 'default',
+});
+
+/** The page's locale. The build sets <html lang> on each locale's page. */
+export const locale =
+  LOCALES.find((l) => l.code === document.documentElement.lang) ?? DEFAULT_LOCALE;
+
+const strings = files[`./${locale.code}.properties`];
+const plural = new Intl.PluralRules(locale.code);
 
 type Params = Record<string, string | number>;
 

@@ -1,4 +1,5 @@
 import { t } from '../i18n';
+import { LanguageNav } from './LanguageNav';
 
 export function Header() {
   return (
@@ -9,7 +10,10 @@ export function Header() {
         {/*   = thin space; the tagline reads as a continuation of the wordmark */}
         <span className="tagline">{' '}{t('header.tagline')}</span>
       </div>
-      <span className="header-formats">{t('header.formats')}</span>
+      <div className="header-side">
+        <span className="header-formats">{t('header.formats')}</span>
+        <LanguageNav />
+      </div>
     </header>
   );
 }
