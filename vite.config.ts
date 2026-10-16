@@ -1,4 +1,5 @@
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defineConfig, type Plugin } from 'vite';
@@ -27,21 +28,60 @@ function placeholders(value: string): string {
   return [...value.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort().join(',');
 }
 
-/** Throws unless every translation has exactly the English keys and placeholders. */
+const PLURAL_FORM = /^(.+)\.(zero|one|two|few|many|other)$/;
+
+/**
+ * The plural forms a locale must translate: every CLDR category a whole
+ * number reaches (es/fr/pt "many" starts at 1,000,000, so it isn't required),
+ * plus "other", which tPlural falls back to.
+ */
+function requiredPluralForms(code: string): Set<string> {
+  const rules = new Intl.PluralRules(code);
+  const forms = new Set(['other']);
+  for (let n = 0; n <= 1000; n++) forms.add(rules.select(n));
+  return forms;
+}
+
+/**
+ * Throws unless every locale file (English included) has the English keys
+ * with the same placeholders and no empty values. Plural keys (base.one,
+ * base.other, …) follow each locale's own CLDR categories instead.
+ */
 function validateLocales(): void {
   const en = loadStrings(DEFAULT_LOCALE);
+  // Plural bases: keys like preview.pages that have a .other form in English.
+  const pluralBases = new Set(
+    Object.keys(en).flatMap((key) => {
+      const m = PLURAL_FORM.exec(key);
+      return m && `${m[1]}.other` in en ? [m[1]] : [];
+    }),
+  );
+  const pluralBase = (key: string) => {
+    const m = PLURAL_FORM.exec(key);
+    return m && pluralBases.has(m[1]) ? { base: m[1], form: m[2] } : null;
+  };
   const problems: string[] = [];
   for (const locale of LOCALES) {
-    if (locale === DEFAULT_LOCALE) continue;
     const strings = loadStrings(locale);
+    const allowed = new Intl.PluralRules(locale.code).resolvedOptions().pluralCategories as string[];
     for (const key of Object.keys(en)) {
-      if (!(key in strings)) problems.push(`${locale.code}: missing "${key}"`);
-      else if (strings[key] === '') problems.push(`${locale.code}: empty "${key}"`);
-      else if (placeholders(strings[key]) !== placeholders(en[key]))
-        problems.push(`${locale.code}: "${key}" placeholders differ from English`);
+      if (!pluralBase(key) && !(key in strings)) problems.push(`${locale.code}: missing "${key}"`);
     }
-    for (const key of Object.keys(strings)) {
-      if (!(key in en)) problems.push(`${locale.code}: unknown key "${key}"`);
+    for (const base of pluralBases) {
+      for (const form of requiredPluralForms(locale.code)) {
+        if (!(`${base}.${form}` in strings)) problems.push(`${locale.code}: missing "${base}.${form}"`);
+      }
+    }
+    for (const [key, value] of Object.entries(strings)) {
+      const plural = pluralBase(key);
+      // Every plural form is checked against the English "other" form.
+      const english = plural ? en[`${plural.base}.other`] : en[key];
+      if (english === undefined) problems.push(`${locale.code}: unknown key "${key}"`);
+      else if (plural && !allowed.includes(plural.form))
+        problems.push(`${locale.code}: "${key}" is not a plural form of ${locale.code} (${allowed.join(', ')})`);
+      else if (value === '') problems.push(`${locale.code}: empty "${key}"`);
+      else if (placeholders(value) !== placeholders(english))
+        problems.push(`${locale.code}: "${key}" placeholders differ from English`);
     }
   }
   if (problems.length) throw new Error(`Translation check failed:\n  ${problems.join('\n  ')}`);
@@ -96,8 +136,26 @@ function renderHtml(html: string, locale: Locale, strings: Strings): string {
   });
 }
 
+/**
+ * The date a locale's page last changed: the newest commit touching index.html
+ * or its .properties file. Needs full git history (deploy.yml fetch-depth: 0);
+ * falls back to today without git.
+ */
+function lastModified(locale: Locale): string {
+  try {
+    const date = execFileSync(
+      'git',
+      ['log', '-1', '--format=%cs', '--', 'index.html', `src/i18n/${locale.code}.properties`],
+      { encoding: 'utf8' },
+    ).trim();
+    if (date) return date;
+  } catch {
+    // No git (e.g. a source tarball).
+  }
+  return new Date().toISOString().slice(0, 10);
+}
+
 function sitemap(): string {
-  const lastmod = new Date().toISOString().slice(0, 10);
   const alternates = [
     ...LOCALES.flatMap((l) => l.hreflang.map((h) => [h, absoluteUrl(l)])),
     ['x-default', absoluteUrl(DEFAULT_LOCALE)],
@@ -105,7 +163,7 @@ function sitemap(): string {
     .map(([h, href]) => `    <xhtml:link rel="alternate" hreflang="${h}" href="${href}"/>`)
     .join('\n');
   const urls = LOCALES.map(
-    (l) => `  <url>\n    <loc>${absoluteUrl(l)}</loc>\n    <lastmod>${lastmod}</lastmod>\n${alternates}\n  </url>`,
+    (l) => `  <url>\n    <loc>${absoluteUrl(l)}</loc>\n    <lastmod>${lastModified(l)}</lastmod>\n${alternates}\n  </url>`,
   );
   return `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">
@@ -151,9 +209,13 @@ function i18nPlugin(): Plugin {
       const locale = devLocale(ctx.originalUrl ?? ctx.path);
       return renderHtml(html, locale, loadStrings(locale));
     },
-    closeBundle() {
-      if (!isBuild) return;
-      const template = readFileSync(resolve(outDir, 'index.html'), 'utf8');
+    // Also called on failed builds (with the error) and when the dev server
+    // closes; only a finished build has a dist/index.html to copy.
+    closeBundle(error?: Error) {
+      if (!isBuild || error) return;
+      const file = resolve(outDir, 'index.html');
+      if (!existsSync(file)) throw new Error(`i18n: ${file} was not written`);
+      const template = readFileSync(file, 'utf8');
       for (const locale of LOCALES) {
         const dir = resolve(outDir, locale.path);
         mkdirSync(dir, { recursive: true });
