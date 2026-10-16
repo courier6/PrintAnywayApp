@@ -4,6 +4,7 @@ import { EmptyState } from './components/EmptyState';
 import { ProcessingState } from './components/ProcessingState';
 import { PreviewState } from './components/PreviewState';
 import { ErrorState, type ErrorKind } from './components/ErrorState';
+import { t } from './i18n';
 import { INKS } from './lib/inks';
 import { loadDocument } from './lib/loadDocument';
 import { classifyError, logAppError, type ErrorCode } from './lib/errors';
@@ -271,11 +272,10 @@ export default function App() {
         {dragging && appState !== 'empty' && (
           <div className="drag-overlay">
             <div className="drag-overlay-frame" aria-hidden="true" />
-            <div className="drag-overlay-headline">Drop to replace {fileName}</div>
-            <div className="drag-overlay-subline">
-              The new file gets re-inked right away — your current file stays safe on your
-              device.
+            <div className="drag-overlay-headline">
+              {t('dragOverlay.headline', { fileName })}
             </div>
+            <div className="drag-overlay-subline">{t('dragOverlay.subline')}</div>
           </div>
         )}
       </div>

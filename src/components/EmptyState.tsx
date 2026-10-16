@@ -1,3 +1,4 @@
+import { t } from '../i18n';
 import { PRINTER_TIPS } from '../lib/printerTips';
 import { DropZone } from './DropZone';
 
@@ -10,33 +11,28 @@ export function EmptyState({ onFile, onChoose }: Props) {
   return (
     <div className="state-pad">
       <DropZone onFile={onFile} onChoose={onChoose}>
-        <h1 className="hero-headline">Out of black ink? Drop your document here.</h1>
-        <p className="hero-subline">
-          It gets re-inked in a dark color your printer can still print — every page, every
-          photo, still readable.
-        </p>
+        <h1 className="hero-headline">{t('empty.headline')}</h1>
+        <p className="hero-subline">{t('empty.subline')}</p>
         <div className="hero-actions">
           <button className="btn-primary" onClick={onChoose}>
-            Choose a file
+            {t('empty.choose')}
           </button>
-          <span className="hero-formats">PDF, PNG, JPG, or HEIC</span>
+          <span className="hero-formats">{t('empty.formats')}</span>
         </div>
       </DropZone>
       <div className="below-zone">
-        <span className="privacy-line">
-          Your file never leaves your device — everything happens in your browser.
-        </span>
+        <span className="privacy-line">{t('empty.privacy')}</span>
       </div>
       <details className="printer-tips">
         <summary>
-          For HP, Epson, Canon and most other color printers ·{' '}
-          <span className="printer-tips-link">Printer still refusing? See tips</span>
+          {t('empty.tipsLead')}{' '}
+          <span className="printer-tips-link">{t('empty.tipsLink')}</span>
         </summary>
         <dl className="printer-tips-list">
-          {PRINTER_TIPS.map((t) => (
-            <div key={t.brand}>
-              <dt>{t.brand}</dt>
-              <dd>{t.tip}</dd>
+          {PRINTER_TIPS.map((tip) => (
+            <div key={tip.brand}>
+              <dt>{tip.brand}</dt>
+              <dd>{t(tip.tipKey)}</dd>
             </div>
           ))}
         </dl>

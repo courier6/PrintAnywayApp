@@ -1,3 +1,5 @@
+import { t } from '../i18n';
+
 export function Header() {
   return (
     <header className="header">
@@ -5,9 +7,9 @@ export function Header() {
         <div className="brand-square" aria-hidden="true" />
         <span className="wordmark">PrintAnyway App</span>
         {/*   = thin space; the tagline reads as a continuation of the wordmark */}
-        <span className="tagline">{' '}&mdash; even when the black runs out.</span>
+        <span className="tagline">{' '}{t('header.tagline')}</span>
       </div>
-      <span className="header-formats">Works with PDF · PNG · JPG · HEIC</span>
+      <span className="header-formats">{t('header.formats')}</span>
     </header>
   );
 }

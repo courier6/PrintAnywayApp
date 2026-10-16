@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { t, tPlural } from '../i18n';
 import { INKS } from '../lib/inks';
 import { PRINTER_TIPS } from '../lib/printerTips';
 import { PageCanvas } from './PageCanvas';
@@ -94,27 +95,27 @@ export function PreviewState({
       <div className="toolbar">
         <div className="toolbar-file">
           <span className="file-chip">
-            {fileName} · {pageCount} {pageCount === 1 ? 'page' : 'pages'}
+            {fileName} · {tPlural('preview.pages', pageCount)}
           </span>
           <button className="btn-text" onClick={onChooseFile}>
-            Choose a different file
+            {t('preview.chooseDifferent')}
           </button>
         </div>
         <div className="pager">
           <button
             className="pager-btn"
-            aria-label="Previous page"
+            aria-label={t('preview.prevPage')}
             disabled={currentPage === 0}
             onClick={() => onPageChange(currentPage - 1)}
           >
             ‹
           </button>
           <span className="pager-label">
-            Page {currentPage + 1} of {pageCount}
+            {t('preview.pageOf', { page: currentPage + 1, total: pageCount })}
           </span>
           <button
             className="pager-btn"
-            aria-label="Next page"
+            aria-label={t('preview.nextPage')}
             disabled={currentPage >= pageCount - 1}
             onClick={() => onPageChange(currentPage + 1)}
           >
@@ -130,10 +131,10 @@ export function PreviewState({
             onClick={onDownload}
             disabled={busy !== null}
           >
-            {busy === 'download' ? 'Preparing…' : 'Download PDF'}
+            {busy === 'download' ? t('preview.preparing') : t('preview.download')}
           </button>
           <button className="btn-primary toolbar-print" onClick={onPrint} disabled={busy !== null}>
-            Print
+            {t('preview.print')}
           </button>
         </div>
       </div>
@@ -147,10 +148,10 @@ export function PreviewState({
             style={justInked && !holding ? { color: inkHex } : undefined}
           >
             {holding
-              ? 'Original — black ink'
+              ? t('preview.captionOriginal')
               : justInked
-                ? `✓ Re-inked in ${INKS[inkIndex].name} — ready to print or download`
-                : 'Re-inked preview — what will print'}
+                ? t('preview.captionInked', { ink: t(INKS[inkIndex].nameKey) })
+                : t('preview.captionDefault')}
           </span>
           {pageReady ? (
             <div className="page-stack">
@@ -164,7 +165,7 @@ export function PreviewState({
               )}
             </div>
           ) : (
-            <div className="page-placeholder">Recoloring this page…</div>
+            <div className="page-placeholder">{t('preview.recoloringPage')}</div>
           )}
           <button
             className="pill-btn"
@@ -182,20 +183,20 @@ export function PreviewState({
             onBlur={() => onHoldChange(false)}
             onContextMenu={(e) => e.preventDefault()}
           >
-            Press and hold to see the original
+            {t('preview.hold')}
           </button>
         </div>
 
         <aside className="sidebar">
           <div>
-            <div className="side-label">Ink color</div>
+            <div className="side-label">{t('preview.inkLabel')}</div>
             <div className="swatch-row">
               {INKS.map((ink, i) => (
                 <button
                   key={ink.hex}
                   className="swatch"
-                  aria-label={ink.name}
-                  title={ink.name}
+                  aria-label={t(ink.nameKey)}
+                  title={t(ink.nameKey)}
                   aria-pressed={i === inkIndex}
                   style={{
                     background: ink.hex,
@@ -208,20 +209,17 @@ export function PreviewState({
                 />
               ))}
             </div>
-            <div className="ink-name">{INKS[inkIndex].name}</div>
+            <div className="ink-name">{t(INKS[inkIndex].nameKey)}</div>
           </div>
 
-          <p className="side-note">
-            Colored content becomes one ink — a red line and a green line of the same darkness
-            will look the same.
-          </p>
+          <p className="side-note">{t('preview.sideNote')}</p>
 
           <div className="help-section">
-            <div className="side-label">If it still won't print</div>
-            {PRINTER_TIPS.map((t, i) => (
-              <details className="help-item" key={t.brand} open={i === 0}>
-                <summary>{t.brand}</summary>
-                <div className="help-body">{t.tip}</div>
+            <div className="side-label">{t('preview.helpLabel')}</div>
+            {PRINTER_TIPS.map((tip, i) => (
+              <details className="help-item" key={tip.brand} open={i === 0}>
+                <summary>{tip.brand}</summary>
+                <div className="help-body">{t(tip.tipKey)}</div>
               </details>
             ))}
           </div>

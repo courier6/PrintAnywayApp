@@ -1,3 +1,4 @@
+import { t } from '../i18n';
 import { useState, type DragEvent, type KeyboardEvent, type ReactNode } from 'react';
 
 interface Props {
@@ -28,7 +29,7 @@ export function DropZone({ onFile, onChoose, children }: Props) {
     <div
       className={'drop-zone' + (dragOver ? ' drag-over' : '')}
       tabIndex={0}
-      aria-label="Drop your document here, or press Enter to choose a file"
+      aria-label={t('dropZone.ariaLabel')}
       onDragOver={(e) => {
         e.preventDefault();
         setDragOver(true);

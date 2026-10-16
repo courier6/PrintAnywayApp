@@ -1,3 +1,4 @@
+import { t } from '../i18n';
 import { PageCanvas } from './PageCanvas';
 
 interface Props {
@@ -10,10 +11,10 @@ export function ProcessingState({ firstPage, done, total }: Props) {
   const pct = total > 0 ? Math.max(4, Math.round((done / total) * 100)) : 4;
   const label =
     total === 0
-      ? 'Reading your file…'
+      ? t('processing.reading')
       : done >= total
-        ? 'Finishing up…'
-        : `Recoloring page ${done + 1} of ${total}…`;
+        ? t('processing.finishing')
+        : t('processing.page', { page: done + 1, total });
 
   return (
     <div className="processing-area">
@@ -24,7 +25,7 @@ export function ProcessingState({ firstPage, done, total }: Props) {
         </div>
         <div className="progress-label">{label}</div>
         {firstPage && (
-          <div className="progress-sub">Here's your first page while the rest finish.</div>
+          <div className="progress-sub">{t('processing.firstPage')}</div>
         )}
       </div>
     </div>
