@@ -106,6 +106,20 @@ export default function App() {
     };
   }, []);
 
+  // While a document is loaded, a refresh or tab close asks first: the file
+  // lives only in memory, so leaving drops it. The browser shows its own
+  // wording. iOS Safari never fires beforeunload, so this covers desktop only.
+  const hasDocument = appState === 'processing' || appState === 'preview';
+  useEffect(() => {
+    if (!hasDocument) return;
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = ''; // Safari and older Chrome need returnValue set
+    };
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => window.removeEventListener('beforeunload', onBeforeUnload);
+  }, [hasDocument]);
+
   function openPicker() {
     fileInput.current?.click();
   }
