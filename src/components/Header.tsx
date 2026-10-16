@@ -11,8 +11,8 @@ export function Header() {
         <span className="tagline">{' '}{t('header.tagline')}</span>
       </div>
       <div className="header-side">
-        <span className="header-formats">{t('header.formats')}</span>
         <LanguageNav />
+        <span className="header-formats">{t('header.formats')}</span>
       </div>
     </header>
   );
