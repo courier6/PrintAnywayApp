@@ -23,6 +23,10 @@ export const LOCALES: readonly Locale[] = [
   { code: 'pt-BR', path: 'pt-br', hreflang: ['pt-BR', 'pt'], ogLocale: 'pt_BR', name: 'Português' },
   { code: 'fr', path: 'fr', hreflang: ['fr'], ogLocale: 'fr_FR', name: 'Français' },
   { code: 'de', path: 'de', hreflang: ['de'], ogLocale: 'de_DE', name: 'Deutsch' },
+  { code: 'it', path: 'it', hreflang: ['it'], ogLocale: 'it_IT', name: 'Italiano' },
+  { code: 'ja', path: 'ja', hreflang: ['ja'], ogLocale: 'ja_JP', name: '日本語' },
+  { code: 'ru', path: 'ru', hreflang: ['ru'], ogLocale: 'ru_RU', name: 'Русский' },
+  { code: 'zh-CN', path: 'zh-cn', hreflang: ['zh-CN', 'zh-Hans'], ogLocale: 'zh_CN', name: '简体中文' },
 ];
 
 export const DEFAULT_LOCALE = LOCALES[0];
