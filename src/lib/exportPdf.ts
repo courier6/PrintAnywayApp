@@ -22,7 +22,7 @@ export async function exportRecoloredPdf(
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
-  link.download = sourceName.replace(/\.[^.]+$/, '') + '-reinked.pdf';
+  link.download = sourceName.replace(/\.[^.]+$/, '') + '-recolored.pdf';
   link.click();
   setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }

@@ -27,7 +27,7 @@ Plain, short and friendly. People arrive frustrated by a printer that won't prin
 |---|---|---|---|---|
 | black ink | tinta negra | tinta preta | encre noire | schwarze Tinte |
 | cartridge | cartucho | cartucho | cartouche | Patrone |
-| re-ink / recolor | recolorear | recolorir | recolorer | umfärben |
+| recolor | recolorear | recolorir | recolorer | umfärben |
 | Epson / Canon stop button | Detener/Cancelar (Stop/Cancel), Parar (Stop) | Parar/Cancelar (Stop/Cancel), Parar (Stop) | Arrêt/Annuler (Stop/Cancel), Arrêt (Stop) | Stopp/Abbrechen (Stop/Cancel), Stopp (Stop) |
 | print dialog | ventana de impresión | janela de impressão | fenêtre d’impression | Druckdialog |
 | grayscale | escala de grises | tons de cinza | niveaux de gris | Graustufen |

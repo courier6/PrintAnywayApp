@@ -66,7 +66,7 @@ function inkLut(inkHex: string): Uint8Array {
 }
 
 /**
- * Re-ink a page from its cached luminance map. Reuses `target` when given so
+ * Recolor a page from its cached luminance map. Reuses `target` when given so
  * the mounted preview canvas updates in place on swatch changes.
  */
 export function recolorToCanvas(
