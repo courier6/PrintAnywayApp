@@ -19,16 +19,24 @@ export interface SourceDocument {
   renderPage(index: number): Promise<HTMLCanvasElement>;
 }
 
-export async function loadDocument(file: File): Promise<SourceDocument> {
+export type FileKind = 'pdf' | 'png' | 'jpg' | 'heic';
+
+/** The supported format of `file`, from its MIME type or extension. */
+export function fileKind(file: File): FileKind | null {
   const name = file.name.toLowerCase();
-  const isPdf = file.type === 'application/pdf' || name.endsWith('.pdf');
-  const isImage =
-    file.type === 'image/png' || file.type === 'image/jpeg' || /\.(png|jpe?g)$/.test(name);
-  const isHeic =
-    file.type === 'image/heic' || file.type === 'image/heif' || /\.hei[cf]$/.test(name);
-  if (isPdf) return loadPdf(file);
-  if (isHeic) return loadImage(await decodeHeic(file));
-  if (isImage) return loadImage(file);
+  if (file.type === 'application/pdf' || name.endsWith('.pdf')) return 'pdf';
+  if (file.type === 'image/heic' || file.type === 'image/heif' || /\.hei[cf]$/.test(name))
+    return 'heic';
+  if (file.type === 'image/png' || name.endsWith('.png')) return 'png';
+  if (file.type === 'image/jpeg' || /\.jpe?g$/.test(name)) return 'jpg';
+  return null;
+}
+
+export async function loadDocument(file: File): Promise<SourceDocument> {
+  const kind = fileKind(file);
+  if (kind === 'pdf') return loadPdf(file);
+  if (kind === 'heic') return loadImage(await decodeHeic(file));
+  if (kind === 'png' || kind === 'jpg') return loadImage(file);
   throw new UnsupportedFileError();
 }
 

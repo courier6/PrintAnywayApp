@@ -177,7 +177,7 @@ button {
   cursor: default;
 }
 
-/* Gentle sheen sweep nudging toward Download PDF a moment after an ink
+/* Gentle sheen sweep nudging toward the download button a moment after an ink
    change; two passes, then still. */
 .btn-shimmer {
   position: relative;
@@ -438,14 +438,23 @@ button {
 
 /* ---------- Preview toolbar ---------- */
 
+/* File info centered across the page, actions at the right edge. */
 .toolbar {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
   align-items: center;
-  justify-content: space-between;
   gap: 16px;
   padding: 12px 26px;
   border-bottom: 1px solid var(--ink-18);
-  flex-wrap: wrap;
+}
+
+.toolbar-file {
+  grid-column: 2;
+}
+
+.toolbar-actions {
+  grid-column: 3;
+  justify-self: end;
 }
 
 .toolbar-file {
@@ -518,7 +527,8 @@ button {
 .preview-grid {
   flex: 1;
   display: grid;
-  grid-template-columns: 1fr 300px;
+  /* minmax(0, …): let the page shrink instead of widening the column. */
+  grid-template-columns: minmax(0, 1fr) 300px;
 }
 
 .preview-stage {
@@ -824,7 +834,7 @@ button {
   }
 
   .preview-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .sidebar {
@@ -833,6 +843,8 @@ button {
   }
 
   .toolbar {
+    display: flex;
+    flex-wrap: wrap;
     justify-content: center;
   }
 }

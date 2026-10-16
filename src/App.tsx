@@ -6,10 +6,10 @@ import { PreviewState } from './components/PreviewState';
 import { ErrorState, type ErrorKind } from './components/ErrorState';
 import { t, useLocale } from './i18n';
 import { INKS } from './lib/inks';
-import { loadDocument } from './lib/loadDocument';
+import { fileKind, loadDocument } from './lib/loadDocument';
 import { classifyError, logAppError, type ErrorCode } from './lib/errors';
 import { PageStore } from './lib/pageStore';
-import { exportRecoloredPdf } from './lib/exportPdf';
+import { exportFormat, exportRecolored, type ExportFormat } from './lib/exportFile';
 
 type AppState = 'empty' | 'processing' | 'preview' | 'error';
 
@@ -42,6 +42,7 @@ export default function App() {
   });
   const [inkIndex, setInkIndex] = useState(0);
   const [fileName, setFileName] = useState('');
+  const [format, setFormat] = useState<ExportFormat>('pdf');
   const [pageCount, setPageCount] = useState(0);
   const [processedCount, setProcessedCount] = useState(0);
   const [currentPage, setCurrentPage] = useState(0);
@@ -122,6 +123,8 @@ export default function App() {
     setPrintImages([]);
     setHolding(false);
     setFileName(file.name);
+    const kind = fileKind(file);
+    if (kind) setFormat(exportFormat(kind));
     setPageCount(0);
     setProcessedCount(0);
     setCurrentPage(0);
@@ -213,7 +216,7 @@ export default function App() {
     setBusy('download');
     try {
       const canvases = await collectAllRecolored();
-      await exportRecoloredPdf(canvases, fileName || 'document');
+      await exportRecolored(canvases, fileName || 'document', format);
     } finally {
       setBusy(null);
     }
@@ -245,6 +248,7 @@ export default function App() {
         {appState === 'preview' && (
           <PreviewState
             fileName={fileName}
+            downloadFormat={format}
             pageCount={pageCount}
             currentPage={currentPage}
             onPageChange={goToPage}

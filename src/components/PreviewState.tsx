@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { t, tPlural } from '../i18n';
+import type { ExportFormat } from '../lib/exportFile';
 import { INKS } from '../lib/inks';
 import { PRINTER_TIPS } from '../lib/printerTips';
 import { PageCanvas } from './PageCanvas';
@@ -7,6 +8,7 @@ import { PrintReminder } from './PrintReminder';
 
 interface Props {
   fileName: string;
+  downloadFormat: ExportFormat;
   pageCount: number;
   currentPage: number;
   onPageChange: (page: number) => void;
@@ -26,6 +28,7 @@ interface Props {
 
 export function PreviewState({
   fileName,
+  downloadFormat,
   pageCount,
   currentPage,
   onPageChange,
@@ -52,7 +55,7 @@ export function PreviewState({
   const inkTimer = useRef<number | null>(null);
   const prevInk = useRef(inkIndex);
 
-  // Delayed nudge toward Download PDF: starts after the page flash and
+  // Delayed nudge toward the download button: starts after the page flash and
   // caption have settled so it reads as a second, quieter cue.
   const [downloadHint, setDownloadHint] = useState(false);
   const hintTimers = useRef<number[]>([]);
@@ -101,27 +104,6 @@ export function PreviewState({
             {t('preview.chooseDifferent')}
           </button>
         </div>
-        <div className="pager">
-          <button
-            className="pager-btn"
-            aria-label={t('preview.prevPage')}
-            disabled={currentPage === 0}
-            onClick={() => onPageChange(currentPage - 1)}
-          >
-            ‹
-          </button>
-          <span className="pager-label">
-            {t('preview.pageOf', { page: currentPage + 1, total: pageCount })}
-          </span>
-          <button
-            className="pager-btn"
-            aria-label={t('preview.nextPage')}
-            disabled={currentPage >= pageCount - 1}
-            onClick={() => onPageChange(currentPage + 1)}
-          >
-            ›
-          </button>
-        </div>
         <div className="toolbar-actions">
           <button
             className={
@@ -131,7 +113,9 @@ export function PreviewState({
             onClick={onDownload}
             disabled={busy !== null}
           >
-            {busy === 'download' ? t('preview.preparing') : t('preview.download')}
+            {busy === 'download'
+              ? t('preview.preparing')
+              : t('preview.download', { format: downloadFormat.toUpperCase() })}
           </button>
           <button className="btn-primary toolbar-print" onClick={onPrint} disabled={busy !== null}>
             {t('preview.print')}
@@ -153,6 +137,29 @@ export function PreviewState({
                 ? t('preview.captionInked', { ink: t(INKS[inkIndex].nameKey) })
                 : t('preview.captionDefault')}
           </span>
+          {pageCount > 1 && (
+            <div className="pager">
+              <button
+                className="pager-btn"
+                aria-label={t('preview.prevPage')}
+                disabled={currentPage === 0}
+                onClick={() => onPageChange(currentPage - 1)}
+              >
+                ‹
+              </button>
+              <span className="pager-label">
+                {t('preview.pageOf', { page: currentPage + 1, total: pageCount })}
+              </span>
+              <button
+                className="pager-btn"
+                aria-label={t('preview.nextPage')}
+                disabled={currentPage >= pageCount - 1}
+                onClick={() => onPageChange(currentPage + 1)}
+              >
+                ›
+              </button>
+            </div>
+          )}
           {pageReady ? (
             <div className="page-stack">
               <PageCanvas canvas={recoloredCanvas} className="page-layer" />
@@ -216,8 +223,8 @@ export function PreviewState({
 
           <div className="help-section">
             <div className="side-label">{t('preview.helpLabel')}</div>
-            {PRINTER_TIPS.map((tip, i) => (
-              <details className="help-item" key={tip.brand} open={i === 0}>
+            {PRINTER_TIPS.map((tip) => (
+              <details className="help-item" key={tip.brand}>
                 <summary>{tip.brand}</summary>
                 <div className="help-body">{t(tip.tipKey)}</div>
               </details>
