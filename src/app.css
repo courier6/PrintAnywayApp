@@ -438,23 +438,25 @@ button {
 
 /* ---------- Preview toolbar ---------- */
 
-/* File info centered across the page, actions at the right edge. */
+/* Same columns as .preview-grid: file info centered over the preview,
+   actions over the sidebar. */
 .toolbar {
   display: grid;
-  grid-template-columns: 1fr auto 1fr;
+  grid-template-columns: minmax(0, 1fr) 300px;
   align-items: center;
-  gap: 16px;
-  padding: 12px 26px;
+  padding: 12px 0;
   border-bottom: 1px solid var(--ink-18);
 }
 
 .toolbar-file {
-  grid-column: 2;
+  justify-self: center;
+  max-width: 100%;
+  padding: 0 26px;
 }
 
 .toolbar-actions {
-  grid-column: 3;
   justify-self: end;
+  padding-right: 26px;
 }
 
 .toolbar-file {
@@ -845,6 +847,19 @@ button {
   .toolbar {
     display: flex;
     flex-wrap: wrap;
+    justify-content: center;
+    gap: 16px;
+    padding: 12px 26px;
+  }
+
+  .toolbar-file,
+  .toolbar-actions {
+    padding: 0;
+  }
+
+  /* Own line, so it stays centered over the page below. */
+  .toolbar-file {
+    flex-basis: 100%;
     justify-content: center;
   }
 }
