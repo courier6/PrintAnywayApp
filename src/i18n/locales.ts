@@ -20,6 +20,9 @@ export interface Locale {
 export const LOCALES: readonly Locale[] = [
   { code: 'en', path: '', hreflang: ['en'], ogLocale: 'en_US', name: 'English' },
   { code: 'es', path: 'es', hreflang: ['es'], ogLocale: 'es_ES', name: 'Español' },
+  { code: 'pt-BR', path: 'pt-br', hreflang: ['pt-BR', 'pt'], ogLocale: 'pt_BR', name: 'Português' },
+  { code: 'fr', path: 'fr', hreflang: ['fr'], ogLocale: 'fr_FR', name: 'Français' },
+  { code: 'de', path: 'de', hreflang: ['de'], ogLocale: 'de_DE', name: 'Deutsch' },
 ];
 
 export const DEFAULT_LOCALE = LOCALES[0];

@@ -16,8 +16,8 @@ Plain, short and friendly. People arrive frustrated by a printer that won't prin
 |---|---|---|---|
 | Spanish | es | tú; Latin-American-neutral verbs (presiona, Enter) | “ ” |
 | Portuguese (Brazil) | pt-BR | você | “ ” |
-| French | fr | vous | « » with no-break spaces inside |
-| German | de | Sie | „ “ |
+| French | fr | vous; no-break space (U+00A0) before ? ! : ; | « » with no-break spaces inside |
+| German | de | Sie; spaced en dash – instead of — | „ “ |
 
 ## Terms
 
@@ -28,15 +28,17 @@ Plain, short and friendly. People arrive frustrated by a printer that won't prin
 | black ink | tinta negra | tinta preta | encre noire | schwarze Tinte |
 | cartridge | cartucho | cartucho | cartouche | Patrone |
 | re-ink / recolor | recolorear | recolorir | recolorer | umfärben |
+| Epson / Canon stop button | Detener/Cancelar (Stop/Cancel), Parar (Stop) | Parar/Cancelar (Stop/Cancel), Parar (Stop) | Arrêt/Annuler (Stop/Cancel), Arrêt (Stop) | Stopp/Abbrechen (Stop/Cancel), Stopp (Stop) |
 | print dialog | ventana de impresión | janela de impressão | fenêtre d’impression | Druckdialog |
-| grayscale | escala de grises | escala de cinza | niveaux de gris | Graustufen |
+| grayscale | escala de grises | tons de cinza | niveaux de gris | Graustufen |
 | black & white | blanco y negro | preto e branco | noir et blanc | Schwarzweiß |
+| Keyboard Enter key | Enter | Enter | Entrée | Eingabetaste |
 | Color (print dialog option) | Color | Colorido | Couleur | Farbe |
 | Print → Save as PDF | Imprimir → Guardar como PDF | Imprimir → Salvar como PDF | Imprimer → Enregistrer au format PDF | Drucken → Als PDF speichern |
-| Dark navy | Azul marino | Azul-marinho escuro | Bleu marine foncé | Dunkles Marineblau |
-| Dark teal | Verde petróleo | Verde-azulado escuro | Bleu canard foncé | Dunkles Petrol |
-| Dark maroon | Granate | Bordô escuro | Bordeaux foncé | Dunkles Weinrot |
-| Dark purple | Morado oscuro | Roxo escuro | Violet foncé | Dunkles Violett |
+| Dark navy | Azul marino | Azul-marinho | Bleu marine | Marineblau |
+| Dark teal | Verde petróleo | Verde-petróleo | Bleu canard | Petrolblau |
+| Dark maroon | Granate | Bordô | Bordeaux | Weinrot |
+| Dark purple | Morado oscuro | Roxo escuro | Violet foncé | Dunkelviolett |
 
 ## Process (per language)
 

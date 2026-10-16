@@ -808,6 +808,16 @@ button {
     display: none;
   }
 
+  /* The language picker drops below the wordmark when both don't fit. */
+  .header {
+    flex-wrap: wrap;
+    row-gap: 8px;
+  }
+
+  .brand {
+    flex: none;
+  }
+
   .hero-headline {
     font-size: 28px;
     letter-spacing: -0.4px;
