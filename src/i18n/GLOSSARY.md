@@ -28,7 +28,7 @@ Plain, short and friendly. People arrive frustrated by a printer that won't prin
 `{ink}` is filled with the capitalized swatch name, so place it where capitals read naturally (e.g. after a colon).
 
 | English | es | pt-BR | fr | de | it | ja | ru | zh-CN |
-|---|---|---|---|---| --- | --- | --- | --- |
+|---|---|---|---|---|---|---|---|---|
 | black ink | tinta negra | tinta preta | encre noire | schwarze Tinte | inchiostro nero | 黒インク | чёрные чернила | 黑色墨水 |
 | cartridge | cartucho | cartucho | cartouche | Patrone | cartuccia | カートリッジ | картридж | 墨盒 |
 | recolor | recolorear | recolorir | recolorer | umfärben | ricolorare | 色変換（する） | перекрашивать | 重新着色 |

@@ -23,10 +23,10 @@ button {
   font-family: inherit;
 }
 
-/* CJK: system fonts with full glyph coverage, and the monospace caption labels
-   (letter-spaced uppercase Latin) switch to the body font. */
+/* CJK: system fonts with full glyph coverage. The caption labels (letter-spaced
+   uppercase monospace Latin) switch to the body font, larger and with lighter tracking. */
 html[lang='ja'] body {
-  font-family: Helvetica, Arial, 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', Meiryo, sans-serif;
+  font-family: Helvetica, Arial, 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', Meiryo, 'Noto Sans JP', sans-serif;
 }
 
 html[lang='zh-CN'] body {
@@ -35,6 +35,7 @@ html[lang='zh-CN'] body {
 
 html:is([lang='ja'], [lang='zh-CN']) :is(.compare-caption, .side-label) {
   font-family: inherit;
+  font-size: 12px;
   letter-spacing: 0.04em;
 }
 

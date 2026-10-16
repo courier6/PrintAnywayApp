@@ -172,13 +172,15 @@ ${urls.join('\n')}
 `;
 }
 
-/** The locale for a dev-server request: /es/ or ?lang=es, else English. */
+/** The locale for a dev-server request: ?lang=es overrides the /es/ path; else English. */
 function devLocale(url: string): Locale {
   const { pathname, searchParams } = new URL(url, 'http://localhost');
   const segment = pathname.split('/')[1];
   const lang = searchParams.get('lang');
   return (
-    LOCALES.find((l) => l.code === lang || (l.path !== '' && l.path === segment)) ?? DEFAULT_LOCALE
+    LOCALES.find((l) => l.code === lang) ??
+    LOCALES.find((l) => l.path !== '' && l.path === segment) ??
+    DEFAULT_LOCALE
   );
 }
 
@@ -193,6 +195,7 @@ function i18nPlugin(): Plugin {
   return {
     name: 'i18n',
     configResolved(config) {
+      if (config.base !== '/') throw new Error('i18n: locale URLs assume base "/"; see localePath() in src/i18n/locales.ts');
       outDir = resolve(config.root, config.build.outDir);
       isBuild = config.command === 'build';
     },
@@ -225,6 +228,12 @@ function i18nPlugin(): Plugin {
     },
     handleHotUpdate({ file, server }) {
       if (!file.endsWith('.properties')) return;
+      // Report translation problems in the terminal without stopping the dev server.
+      try {
+        validateLocales();
+      } catch (e) {
+        server.config.logger.error(e instanceof Error ? e.message : String(e));
+      }
       server.ws.send({ type: 'full-reload' });
       return [];
     },
