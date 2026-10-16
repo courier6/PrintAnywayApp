@@ -1,5 +1,5 @@
-import { createElement, Fragment, type ReactNode } from 'react';
-import { DEFAULT_LOCALE, LOCALES } from './locales';
+import { createElement, Fragment, useSyncExternalStore, type ReactNode } from 'react';
+import { DEFAULT_LOCALE, LOCALES, type Locale } from './locales';
 
 // Every <code>.properties file in this folder, keyed by path.
 const files = import.meta.glob<Record<string, string>>('./*.properties', {
@@ -7,12 +7,45 @@ const files = import.meta.glob<Record<string, string>>('./*.properties', {
   import: 'default',
 });
 
-/** The page's locale. The build sets <html lang> on each locale's page. */
-export const locale =
-  LOCALES.find((l) => l.code === document.documentElement.lang) ?? DEFAULT_LOCALE;
+/** The page's starting locale. The build sets <html lang> on each locale's page. */
+let locale = LOCALES.find((l) => l.code === document.documentElement.lang) ?? DEFAULT_LOCALE;
+let strings = files[`./${locale.code}.properties`];
+let plural = new Intl.PluralRules(locale.code);
+const listeners = new Set<() => void>();
 
-const strings = files[`./${locale.code}.properties`];
-const plural = new Intl.PluralRules(locale.code);
+/**
+ * Switches the UI language without a page load, so a loaded document
+ * survives. The caller updates the URL (pushState) when it should change.
+ */
+export function setLocale(next: Locale) {
+  if (next === locale) return;
+  locale = next;
+  strings = files[`./${next.code}.properties`];
+  plural = new Intl.PluralRules(next.code);
+  document.documentElement.lang = next.code;
+  document.title = lookup('meta.title');
+  listeners.forEach((l) => l());
+}
+
+/** The current locale; re-renders the caller when it changes. */
+export function useLocale(): Locale {
+  return useSyncExternalStore(
+    (onChange) => {
+      listeners.add(onChange);
+      return () => listeners.delete(onChange);
+    },
+    () => locale,
+  );
+}
+
+/** The locale whose page lives at `pathname` (/es/, /pt-br/, …). */
+export function localeForPath(pathname: string): Locale {
+  const segment = pathname.split('/')[1]?.toLowerCase() ?? '';
+  return LOCALES.find((l) => l.path === segment) ?? DEFAULT_LOCALE;
+}
+
+// Back/forward between language URLs pushed by the picker.
+window.addEventListener('popstate', () => setLocale(localeForPath(location.pathname)));
 
 type Params = Record<string, string | number>;
 

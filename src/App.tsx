@@ -4,7 +4,7 @@ import { EmptyState } from './components/EmptyState';
 import { ProcessingState } from './components/ProcessingState';
 import { PreviewState } from './components/PreviewState';
 import { ErrorState, type ErrorKind } from './components/ErrorState';
-import { t } from './i18n';
+import { t, useLocale } from './i18n';
 import { INKS } from './lib/inks';
 import { loadDocument } from './lib/loadDocument';
 import { classifyError, logAppError, type ErrorCode } from './lib/errors';
@@ -33,6 +33,8 @@ const cancelIdle: (handle: number) => void =
     : (handle) => window.clearTimeout(handle);
 
 export default function App() {
+  // Re-render everything when the language picker switches locale.
+  useLocale();
   const [appState, setAppState] = useState<AppState>('empty');
   const [errorInfo, setErrorInfo] = useState<{ code: ErrorCode; kind: ErrorKind }>({
     code: 'PA-100',
