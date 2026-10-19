@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defineConfig, type Plugin } from 'vite';
@@ -240,8 +240,35 @@ function i18nPlugin(): Plugin {
   };
 }
 
+/** Prntr ships as its own lazy chunk; its dev-only entrance must not ship at all. */
+function prntrGuard(): Plugin {
+  let outDir = '';
+  let isBuild = false;
+  return {
+    name: 'prntr-guard',
+    configResolved(config) {
+      outDir = resolve(config.root, config.build.outDir);
+      isBuild = config.command === 'build';
+    },
+    closeBundle(error?: Error) {
+      if (!isBuild || error) return;
+      const assets = resolve(outDir, 'assets');
+      const files = readdirSync(assets).filter((f) => f.endsWith('.js'));
+      for (const f of files) {
+        if (readFileSync(resolve(assets, f), 'utf8').includes('prntr-dev-skip')) {
+          throw new Error(`prntr: dev skip leaked into the build: assets/${f}`);
+        }
+      }
+      const chunks = files.filter((f) => /^Prntr-.*\.js$/.test(f));
+      if (chunks.length !== 1) {
+        throw new Error(`prntr: expected one Prntr-*.js chunk, found ${chunks.length}`);
+      }
+    },
+  };
+}
+
 export default defineConfig({
   // Served from https://printanyway.app/
   base: '/',
-  plugins: [i18nPlugin(), react()],
+  plugins: [i18nPlugin(), prntrGuard(), react()],
 });
