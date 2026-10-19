@@ -818,6 +818,61 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
   }
 }
 
+/* ---------- Prntr ---------- */
+
+.prntr {
+  position: relative;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 30px;
+  background: var(--ink-5);
+}
+
+.prntr-canvas {
+  width: min(380px, 100%);
+  display: block;
+  background: #ffffff;
+  box-shadow: 0 12px 36px rgba(20, 30, 50, 0.15);
+}
+
+.prntr-caption {
+  min-height: 1.4em;
+  font: 700 10.5px ui-monospace, Menlo, monospace;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-60);
+}
+
+.prntr-exit {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--ink-18);
+  border-radius: 50%;
+  background: #ffffff;
+  color: var(--ink-60);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.prntr-end {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--ink-75);
+}
+
 /* ---------- Motion & responsive ---------- */
 
 @media (prefers-reduced-motion: reduce) {
