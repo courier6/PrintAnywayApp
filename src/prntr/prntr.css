@@ -1,0 +1,91 @@
+/* Prntr is standalone: its own ground, type and colours. Nothing here uses the
+   app's --ink tints. Ships with the lazy chunk. */
+
+.prntr {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  overflow: hidden;
+  background: #000000;
+  color: #EDEDED;
+  outline: none;
+}
+
+.prntr-stage {
+  position: absolute;
+  inset: 0;
+}
+
+.prntr-run {
+  position: absolute;
+  inset: 0;
+}
+
+/* Provisional (handoff §8.1): top-right, off-white at 50%. */
+.prntr-exit {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 1;
+  width: 44px;
+  height: 44px;
+  border: 0;
+  background: none;
+  color: #EDEDED;
+  opacity: 0.5;
+  font-size: 18px;
+  line-height: 44px;
+  cursor: pointer;
+}
+
+.prntr-live {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.prntr-placeholder {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  font-family: 'Press Start 2P', 'Courier New', monospace;
+  font-size: 28px;
+  color: #FFD91A;
+}
+
+/* Provisional stub after "press start" (handoff §8.2). */
+.prntr-end {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 28px;
+  background: #000000;
+  font-family: 'Press Start 2P', 'Courier New', monospace;
+  font-size: 13px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #EDEDED;
+}
+
+.prntr-end p {
+  margin: 0;
+}
+
+.prntr-end-btn {
+  border: 0;
+  background: none;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  color: #FFD91A;
+  cursor: pointer;
+}

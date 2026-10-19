@@ -1,3 +1,5 @@
+import type { PrntrAudio } from './audio';
+
 /** Downscaled copies of the page as it was when Prntr started (long side ≤ 960px). */
 export interface PageBitmaps {
   source: HTMLCanvasElement;
@@ -7,24 +9,21 @@ export interface PageBitmaps {
 }
 
 /**
- * What a stage gets to work with. `g` is already scaled by devicePixelRatio, so
- * stages draw in CSS pixels: the visible canvas is `width` × `height` units and
- * that size is fixed for the whole run (the CSS scales the element if the
- * viewport changes).
+ * What a stage gets to work with. `root` is the full-viewport element the stage
+ * owns: build DOM (or a canvas) inside it and leave it empty when resolving.
+ * Everything else is shared for the whole run.
  */
 export interface StageContext {
-  canvas: HTMLCanvasElement;
-  g: CanvasRenderingContext2D;
-  width: number;
-  height: number;
+  root: HTMLElement;
   page: PageBitmaps;
   inkHex: string;
+  audio: PrntrAudio;
+  /** Resolves once Prntr's web fonts are usable (never rejects). */
+  fontsReady: Promise<void>;
   /** Aborted when the user leaves (Esc, ✕) or the component unmounts. */
   signal: AbortSignal;
-  /** The one line of text under the canvas. Empty string hides it. */
-  setCaption(text: string): void;
-  /** Client (pointer event) coordinates → canvas units. */
-  toLocal(clientX: number, clientY: number): { x: number; y: number };
+  /** Screen-reader announcement through Prntr's one aria-live="polite" region. */
+  announce(text: string): void;
 }
 
 /**
@@ -33,10 +32,7 @@ export interface StageContext {
  * `?prntr=N` begin at any stage), plus the kind its predecessor emits. New kinds
  * are added here as stages land.
  */
-export type Handoff =
-  | { kind: 'start' }
-  /** A cols×rows sliding-puzzle layout: slots[i] = tile index shown at slot i, -1 = the gap. */
-  | { kind: 'tiles'; cols: number; rows: number; slots: number[] };
+export type Handoff = { kind: 'start' };
 
 export interface Stage {
   name: string;

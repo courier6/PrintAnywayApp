@@ -4,6 +4,7 @@ import { EmptyState } from './components/EmptyState';
 import { ProcessingState } from './components/ProcessingState';
 import { PreviewState } from './components/PreviewState';
 import { PrntrHost } from './components/PrntrHost';
+import { prntrAudioContext } from './components/prntrAudio';
 import { ErrorState, type ErrorKind } from './components/ErrorState';
 import { t, useLocale } from './i18n';
 import { INKS } from './lib/inks';
@@ -55,6 +56,7 @@ export default function App() {
   const [, setPagesVersion] = useState(0);
   const [prntrStage, setPrntrStage] = useState(0);
   const prntrPage = useRef<{ source: HTMLCanvasElement; recolored: HTMLCanvasElement } | null>(null);
+  const prntrAudio = useRef<AudioContext | null>(null);
 
   const storeRef = useRef(new PageStore());
   const store = storeRef.current;
@@ -226,6 +228,7 @@ export default function App() {
     const recolored = store.ensureRecolored(currentPage, inkRef.current);
     const source = store.getSource(currentPage);
     if (!recolored || !source) return;
+    prntrAudio.current = prntrAudioContext();
     setHolding(false);
     prntrPage.current = { source, recolored };
     setPrntrStage(stage);
@@ -322,6 +325,7 @@ export default function App() {
             recolored={prntrPage.current.recolored}
             inkHex={inkHex}
             stage={prntrStage}
+            audioContext={prntrAudio.current}
             onExit={exitPrntr}
           />
         )}

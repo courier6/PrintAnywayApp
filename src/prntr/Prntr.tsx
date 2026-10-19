@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
+import './prntr.css';
+import { createPrntrAudio } from './audio';
 import { capturePage } from './page';
 import { runChain } from './runner';
 import { STAGES } from './stages';
@@ -10,16 +12,21 @@ interface Props {
   inkHex: string;
   /** Stage to start at; clamped to the last existing stage. */
   stage: number;
+  /** Created by the host inside the user's gesture when there is one; null without Web Audio. */
+  audioContext: AudioContext | null;
   onExit: () => void;
 }
 
-export default function Prntr({ source, recolored, inkHex, stage, onExit }: Props) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [caption, setCaption] = useState('');
+export default function Prntr({ source, recolored, inkHex, stage, audioContext, onExit }: Props) {
+  const rootRef = useRef<HTMLDivElement>(null);
+  const stageRef = useRef<HTMLDivElement>(null);
+  const [live, setLive] = useState('');
   const [finished, setFinished] = useState(false);
   const onExitRef = useRef(onExit);
   onExitRef.current = onExit;
 
+  // Esc leaves from any stage. Added on mount, removed on unmount: nothing leaks
+  // into the host app after Prntr closes.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onExitRef.current();
@@ -29,58 +36,68 @@ export default function Prntr({ source, recolored, inkHex, stage, onExit }: Prop
   }, []);
 
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const page = capturePage(source, recolored);
-    // The CSS fixes the width (≤ 380px) and the aspect ratio; the backing store
-    // follows devicePixelRatio and stays at this size for the whole run.
-    const width = canvas.clientWidth;
-    const height = Math.round((width * page.height) / page.width);
-    const dpr = window.devicePixelRatio || 1;
-    canvas.width = Math.round(width * dpr);
-    canvas.height = Math.round(height * dpr);
-    const g = canvas.getContext('2d');
-    if (!g) throw new Error('prntr: no 2d context');
-    g.scale(dpr, dpr);
+    const stageEl = stageRef.current;
+    if (!stageEl) return;
+    // Each run builds in its own element: a cancelled run (exit, or React
+    // StrictMode's mount–unmount–mount in dev) may still finish its last lines
+    // after the abort, and must only ever touch its own, already detached, root.
+    const root = document.createElement('div');
+    root.className = 'prntr-run';
+    stageEl.append(root);
+    rootRef.current?.focus();
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
     const controller = new AbortController();
+    // Without a gesture before Prntr opened (the dev entrance), the browser keeps
+    // the context suspended: unlock it on the first press so later cues play.
+    if (audioContext?.state === 'suspended') {
+      const unlock = () => void audioContext.resume().catch(() => undefined);
+      window.addEventListener('pointerdown', unlock, { once: true, signal: controller.signal });
+      window.addEventListener('keydown', unlock, { once: true, signal: controller.signal });
+    }
+    // Start the webfonts now; stage 0 holds its card until they are in.
+    const fontsReady = Promise.all([
+      document.fonts.load('700 220px "Comic Neue"'),
+      document.fonts.load('16px "Press Start 2P"'),
+    ]).then(
+      () => undefined,
+      () => undefined,
+    );
     const ctx: StageContext = {
-      canvas,
-      g,
-      width,
-      height,
-      page,
+      root,
+      page: capturePage(source, recolored),
       inkHex,
+      audio: createPrntrAudio(audioContext),
+      fontsReady,
       signal: controller.signal,
-      setCaption,
-      toLocal(clientX, clientY) {
-        const r = canvas.getBoundingClientRect();
-        return { x: ((clientX - r.left) / r.width) * width, y: ((clientY - r.top) / r.height) * height };
-      },
+      announce: setLive,
     };
     const startAt = Math.min(Math.max(0, stage), STAGES.length - 1);
     void runChain(ctx, STAGES, startAt).then((result) => {
       if (result === 'finished') setFinished(true);
     });
-    return () => controller.abort();
-  }, [source, recolored, inkHex, stage]);
+    return () => {
+      controller.abort();
+      root.remove();
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [source, recolored, inkHex, stage, audioContext]);
 
   return (
-    <div className="prntr">
+    <div className="prntr" ref={rootRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="Prntr">
+      <div className="prntr-stage" ref={stageRef} />
+      {/* Provisional: the exit's place on the black screen is not designed (handoff §8.1). */}
       <button className="prntr-exit" aria-label="Leave" onClick={onExit}>
         ✕
       </button>
-      <canvas
-        ref={canvasRef}
-        className="prntr-canvas"
-        style={{ aspectRatio: `${recolored.width} / ${recolored.height}` }}
-      />
-      <span className="prntr-caption" aria-live="polite">
-        {caption}
+      <span className="prntr-live" aria-live="polite">
+        {live}
       </span>
       {finished && (
+        // Provisional stub after "press start"; stage 1 is not designed (handoff §8.2).
         <div className="prntr-end">
           <p>That's all for now.</p>
-          <button className="btn-secondary" onClick={onExit}>
+          <button className="prntr-end-btn" onClick={onExit}>
             Back to your page
           </button>
         </div>

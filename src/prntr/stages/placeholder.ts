@@ -1,14 +1,16 @@
 import { nextInput } from '../anim';
 import type { Stage } from '../types';
 
-/** Stands in for stage 0 until "The crack" lands: shows the page, waits for a click. */
+/** Stands in until the opening lands: the name, wait for a press. */
 export const placeholder: Stage = {
   name: 'placeholder',
   async run(ctx) {
-    const { g, width, height, page } = ctx;
-    g.drawImage(page.recolored, 0, 0, width, height);
-    ctx.setCaption('Prntr');
-    await nextInput(ctx.canvas, ctx.signal);
+    const p = document.createElement('p');
+    p.className = 'prntr-placeholder';
+    p.textContent = 'Prntr';
+    ctx.root.replaceChildren(p);
+    await nextInput(ctx.root, ctx.signal);
+    ctx.root.replaceChildren();
     return { kind: 'start' };
   },
 };
