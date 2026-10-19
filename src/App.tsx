@@ -4,6 +4,7 @@ import { EmptyState } from './components/EmptyState';
 import { ProcessingState } from './components/ProcessingState';
 import { PreviewState } from './components/PreviewState';
 import { PrntrHost } from './components/PrntrHost';
+import { prntrAudioContext } from './components/prntrAudio';
 import { ErrorState, type ErrorKind } from './components/ErrorState';
 import { t, useLocale } from './i18n';
 import { INKS } from './lib/inks';
@@ -55,6 +56,8 @@ export default function App() {
   const [, setPagesVersion] = useState(0);
   const [prntrStage, setPrntrStage] = useState(0);
   const prntrPage = useRef<{ source: HTMLCanvasElement; recolored: HTMLCanvasElement } | null>(null);
+  const prntrAudio = useRef<AudioContext | null>(null);
+  const prntrReturn = useRef<AppState>('preview');
 
   const storeRef = useRef(new PageStore());
   const store = storeRef.current;
@@ -112,7 +115,8 @@ export default function App() {
   // While a document is loaded, a refresh or tab close asks first: the file
   // lives only in memory, so leaving drops it. The browser shows its own
   // wording. iOS Safari never fires beforeunload, so this covers desktop only.
-  const hasDocument = appState === 'processing' || appState === 'preview' || appState === 'prntr';
+  const hasDocument =
+    appState === 'processing' || appState === 'preview' || (appState === 'prntr' && prntrReturn.current === 'preview');
   useEffect(() => {
     if (!hasDocument) return;
     const onBeforeUnload = (e: BeforeUnloadEvent) => {
@@ -123,20 +127,35 @@ export default function App() {
     return () => window.removeEventListener('beforeunload', onBeforeUnload);
   }, [hasDocument]);
 
-  // Dev-only entrance: ?prntr=N opens Prntr at stage N once the preview is up.
+  // Dev-only entrance: ?prntr=N opens Prntr at stage N as soon as the app loads,
+  // with a stand-in page so nothing has to be uploaded first.
   // import.meta.env.DEV is a build-time constant, so builds drop this whole block;
   // vite.config.ts fails the build if its marker string survives.
   const devSkipUsed = useRef(false);
   useEffect(() => {
     if (import.meta.env.DEV) {
-      if (appState !== 'preview' || devSkipUsed.current) return;
+      if (appState !== 'empty' || devSkipUsed.current) return;
       const raw = new URLSearchParams(location.search).get('prntr');
       if (raw === null) return;
       const n = Number(raw);
       if (!Number.isInteger(n) || n < 0) return;
       devSkipUsed.current = true;
       console.info('prntr-dev-skip', n);
-      enterPrntr(n);
+      // A letter-size page of "text" lines: black for the source, the ink for the recolored copy.
+      const standIn = (ink: string) => {
+        const canvas = document.createElement('canvas');
+        canvas.width = 612;
+        canvas.height = 792;
+        const g = canvas.getContext('2d');
+        if (!g) return canvas;
+        g.fillStyle = '#ffffff';
+        g.fillRect(0, 0, 612, 792);
+        g.fillStyle = ink;
+        g.fillRect(72, 80, 300, 28);
+        for (let y = 140; y < 700; y += 24) g.fillRect(72, y, 300 + ((y * 7) % 170), 10);
+        return canvas;
+      };
+      enterPrntr(n, { source: standIn('#000000'), recolored: standIn(inkRef.current) });
     }
   }, [appState]);
 
@@ -220,20 +239,26 @@ export default function App() {
     setCurrentPage(clamped);
   }
 
-  // Prntr takes over the stage with the page shown now; see PRNTR-ARCHITECTURE.md.
-  function enterPrntr(stage: number) {
-    if (appState !== 'preview') return;
-    const recolored = store.ensureRecolored(currentPage, inkRef.current);
-    const source = store.getSource(currentPage);
-    if (!recolored || !source) return;
+  // Prntr takes over the viewport with the page shown now (or a page it is handed,
+  // which only the dev entrance does); see PRNTR-ARCHITECTURE.md.
+  function enterPrntr(stage: number, page?: { source: HTMLCanvasElement; recolored: HTMLCanvasElement }) {
+    if (!page) {
+      if (appState !== 'preview') return;
+      const recolored = store.ensureRecolored(currentPage, inkRef.current);
+      const source = store.getSource(currentPage);
+      if (!recolored || !source) return;
+      page = { source, recolored };
+    }
+    prntrReturn.current = appState;
+    prntrAudio.current = prntrAudioContext();
     setHolding(false);
-    prntrPage.current = { source, recolored };
+    prntrPage.current = page;
     setPrntrStage(stage);
     setAppState('prntr');
   }
 
   function exitPrntr() {
-    setAppState('preview');
+    setAppState(prntrReturn.current);
   }
 
   async function collectAllRecolored(): Promise<HTMLCanvasElement[]> {
@@ -322,6 +347,7 @@ export default function App() {
             recolored={prntrPage.current.recolored}
             inkHex={inkHex}
             stage={prntrStage}
+            audioContext={prntrAudio.current}
             onExit={exitPrntr}
           />
         )}

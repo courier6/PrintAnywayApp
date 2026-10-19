@@ -48,18 +48,24 @@ export function frames(ms: number, signal: AbortSignal, draw: (t: number) => voi
   });
 }
 
-/** Resolves on the next pointer press on the canvas or key press anywhere. */
-export function nextInput(canvas: HTMLCanvasElement, signal: AbortSignal): Promise<void> {
+/**
+ * Resolves on the next pointer press on `target` or key press anywhere, except
+ * Escape, which is Prntr's exit and must not count as "continue".
+ */
+export function nextInput(target: HTMLElement, signal: AbortSignal): Promise<void> {
   return new Promise((resolve) => {
     if (signal.aborted) return resolve();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') done();
+    };
     const done = () => {
-      canvas.removeEventListener('pointerdown', done);
-      window.removeEventListener('keydown', done);
+      target.removeEventListener('pointerdown', done);
+      window.removeEventListener('keydown', onKey);
       signal.removeEventListener('abort', done);
       resolve();
     };
-    canvas.addEventListener('pointerdown', done);
-    window.addEventListener('keydown', done);
+    target.addEventListener('pointerdown', done);
+    window.addEventListener('keydown', onKey);
     signal.addEventListener('abort', done);
   });
 }

@@ -7,6 +7,7 @@ export interface PrntrHostProps {
   recolored: HTMLCanvasElement;
   inkHex: string;
   stage: number;
+  audioContext: AudioContext | null;
   onExit: () => void;
 }
 

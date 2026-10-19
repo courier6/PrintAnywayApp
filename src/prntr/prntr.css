@@ -1,0 +1,311 @@
+@font-face {
+  font-family: 'Comic Neue';
+  font-style: normal;
+  font-weight: 700;
+  font-display: block;
+  src: url(./fonts/ComicNeue-Bold.woff2) format('woff2');
+}
+
+@font-face {
+  font-family: 'Press Start 2P';
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+  src: url(./fonts/PressStart2P-Regular.woff2) format('woff2');
+}
+
+/* Prntr is standalone: its own ground, type and colours. Nothing here uses the
+   app's --ink tints. Ships with the lazy chunk. */
+
+.prntr {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  overflow: hidden;
+  background: #000000;
+  color: #EDEDED;
+  outline: none;
+}
+
+.prntr-stage {
+  position: absolute;
+  inset: 0;
+}
+
+.prntr-run {
+  position: absolute;
+  inset: 0;
+}
+
+/* Provisional (handoff §8.1): top-right, off-white at 50%. */
+.prntr-exit {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 1;
+  width: 44px;
+  height: 44px;
+  border: 0;
+  background: none;
+  color: #EDEDED;
+  opacity: 0.5;
+  font-size: 18px;
+  line-height: 44px;
+  cursor: pointer;
+}
+
+.prntr-live {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* Provisional stub after "press start" (handoff §8.2). */
+.prntr-end {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 28px;
+  background: #000000;
+  font-family: 'Press Start 2P', 'Courier New', monospace;
+  font-size: 13px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #EDEDED;
+}
+
+.prntr-end p {
+  margin: 0;
+}
+
+.prntr-end-btn {
+  border: 0;
+  background: none;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  color: #FFD91A;
+  cursor: pointer;
+}
+
+/* ---- Stage 0: the opening ---- */
+
+/* 1250ms: in over 250ms, hold, out over 250ms. */
+@keyframes prntr-card {
+  0% { opacity: 0; }
+  20% { opacity: 1; }
+  80% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+@keyframes prntr-pop {
+  0% { opacity: 0; transform: scale(0.4); }
+  60% { opacity: 1; transform: scale(1.14); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+@keyframes prntr-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes prntr-blink {
+  0% { opacity: 1; }
+  50% { opacity: 0; }
+  100% { opacity: 0; }
+}
+
+/* The one glow in the whole opening: a story beat, not decoration. */
+@keyframes prntr-glow {
+  0% { text-shadow: none; color: #EDEDED; }
+  16% { text-shadow: 0 0 6px #46D36E; color: #F4FFF6; }
+  32% { text-shadow: 0 0 3px #19B8F0, 0 0 14px #19B8F0; color: #FFFFFF; }
+  44% { text-shadow: none; color: #EDEDED; }
+  56% { text-shadow: 0 0 10px #F0288C, 0 0 24px #F0288C; color: #FFFFFF; }
+  72% { text-shadow: 0 0 4px #FFD91A, 0 0 30px #FF6A2B; color: #FFFFFF; }
+  80% { text-shadow: none; color: #EDEDED; }
+  100% { text-shadow: 0 0 14px #FFFFFF, 0 0 40px #19B8F0; color: #FFFFFF; }
+}
+
+@keyframes prntr-after {
+  from { text-shadow: 0 0 14px #FFFFFF, 0 0 40px #19B8F0; color: #FFFFFF; }
+  to { text-shadow: none; color: #EDEDED; }
+}
+
+.prntr-card {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 28px;
+  font-family: 'Helvetica Neue', Helvetica, sans-serif;
+  opacity: 0;
+  animation: prntr-card 1250ms linear forwards;
+}
+
+.prntr-card-brand {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+}
+
+.prntr-card-logo {
+  display: block;
+  width: 120px;
+  height: 72px;
+}
+
+.prntr-card-logo path {
+  stroke-width: 1.6;
+}
+
+.prntr-card-name {
+  color: #EDEDED;
+  font-size: 26px;
+  font-weight: 400;
+  letter-spacing: 0.32em;
+  padding-left: 0.32em; /* optical centring against the tracking */
+  text-transform: uppercase;
+}
+
+.prntr-card-presents {
+  color: #9A9A9A;
+  font-size: 18px;
+  font-style: italic;
+  letter-spacing: 0.06em;
+}
+
+.prntr-title-wrap {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.prntr-title {
+  margin: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  font-family: 'Comic Sans MS', 'Comic Sans', 'Comic Neue', cursive;
+  font-weight: 700;
+  font-size: min(220px, 27vw);
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+
+.prntr-title-slot {
+  display: inline-block; /* the wobble transform lives here… */
+  transform: var(--prntr-wobble, none);
+}
+
+.prntr-letter {
+  display: inline-block; /* …and the pop animation here, so neither overwrites the other */
+  opacity: 0;
+}
+
+.prntr-arcade {
+  position: absolute;
+  inset: 0;
+  font-family: 'Press Start 2P', 'Courier New', monospace;
+  text-transform: uppercase;
+}
+
+.prntr-prompt-row {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 75%;
+  display: flex;
+  justify-content: center;
+}
+
+.prntr-prompt {
+  color: #FFD91A;
+  font-size: 28px;
+  letter-spacing: 0.08em;
+  text-align: center;
+}
+
+.prntr-prompt.is-blinking {
+  animation: prntr-blink 1s step-end infinite;
+}
+
+.prntr-footer {
+  position: absolute;
+  left: 48px;
+  right: 48px;
+  bottom: 40px;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  color: #EDEDED;
+  font-size: 13px;
+  letter-spacing: 0.06em;
+}
+
+.prntr-credit.is-glowing {
+  animation: prntr-glow 1500ms linear forwards;
+}
+
+.prntr-credit.is-after {
+  animation: prntr-after 600ms linear forwards;
+}
+
+/* The corrupted frame that flickers through just before the flip: the letters
+   thrown about, the prompt warped, the copyright line from somewhere else. */
+.prntr-copyright-corrupt {
+  display: none;
+  font-family: 'Comic Sans MS', 'Comic Sans', 'Comic Neue', cursive;
+  font-weight: 700;
+  font-size: 15px;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  color: #E8102A;
+  transform: rotate(-3deg) skewX(-8deg);
+}
+
+.is-corrupt .prntr-copyright {
+  display: none;
+}
+
+.is-corrupt .prntr-copyright-corrupt {
+  display: block;
+}
+
+.is-corrupt .prntr-title-slot:nth-child(1) { transform: translate(-0.22em, 0.18em) rotate(28deg); }
+.is-corrupt .prntr-title-slot:nth-child(2) { transform: translate(0.12em, -0.3em) rotate(-50deg) scaleX(-1); }
+.is-corrupt .prntr-title-slot:nth-child(3) { transform: translate(0.3em, 0.24em) rotate(166deg); }
+.is-corrupt .prntr-title-slot:nth-child(4) { transform: translate(-0.16em, -0.2em) rotate(72deg); }
+.is-corrupt .prntr-title-slot:nth-child(5) { transform: translate(0.05em, 0.36em) rotate(-118deg); }
+
+.is-corrupt .prntr-prompt {
+  transform: skewX(-14deg) scale(1.08, 0.88) translateX(0.2em);
+  letter-spacing: 0.18em;
+  animation: none;
+  opacity: 1;
+}
+
+@media (max-width: 640px) {
+  .prntr-card { gap: 22px; }
+  .prntr-card-brand { gap: 14px; }
+  .prntr-card-logo { width: 90px; height: 54px; }
+  .prntr-card-logo path { stroke-width: 2; }
+  .prntr-card-name { font-size: 18px; letter-spacing: 0.3em; padding-left: 0.3em; }
+  .prntr-card-presents { font-size: 15px; }
+  .prntr-title { gap: 2px; font-size: min(112px, 23.4vw); }
+  .prntr-prompt-row { top: 70%; }
+  .prntr-prompt { font-size: 16px; letter-spacing: 0.06em; }
+  .prntr-footer { left: 24px; right: 24px; bottom: 32px; font-size: 9px; }
+  .prntr-copyright-corrupt { font-size: 11px; }
+}
