@@ -1,3 +1,19 @@
+@font-face {
+  font-family: 'Comic Neue';
+  font-style: normal;
+  font-weight: 700;
+  font-display: block;
+  src: url(./fonts/ComicNeue-Bold.woff2) format('woff2');
+}
+
+@font-face {
+  font-family: 'Press Start 2P';
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+  src: url(./fonts/PressStart2P-Regular.woff2) format('woff2');
+}
+
 /* Prntr is standalone: its own ground, type and colours. Nothing here uses the
    app's --ink tints. Ships with the lazy chunk. */
 
