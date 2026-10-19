@@ -3,6 +3,7 @@ import { Header } from './components/Header';
 import { EmptyState } from './components/EmptyState';
 import { ProcessingState } from './components/ProcessingState';
 import { PreviewState } from './components/PreviewState';
+import { PrntrHost } from './components/PrntrHost';
 import { ErrorState, type ErrorKind } from './components/ErrorState';
 import { t, useLocale } from './i18n';
 import { INKS } from './lib/inks';
@@ -11,7 +12,7 @@ import { classifyError, logAppError, type ErrorCode } from './lib/errors';
 import { PageStore } from './lib/pageStore';
 import { exportFormat, exportRecolored, type ExportFormat } from './lib/exportFile';
 
-type AppState = 'empty' | 'processing' | 'preview' | 'error';
+type AppState = 'empty' | 'processing' | 'preview' | 'error' | 'prntr';
 
 const KIND_BY_CODE: Record<ErrorCode, ErrorKind> = {
   'PA-100': 'processing',
@@ -52,6 +53,8 @@ export default function App() {
   const [busy, setBusy] = useState<'print' | 'download' | null>(null);
   const [dragging, setDragging] = useState(false);
   const [, setPagesVersion] = useState(0);
+  const [prntrStage, setPrntrStage] = useState(0);
+  const prntrPage = useRef<{ source: HTMLCanvasElement; recolored: HTMLCanvasElement } | null>(null);
 
   const storeRef = useRef(new PageStore());
   const store = storeRef.current;
@@ -109,7 +112,7 @@ export default function App() {
   // While a document is loaded, a refresh or tab close asks first: the file
   // lives only in memory, so leaving drops it. The browser shows its own
   // wording. iOS Safari never fires beforeunload, so this covers desktop only.
-  const hasDocument = appState === 'processing' || appState === 'preview';
+  const hasDocument = appState === 'processing' || appState === 'preview' || appState === 'prntr';
   useEffect(() => {
     if (!hasDocument) return;
     const onBeforeUnload = (e: BeforeUnloadEvent) => {
@@ -119,6 +122,23 @@ export default function App() {
     window.addEventListener('beforeunload', onBeforeUnload);
     return () => window.removeEventListener('beforeunload', onBeforeUnload);
   }, [hasDocument]);
+
+  // Dev-only entrance: ?prntr=N opens Prntr at stage N once the preview is up.
+  // import.meta.env.DEV is a build-time constant, so builds drop this whole block;
+  // vite.config.ts fails the build if its marker string survives.
+  const devSkipUsed = useRef(false);
+  useEffect(() => {
+    if (import.meta.env.DEV) {
+      if (appState !== 'preview' || devSkipUsed.current) return;
+      const raw = new URLSearchParams(location.search).get('prntr');
+      if (raw === null) return;
+      const n = Number(raw);
+      if (!Number.isInteger(n) || n < 0) return;
+      devSkipUsed.current = true;
+      console.info('prntr-dev-skip', n);
+      enterPrntr(n);
+    }
+  }, [appState]);
 
   function openPicker() {
     fileInput.current?.click();
@@ -200,6 +220,22 @@ export default function App() {
     setCurrentPage(clamped);
   }
 
+  // Prntr takes over the stage with the page shown now; see PRNTR-ARCHITECTURE.md.
+  function enterPrntr(stage: number) {
+    if (appState !== 'preview') return;
+    const recolored = store.ensureRecolored(currentPage, inkRef.current);
+    const source = store.getSource(currentPage);
+    if (!recolored || !source) return;
+    setHolding(false);
+    prntrPage.current = { source, recolored };
+    setPrntrStage(stage);
+    setAppState('prntr');
+  }
+
+  function exitPrntr() {
+    setAppState('preview');
+  }
+
   async function collectAllRecolored(): Promise<HTMLCanvasElement[]> {
     const out: HTMLCanvasElement[] = [];
     for (let i = 0; i < store.pageCount; i++) {
@@ -278,6 +314,15 @@ export default function App() {
             busy={busy}
             showReminder={showPrintReminder}
             onDismissReminder={() => setShowPrintReminder(false)}
+          />
+        )}
+        {appState === 'prntr' && prntrPage.current && (
+          <PrntrHost
+            source={prntrPage.current.source}
+            recolored={prntrPage.current.recolored}
+            inkHex={inkHex}
+            stage={prntrStage}
+            onExit={exitPrntr}
           />
         )}
         {appState === 'error' && (
