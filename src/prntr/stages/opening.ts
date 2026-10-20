@@ -1,5 +1,6 @@
 import { nextInput, reducedMotion, wait } from '../anim';
 import type { Stage } from '../types';
+import { H, W } from './room/pixels';
 
 /** 0 = every letter on the baseline, 1 = approved, 2 = twice as messy. */
 const WOBBLE = 1;
@@ -118,7 +119,13 @@ export const opening: Stage = {
 
     // Beat 4: INSERT COIN, half a second after the last letter lands. Input does nothing.
     await at(d + 500);
+    // The arcade layer is the room's frame (240×160 at the largest whole-number scale,
+    // centred), so INSERT COIN and the footer sit where the room's HUD will put its caption
+    // and CREDIT, and nothing jumps at the cut (Edgar, 2026-10-19).
     const arcade = el('div', 'prntr-arcade');
+    const fit = () => arcade.style.setProperty('--s', String(Math.max(1, Math.floor(Math.min(root.clientWidth / W, root.clientHeight / H)))));
+    fit();
+    window.addEventListener('resize', fit, { signal });
     const promptRow = el('div', 'prntr-prompt-row');
     const prompt = el('div', 'prntr-prompt', 'INSERT COIN');
     if (!reduced) prompt.classList.add('is-blinking');

@@ -184,18 +184,25 @@
   opacity: 0;
 }
 
+/* The room's frame (240×160 virtual px at --s, set by the stage), centred: the prompt and the
+   footer are placed in it as the room's caption and CREDIT are, so CREDIT stays put at the cut
+   (Edgar, 2026-10-19; the handoff had the footer 48 px in and 40 px up from the viewport). */
 .prntr-arcade {
   position: absolute;
-  inset: 0;
+  left: calc(50% - 120px * var(--s));
+  top: calc(50% - 80px * var(--s));
+  width: calc(240px * var(--s));
+  height: calc(160px * var(--s));
   font-family: 'Press Start 2P', 'Courier New', monospace;
   text-transform: uppercase;
 }
 
+/* On the line the room's caption will use (132 virtual px: 660 on the 800 frame). */
 .prntr-prompt-row {
   position: absolute;
   left: 0;
   right: 0;
-  top: 75%;
+  top: calc(132px * var(--s));
   display: flex;
   justify-content: center;
 }
@@ -213,9 +220,9 @@
 
 .prntr-footer {
   position: absolute;
-  left: 48px;
-  right: 48px;
-  bottom: 40px;
+  left: calc(8px * var(--s));
+  right: calc(8px * var(--s));
+  bottom: calc(6.4px * var(--s));
   display: flex;
   justify-content: space-between;
   align-items: baseline;
@@ -274,9 +281,8 @@
   .prntr-card-name { font-size: 18px; letter-spacing: 0.3em; padding-left: 0.3em; }
   .prntr-card-presents { font-size: 15px; }
   .prntr-title { gap: 2px; font-size: min(112px, 23.4vw); }
-  .prntr-prompt-row { top: 70%; }
   .prntr-prompt { font-size: 16px; letter-spacing: 0.06em; }
-  .prntr-footer { left: 24px; right: 24px; bottom: 32px; font-size: 9px; }
+  .prntr-footer { font-size: 9px; }
   .prntr-copyright-corrupt { font-size: 11px; }
 }
 
