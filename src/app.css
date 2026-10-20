@@ -106,6 +106,49 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
   animation: sky-drop 700ms both;
 }
 
+/* The Tetris drop (PRNTR-STAGE-1.md §4.10): after a game over the UI's blocks fall in
+   one after another, bottom of the stack first, in discrete steps, and lock with no
+   settle. The frozen room shows between them until they land. Reduced motion never
+   gets here either (App.tsx cuts). The header lands last: App.tsx listens for it. */
+@keyframes tetris-piece {
+  from {
+    transform: translateY(-100vh);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+.no-print.is-tetris-drop {
+  z-index: 101;
+  min-height: 100vh;
+}
+
+.no-print.is-tetris-drop :is(.header, .toolbar, .preview-stage, .sidebar, .state-pad) {
+  animation: tetris-piece 600ms steps(12, end) both;
+}
+
+/* .preview-stage keeps its own tinted background. */
+.no-print.is-tetris-drop :is(.header, .toolbar, .sidebar, .state-pad) {
+  background: #ffffff;
+}
+
+.no-print.is-tetris-drop .sidebar {
+  animation-delay: 0ms;
+}
+
+.no-print.is-tetris-drop :is(.preview-stage, .state-pad) {
+  animation-delay: 150ms;
+}
+
+.no-print.is-tetris-drop .toolbar {
+  animation-delay: 300ms;
+}
+
+.no-print.is-tetris-drop .header {
+  animation-delay: 450ms;
+}
+
 /* ---------- Header ---------- */
 
 .header {

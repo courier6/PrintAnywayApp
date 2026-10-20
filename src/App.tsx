@@ -58,8 +58,9 @@ export default function App() {
   const prntrPage = useRef<{ source: HTMLCanvasElement; recolored: HTMLCanvasElement } | null>(null);
   const prntrAudio = useRef<AudioContext | null>(null);
   const prntrReturn = useRef<AppState>('preview');
-  // True while the app's UI falls back into place over Prntr's last frame.
-  const [prntrDropping, setPrntrDropping] = useState(false);
+  // Set while the app's UI falls back into place over Prntr's last frame: the sky
+  // drop after the room is cleared, the Tetris drop after a game over.
+  const [prntrDrop, setPrntrDrop] = useState<'sky' | 'tetris' | null>(null);
 
   const storeRef = useRef(new PageStore());
   const store = storeRef.current;
@@ -263,25 +264,25 @@ export default function App() {
     setAppState(prntrReturn.current);
   }
 
-  // The sky drop (PRNTR-STAGE-1.md §4.10): after the room is cleared, the app's UI
-  // falls into place over the frozen last frame of Prntr, which stays mounted until
-  // the drop has landed. Reduced motion is a plain cut, as is any exit (Esc, ✕) and,
-  // for now, a game over.
+  // The drops (PRNTR-STAGE-1.md §4.10): after the room is cleared the app's UI falls
+  // into place from the sky in one piece; after a game over its blocks fall in one by
+  // one like Tetris pieces. Either way over the frozen last frame of Prntr, which stays
+  // mounted until the drop has landed. Reduced motion is a plain cut, as is any exit.
   function finishPrntr(outcome: 'cleared' | 'over') {
-    if (outcome === 'over' || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
       exitPrntr();
       return;
     }
-    setPrntrDropping(true);
+    setPrntrDrop(outcome === 'over' ? 'tetris' : 'sky');
     setAppState(prntrReturn.current);
   }
 
   // Safety net: Prntr never stays mounted if the drop's animationend does not arrive.
   useEffect(() => {
-    if (!prntrDropping) return;
-    const id = window.setTimeout(() => setPrntrDropping(false), 1200);
+    if (!prntrDrop) return;
+    const id = window.setTimeout(() => setPrntrDrop(null), prntrDrop === 'tetris' ? 2000 : 1200);
     return () => window.clearTimeout(id);
-  }, [prntrDropping]);
+  }, [prntrDrop]);
 
   async function collectAllRecolored(): Promise<HTMLCanvasElement[]> {
     const out: HTMLCanvasElement[] = [];
@@ -335,9 +336,11 @@ export default function App() {
       style={{ '--ink': INKS[0].hex } as CSSProperties}
     >
       <div
-        className={'no-print' + (prntrDropping ? ' is-sky-drop' : '')}
+        className={'no-print' + (prntrDrop === 'sky' ? ' is-sky-drop' : prntrDrop === 'tetris' ? ' is-tetris-drop' : '')}
         onAnimationEnd={(e) => {
-          if (e.target === e.currentTarget) setPrntrDropping(false);
+          // The sky drop animates .no-print itself; the Tetris drop's last piece is the header.
+          const landed = prntrDrop === 'tetris' ? (e.target as HTMLElement).classList.contains('header') : e.target === e.currentTarget;
+          if (landed) setPrntrDrop(null);
         }}
       >
         <Header />
@@ -391,7 +394,7 @@ export default function App() {
       </div>
       {/* Outside .no-print: the sky drop transforms .no-print, which would carry the fixed
           Prntr layer along with it. */}
-      {(appState === 'prntr' || prntrDropping) && prntrPage.current && (
+      {(appState === 'prntr' || prntrDrop !== null) && prntrPage.current && (
         <PrntrHost
           source={prntrPage.current.source}
           recolored={prntrPage.current.recolored}
