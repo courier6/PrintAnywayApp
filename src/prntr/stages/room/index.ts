@@ -757,14 +757,14 @@ export const room: Stage = {
       for (const p of pages) {
         if (p.shot || now < p.at || p.landedAt !== null) continue;
         const r = pagePose(p, now);
-        pix.blit(r.x, r.y, SPR.PAGE_SMALL, r.w / 10);
+        pix.blit(r.x, r.y, SPR.PAGE_PRINTED, r.w / 10);
       }
-      // A page on the glass: big, at a slight angle, then it slides off. All pages are blank.
+      // A page on the glass: big, at a slight angle, then it slides off.
       for (const p of pages) {
         if (p.landedAt === null) continue;
         const lt = now - p.landedAt;
         const slide = lt > PAGE_LANDED_MS ? ((lt - PAGE_LANDED_MS) / PAGE_SLIDE_MS) * 80 : 0;
-        pix.blit(Math.floor(p.x1 - 20), Math.floor(p.y1 - 26 + slide), SPR.PAGE_SMALL, 4, { skew: 10 });
+        pix.blit(Math.floor(p.x1 - 20), Math.floor(p.y1 - 26 + slide), SPR.PAGE_PRINTED, 4, { skew: 10 });
       }
       if (pointer) {
         const aim = phase === 'fight' || phase === 'continue' || phase === 'over';

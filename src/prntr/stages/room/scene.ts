@@ -14,6 +14,7 @@ export const SPR = {
   CLOCK: parseSprite(SPRITES.CLOCK),
   EXIT: parseSprite(SPRITES.EXIT),
   PAGE_SMALL: parseSprite(SPRITES.PAGE_SMALL),
+  PAGE_PRINTED: parseSprite(SPRITES.PAGE_PRINTED),
 };
 
 /**

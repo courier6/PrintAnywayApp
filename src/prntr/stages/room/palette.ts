@@ -16,7 +16,8 @@ export type PalKey = keyof typeof PAL;
 
 /**
  * String sprite maps, one character per pixel, '.' transparent, letters = PAL keys.
- * Verbatim from prntr/design/stage1/art/sprites.txt. Scale by whole numbers only.
+ * Verbatim from prntr/design/stage1/art/sprites.txt, except PAGE_PRINTED. Scale by
+ * whole numbers only.
  */
 export const SPRITES = {
   // 32 × 22
@@ -221,6 +222,23 @@ KwwwwwwwwK
 KwwwwwwwwK
 KwwwwwwwwK
 KwwwwwwwwK
+KwwwwwwwwK
+KKKKKKKKKK
+`,
+  // 10 × 13: PAGE_SMALL with five lines of print, for the pages the machine throws
+  // (Edgar, 2026-10-19; not in sprites.txt). The page in the tray stays blank.
+  PAGE_PRINTED: `
+KKKKKKKKKK
+KwwwwwwwwK
+KwiiiiwwwK
+KwwwwwwwwK
+KwiiwiiiwK
+KwwwwwwwwK
+KwiiiiiwwK
+KwwwwwwwwK
+KwiwiiiiwK
+KwwwwwwwwK
+KwiiiwwwwK
 KwwwwwwwwK
 KKKKKKKKKK
 `,
