@@ -329,6 +329,7 @@ export const room: Stage = {
       creditEl.classList.remove('is-glowing', 'is-after');
       countEl.textContent = '9';
       continueEl.hidden = false;
+      sounds.death();
       ctx.announce('Continue?');
     };
     // Yes: the credit comes back, the fight resumes with the last heart.
@@ -376,6 +377,7 @@ export const room: Stage = {
       hideHint();
       continueEl.hidden = true;
       overEl.hidden = false;
+      sounds.gameOver();
       ctx.announce('Game over.');
     };
     const startEnd = (now: number) => {

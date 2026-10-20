@@ -4,7 +4,8 @@ import type { PrntrAudio } from '../../audio';
  * The room's sounds: a port of prntr/design/stage1/audio/sounds.js (the spec; the
  * .wav files beside it are renders for listening). Same recipes and numbers, played
  * live through Prntr's master gain instead of the context's destination. Without an
- * AudioContext every sound is a no-op.
+ * AudioContext every sound is a no-op. death and gameOver are not in sounds.js: Edgar
+ * asked for them after playing the room (2026-10-19).
  */
 
 export interface Hum {
@@ -34,6 +35,10 @@ export interface RoomSounds {
   reload(): void;
   /** A page landing on the glass. */
   paperSlap(): void;
+  /** The last heart gone with a continue still to come: three falling notes. */
+  death(): void;
+  /** Game over: the three notes, then the long fall. About 1.4 s; it plays on through the host's drop. */
+  gameOver(): void;
 }
 
 const noop = () => undefined;
@@ -50,6 +55,8 @@ const SILENT: RoomSounds = {
   dryClick: noop,
   reload: noop,
   paperSlap: noop,
+  death: noop,
+  gameOver: noop,
 };
 
 /** Two seconds of white noise, made once per context. */
@@ -269,5 +276,20 @@ export function createRoomSounds(audio: PrntrAudio): RoomSounds {
       noise(t + 0.05, 0.08, { lp: 2200, gain: 0.7, decay: 0.012 });
       tone(t + 0.05, 0.025, { f0: 180, gain: 0.6, decay: 0.008 });
     },
+    // A4, G4, F4: square notes of 120 ms, 150 ms apart
+    death() {
+      deathNotes(now());
+    },
+    // the three notes, then two squares 1.5% apart sliding from E4 down to 50 Hz over 0.9 s
+    gameOver() {
+      const t = now();
+      deathNotes(t);
+      tone(t + 0.45, 0.9, { type: 'square', f0: 329.6, f1: 50, gain: 0.14, attack: 0.01, release: 0.2 });
+      tone(t + 0.45, 0.9, { type: 'square', f0: 334.5, f1: 50.7, gain: 0.14, attack: 0.01, release: 0.2 });
+    },
   };
+
+  function deathNotes(t: number) {
+    [440, 392, 349.2].forEach((f0, i) => tone(t + i * 0.15, 0.12, { type: 'square', f0, gain: 0.2, attack: 0.005, release: 0.03 }));
+  }
 }
