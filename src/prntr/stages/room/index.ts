@@ -96,8 +96,14 @@ const RAGE_STEP = 0.85;
 const RAGE_MAX = 4;
 /** Shooting one of the room's things breaks it, once, for this many points (Edgar, 2026-10-19). */
 const BREAK_POINTS = 5;
-/** The water jug breaking shorts the machine: a fire on its wet side grows over the cooler for
- * this long, then burns on at that size (Edgar, 2026-10-19). */
+/** The water jug breaking shorts the machine (Edgar, 2026-10-20): for SHORT_MS it zaps and sparks,
+ * a burst of sparks off its wet side at each of SHORT_ZAPS_MS with a crackle and a flash of the
+ * machine, before the fire takes. Then a fire on its wet side grows over the cooler for
+ * FIRE_GROW_MS, and burns on at that size (Edgar, 2026-10-19). */
+const SHORT_MS = 1800;
+const SHORT_ZAPS_MS = [0, 380, 700, 1050, 1400];
+/** Where the sparks come from: the machine's wet left foot on the 3× pose. */
+const SHORT_AT = { x: 74, y: 140 };
 const FIRE_GROW_MS = 12_000;
 /** This long after the fire starts the machine is mad (Edgar, 2026-10-19): its slot glows red like
  * the door, its button stays bright, and it trembles (a new offset every SHAKE_FRAMES frames). */
@@ -542,7 +548,10 @@ export const room: Stage = {
     let clockAt = 0;
     let clockX0 = CLOCK_AT.x;
     let clockRot0 = 0;
-    /** When the fire started (the water jug broke), and its crackle. */
+    /** The machine is shorting out from this moment (the water jug broke); the fire takes SHORT_MS later. */
+    let shortAt: number | null = null;
+    let shortZaps = 0;
+    /** When the fire started, and its crackle. */
     let fireAt: number | null = null;
     let fireSound: FireSound | null = null;
     /** The fire's growth, 0 (just lit) to 1 (full), from when it was lit (or last snuffed back). */
@@ -1061,7 +1070,7 @@ export const room: Stage = {
         scene.broken[thing.id] = true;
         sounds[thing.sound]();
         addScore(BREAK_POINTS, now);
-        if (thing.id === 'tank') startFire(now);
+        if (thing.id === 'tank') startShort(now);
         if (thing.id === 'clock') {
           scene.clock.state = 'falling';
           clockAt = now;
@@ -1131,11 +1140,27 @@ export const room: Stage = {
       spreadMs = Math.round(FIRE_SPREAD_MS * Math.pow(STOKE_STEP, stokes));
       if (spreadAt !== null) spreadAt = now - v * spreadMs;
     };
-    // The water reaches the machine: a short, a flash, and a fire on that side that grows.
+    // The water reaches the machine: it shorts out, zapping and sparking for a couple of moments,
+    // and then the fire takes on that side and grows.
+    const startShort = (now: number) => {
+      shortAt = now;
+      shortZaps = 0;
+      sounds.short(SHORT_ZAPS_MS);
+    };
+    // One zap: the machine flashes for a frame and sparks fly off its wet foot, out and up, falling.
+    const zap = (now: number) => {
+      flashFrames = 1;
+      if (reduced) return;
+      for (let i = 0; i < 10 + Math.floor(Math.random() * 6); i++) {
+        const a = -Math.PI * (0.15 + Math.random() * 0.7);
+        const v = 40 + Math.random() * 90;
+        bits.push({ x: SHORT_AT.x + (Math.random() - 0.5) * 6, y: SHORT_AT.y - Math.random() * 6, vx: Math.cos(a) * v, vy: Math.sin(a) * v, g: 220, born: now, life: 250 + Math.random() * 350, size: 1, color: Math.random() < 0.6 ? 'W' : Math.random() < 0.5 ? 'y' : 'c' });
+      }
+    };
     const startFire = (now: number) => {
+      shortAt = null;
       fireAt = now;
       flashFrames = HIT_FLASH_FRAMES * 2;
-      sounds.zap();
       fireSound = sounds.fire();
     };
     // The ink lands in the fire (Edgar, 2026-10-20): a hiss and steam, and the fire is smaller by
@@ -1316,6 +1341,7 @@ export const room: Stage = {
         attackGap,
         exit: (): ExitSign['state'] => scene.exit.state,
         doorGap: () => scene.doorGap,
+        short: () => shortAt !== null,
         fire: () => fireAt !== null,
         fireU: () => fireU(performance.now()),
         /** The x of a tube spraying at the fire right now, or null. */
@@ -1425,6 +1451,14 @@ export const room: Stage = {
       }
       if (hintHideAt && now >= hintHideAt) hideHint();
       poseName(now);
+      // The short: a zap at each of its moments, then the fire.
+      if (shortAt !== null) {
+        while (shortZaps < SHORT_ZAPS_MS.length && now - shortAt >= SHORT_ZAPS_MS[shortZaps]) {
+          shortZaps++;
+          zap(now);
+        }
+        if (now - shortAt >= SHORT_MS) startFire(now);
+      }
       if (fireAt !== null) fireSound?.setLevel(fireU(now) + 0.5 * spreadU(now) + (now - stokeAt < STOKE_FLARE_MS ? 0.3 : 0));
       if (fireAt !== null && !mad && now - fireAt >= MAD_AFTER_MS) {
         mad = true;

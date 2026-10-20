@@ -67,8 +67,10 @@ export interface RoomSounds {
   signCrash(): void;
   /** The door creaking open, 1.3 s, faint under everything else. */
   doorCreak(): void;
-  /** The machine shorting out when the water reaches it. */
+  /** The machine shorting out when the water reaches it: one burst of zaps. */
   zap(): void;
+  /** The short before the fire (Edgar, 2026-10-20): a zap at each of these ms, each its own, with a sizzle between. */
+  short(zapsMs: number[]): void;
   /** A jet of ink from a nozzle: a hiss for the jet's 1.4 s. */
   inkSpray(): void;
   /** A splat completing on the glass. */
@@ -116,6 +118,7 @@ const SILENT: RoomSounds = {
   signCrash: noop,
   doorCreak: noop,
   zap: noop,
+  short: noop,
   inkSpray: noop,
   inkSplat: noop,
   fire: () => ({ setLevel: noop, stop: noop }),
@@ -470,6 +473,24 @@ export function createRoomSounds(audio: PrntrAudio): RoomSounds {
       for (let i = 0; i < 5; i++) {
         tone(t + i * 0.09, 0.06, { type: 'square', f0: 60 + i * 15, gain: 0.25, attack: 0.003, release: 0.01 });
         noise(t + i * 0.09, 0.05, { hp: 3000, gain: 0.5, decay: 0.008 });
+      }
+    },
+    // the short-out before the fire: at each moment a zap of its own, two to four bursts of a
+    // 50–180 Hz square with a crackle on each, 60–80 ms apart, and a short hum of mains buzz under
+    // them; a faint sizzle runs through the whole of it
+    short(zapsMs) {
+      const t = now();
+      const last = zapsMs[zapsMs.length - 1] / 1000 + 0.4;
+      noise(t, last, { hp: 3000, lp: 9000, gain: 0.07 });
+      for (const ms of zapsMs) {
+        const z = t + ms / 1000;
+        const n = 2 + Math.floor(Math.random() * 3);
+        const step = 0.06 + Math.random() * 0.02;
+        for (let i = 0; i < n; i++) {
+          tone(z + i * step, 0.05, { type: 'square', f0: 50 + Math.random() * 130, gain: 0.22, attack: 0.002, release: 0.01 });
+          noise(z + i * step, 0.04, { hp: 2500, gain: 0.55, decay: 0.006 });
+        }
+        tone(z, n * step + 0.05, { type: 'sawtooth', f0: 60, gain: 0.08, attack: 0.005, release: 0.03 });
       }
     },
     // a spit at the front, then a 1.4 s hiss
