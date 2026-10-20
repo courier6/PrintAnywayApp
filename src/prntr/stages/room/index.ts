@@ -523,7 +523,8 @@ export const room: Stage = {
       Array.from(pipsEl.children).forEach((p, i) => p.classList.toggle('is-off', i >= lives));
       pipsEl.setAttribute('aria-label', `Lives ${lives} of ${LIVES_MAX}`);
     };
-    // The heart just lost turns into its ghost and floats up off the HUD (Edgar, 2026-10-20).
+    // The heart just lost turns into its ghost and floats up from the hearts to the top of the
+    // frame (Edgar, 2026-10-20); --rise is how far that is.
     const heartGhost = (i: number) => {
       const heart = pipsEl.children[i] as HTMLElement | undefined;
       if (!heart) return;
@@ -535,6 +536,7 @@ export const room: Stage = {
       ghost.style.top = `${hr.top - fr.top}px`;
       ghost.style.width = `${hr.width}px`;
       ghost.style.height = `${hr.height}px`;
+      ghost.style.setProperty('--rise', `${hr.bottom - fr.top}px`);
       ghost.addEventListener('animationend', () => ghost.remove(), { once: true });
       hud.append(ghost);
     };

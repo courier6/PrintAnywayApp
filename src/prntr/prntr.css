@@ -710,11 +710,12 @@
   pointer-events: none;
 }
 
-/* The lives (Edgar, 2026-10-20): red hearts at the top right, opposite the score. */
+/* The lives (Edgar, 2026-10-20): red hearts at the lower right, above the shot pips, so a lost
+   heart's ghost has the whole room to float up through. */
 .prntr-room-pips {
   position: absolute;
   right: calc(8px * var(--s));
-  top: calc(6.4px * var(--s));
+  bottom: calc(6px * var(--s) + 34px);
   display: flex;
   gap: 10px;
 }
@@ -739,14 +740,15 @@
   100% { opacity: 1; }
 }
 
-/* A lost heart's ghost: pale and see-through, it drifts up and to the left, swaying and growing
-   a little, and fades over 1.8 s, staying in the frame
-   (only fades under reduced motion). */
+/* A lost heart's ghost: pale and see-through, it floats from the hearts to the top of the
+   frame over 5 s (--rise, set by the stage, is the way up), swaying and growing a little, and
+   fades out as it gets there (only fades under reduced motion). It can be shot on the way. */
 @keyframes prntr-heart-ghost {
   0% { opacity: 0.95; transform: translate(0, 0) scale(1); }
-  30% { opacity: 0.8; transform: translate(-7px, -8px) scale(1.06); }
-  60% { opacity: 0.55; transform: translate(4px, -17px) scale(1.12); }
-  100% { opacity: 0; transform: translate(-12px, -26px) scale(1.18); }
+  25% { opacity: 0.9; transform: translate(calc(-2px * var(--s)), calc(var(--rise) * -0.25)) scale(1.05); }
+  50% { opacity: 0.85; transform: translate(calc(1.5px * var(--s)), calc(var(--rise) * -0.5)) scale(1.1); }
+  75% { opacity: 0.7; transform: translate(calc(-2.5px * var(--s)), calc(var(--rise) * -0.75)) scale(1.15); }
+  100% { opacity: 0; transform: translate(0, calc(var(--rise) * -1)) scale(1.2); }
 }
 
 @keyframes prntr-heart-ghost-still {
@@ -758,7 +760,8 @@
   position: absolute;
   background: #FFD6D2;
   clip-path: polygon(14.29% 0, 42.86% 0, 42.86% 16.67%, 57.14% 16.67%, 57.14% 0, 85.71% 0, 85.71% 16.67%, 100% 16.67%, 100% 50%, 85.71% 50%, 85.71% 66.67%, 71.43% 66.67%, 71.43% 83.33%, 57.14% 83.33%, 57.14% 100%, 42.86% 100%, 42.86% 83.33%, 28.57% 83.33%, 28.57% 66.67%, 14.29% 66.67%, 14.29% 50%, 0 50%, 0 16.67%, 14.29% 16.67%);
-  animation: prntr-heart-ghost 1800ms ease-out forwards;
+  --rise: 100px;
+  animation: prntr-heart-ghost 5000ms linear forwards;
   pointer-events: none;
 }
 
@@ -847,7 +850,7 @@
 /* small frames: CREDIT and the shots fill the bottom row, so the bar sits just above CREDIT */
 .prntr-room-frame.is-small .prntr-room-life { left: calc(8px * var(--s)); right: auto; width: calc(90px * var(--s)); bottom: calc(6px * var(--s) + 14px); }
 .prntr-room-frame.is-small .prntr-room-health-name { top: calc(14px * var(--s) - 10px); font-size: 7px; }
-.prntr-room-frame.is-small .prntr-room-pips { gap: 6px; }
+.prntr-room-frame.is-small .prntr-room-pips { gap: 6px; bottom: calc(6px * var(--s) + 24px); }
 .prntr-room-frame.is-small .prntr-room-pips span { width: 14px; height: 12px; }
 .prntr-room-frame.is-small .prntr-room-shots span { width: 7px; height: 16px; border-width: 2px; }
 .prntr-room-frame.is-small .prntr-room-hint-title { font-size: 16px; }
