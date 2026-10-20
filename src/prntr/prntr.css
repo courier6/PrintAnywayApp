@@ -620,11 +620,41 @@
   background: #F0288C;
 }
 
+/* The player's health (Edgar, 2026-10-20): the machine's bar in green, along the bottom
+   between CREDIT and the shots; it blinks twice when it takes a hit. */
+.prntr-room-life {
+  position: absolute;
+  left: calc(70px * var(--s));
+  right: calc(70px * var(--s));
+  bottom: calc(6px * var(--s));
+  height: 16px;
+  border: 3px solid #1E1433;
+  background: #1E1433;
+}
+
+.prntr-room-life-fill {
+  height: 100%;
+  background: #46D36E;
+  transition: width 200ms linear;
+}
+
+.prntr-room-life.is-hurt .prntr-room-life-fill {
+  animation: prntr-hurt 250ms steps(1, end) 2;
+}
+
+/* A hit that leaves health: a short red flash over the room. */
+.prntr-room-hurt {
+  position: absolute;
+  inset: 0;
+  background: rgba(184, 20, 10, 0.2);
+  pointer-events: none;
+}
+
 .prntr-room-pips {
   position: absolute;
   left: 0;
   right: 0;
-  bottom: calc(6px * var(--s));
+  bottom: calc(16px * var(--s));
   display: flex;
   justify-content: center;
   gap: 10px;
@@ -730,7 +760,10 @@
 .prntr-room-frame.is-small .prntr-room-continue {
   text-shadow: 1px 1px 0 #1E1433, -1px -1px 0 #1E1433, 1px -1px 0 #1E1433, -1px 1px 0 #1E1433;
 }
-.prntr-room-frame.is-small .prntr-room-health { height: 10px; border-width: 2px; }
+.prntr-room-frame.is-small .prntr-room-health,
+.prntr-room-frame.is-small .prntr-room-life { height: 10px; border-width: 2px; }
+/* small frames: CREDIT and the shots fill the bottom row, so the bar sits just above CREDIT */
+.prntr-room-frame.is-small .prntr-room-life { left: calc(8px * var(--s)); right: auto; width: calc(90px * var(--s)); bottom: calc(6px * var(--s) + 14px); }
 .prntr-room-frame.is-small .prntr-room-health-name { top: calc(14px * var(--s) - 10px); font-size: 7px; }
 .prntr-room-frame.is-small .prntr-room-pips { gap: 6px; }
 .prntr-room-frame.is-small .prntr-room-pips span { width: 14px; height: 12px; }

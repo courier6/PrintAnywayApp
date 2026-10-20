@@ -27,6 +27,12 @@ const LIVES_START = 2;
 const LIVES_CONTINUE = 1;
 const DEATH_MS = 1200;
 const RESPAWN_MS = 2000;
+/** The player's health, a green bar like the machine's (Edgar, 2026-10-20): each attack that
+ * lands takes HIT_DAMAGE of it and the room flashes red for HURT_MS; the hit that empties it
+ * costs a life (the death beat above), and the bar is full again when the beat is over. */
+const PLAYER_HEALTH = 100;
+const HIT_DAMAGE = { staple: 25, page: 34, ink: 50 } as const;
+const HURT_MS = 150;
 /** The printer's standby tick while the room is idle. */
 const TICK_MS = 4000;
 const AUTO_RELOAD_MS = 800;
@@ -312,6 +318,10 @@ export const room: Stage = {
     healthEl.append(healthFill);
     const healthName = el('div', 'prntr-room-health-name prntr-room-fight-ui', MODEL);
     healthName.setAttribute('aria-hidden', 'true');
+    const lifeEl = el('div', 'prntr-room-life prntr-room-fight-ui');
+    lifeEl.setAttribute('role', 'img');
+    const lifeFill = el('div', 'prntr-room-life-fill');
+    lifeEl.append(lifeFill);
     const pipsEl = el('div', 'prntr-room-pips prntr-room-fight-ui');
     pipsEl.setAttribute('role', 'img');
     for (let i = 0; i < LIVES_MAX; i++) pipsEl.append(el('span', ''));
@@ -319,14 +329,14 @@ export const room: Stage = {
     shotsBtn.type = 'button';
     shotsBtn.className = 'prntr-room-shots prntr-room-fight-ui';
     for (let i = 0; i < SHOTS; i++) shotsBtn.append(el('span', ''));
-    for (const n of [healthEl, healthName, pipsEl, shotsBtn]) n.hidden = true;
+    for (const n of [healthEl, healthName, lifeEl, pipsEl, shotsBtn]) n.hidden = true;
     // When the fight starts: what to do, and the one binding that matters (Edgar, 2026-10-19).
     const hintEl = el('div', 'prntr-room-hint');
     hintEl.setAttribute('aria-hidden', 'true');
     const touch = window.matchMedia('(hover: none)').matches;
     hintEl.append(el('div', 'prntr-room-hint-title', 'PROTECT YOURSELF.'), el('div', 'prntr-room-hint-keys', touch ? 'TAP TO SHOOT' : 'CLICK TO SHOOT'));
     hintEl.hidden = true;
-    hud.append(scoreEl, hiEl, creditEl, captionEl, healthEl, healthName, pipsEl, shotsBtn, hintEl);
+    hud.append(scoreEl, hiEl, creditEl, captionEl, healthEl, healthName, lifeEl, pipsEl, shotsBtn, hintEl);
     const continueEl = el('div', 'prntr-room-continue');
     const countEl = el('div', 'prntr-room-continue-count', '9');
     continueEl.append(el('div', 'prntr-room-continue-label', 'CONTINUE?'), countEl);
@@ -335,11 +345,15 @@ export const room: Stage = {
     const overEl = el('div', 'prntr-room-over');
     overEl.setAttribute('aria-hidden', 'true');
     overEl.hidden = true;
+    // A hit that leaves health: the room flashes red, nothing stops.
+    const hurtEl = el('div', 'prntr-room-hurt');
+    hurtEl.setAttribute('aria-hidden', 'true');
+    hurtEl.hidden = true;
     // The death beat's red dim (a life lost, more to come).
     const deathEl = el('div', 'prntr-room-death');
     deathEl.setAttribute('aria-hidden', 'true');
     deathEl.hidden = true;
-    frame.append(canvas, light, spill, fireLight, slotLight, front, dread, wash, glows, hud, cursor, deathEl, continueEl, overEl);
+    frame.append(canvas, light, spill, fireLight, slotLight, front, dread, wash, glows, hud, cursor, hurtEl, deathEl, continueEl, overEl);
     wrap.append(frame);
     root.append(wrap);
 
@@ -385,6 +399,9 @@ export const room: Stage = {
     let frozenAt: number | null = null;
     let score = 0;
     let lives = LIVES_START;
+    let health = PLAYER_HEALTH;
+    /** The hurt flash shows until this moment (0 = none). */
+    let hurtUntil = 0;
     /** The death beat runs until this moment (0 = none). */
     let deathUntil = 0;
     let shots = SHOTS;
@@ -458,6 +475,10 @@ export const room: Stage = {
       // The health bar is the score, inverted: HI 1337 was its life all along.
       healthFill.style.width = `${(1 - score / HI) * 100}%`;
     };
+    const drawHealth = () => {
+      lifeFill.style.width = `${health}%`;
+      lifeEl.setAttribute('aria-label', `Your health ${health} of ${PLAYER_HEALTH}`);
+    };
     const drawPips = () => {
       Array.from(pipsEl.children).forEach((p, i) => p.classList.toggle('is-off', i >= lives));
       pipsEl.setAttribute('aria-label', `Lives ${lives} of ${LIVES_MAX}`);
@@ -467,7 +488,7 @@ export const room: Stage = {
       shotsBtn.setAttribute('aria-label', `Shots ${shots} of ${SHOTS}. Reload`);
     };
     const showFightUi = (on: boolean) => {
-      for (const n of [healthEl, healthName, pipsEl, shotsBtn]) {
+      for (const n of [healthEl, healthName, lifeEl, pipsEl, shotsBtn]) {
         n.classList.remove('is-in');
         n.hidden = !on;
         if (on) {
@@ -477,6 +498,7 @@ export const room: Stage = {
       }
     };
     drawScore();
+    drawHealth();
     drawPips();
     drawShots();
 
@@ -521,6 +543,8 @@ export const room: Stage = {
       continued = true;
       frozenAt = null;
       lives = LIVES_CONTINUE;
+      health = PLAYER_HEALTH;
+      drawHealth();
       shots = SHOTS;
       autoReloadAt = null;
       reloadSecondAt = null;
@@ -583,6 +607,10 @@ export const room: Stage = {
     const die = (now: number) => {
       if (phase !== 'fight' || frozenAt !== null || god) return;
       lives--;
+      health = 0;
+      drawHealth();
+      hurtUntil = 0;
+      hurtEl.hidden = true;
       pipsEl.classList.remove('is-hurt');
       void pipsEl.offsetWidth; // flush, so the blink restarts
       pipsEl.classList.add('is-hurt');
@@ -603,6 +631,22 @@ export const room: Stage = {
       deathEl.hidden = false;
       sounds.death();
       ctx.announce(`Hit. ${lives} ${lives === 1 ? 'life' : 'lives'} left.`);
+    };
+    // An attack lands: it takes its damage; the one that empties the bar is a life.
+    const hurt = (kind: keyof typeof HIT_DAMAGE, now: number) => {
+      if (phase !== 'fight' || frozenAt !== null || god) return;
+      health = Math.max(0, health - HIT_DAMAGE[kind]);
+      drawHealth();
+      if (health === 0) {
+        die(now);
+        return;
+      }
+      lifeEl.classList.remove('is-hurt');
+      void lifeEl.offsetWidth; // flush, so the blink restarts
+      lifeEl.classList.add('is-hurt');
+      hurtEl.hidden = false;
+      hurtUntil = now + HURT_MS;
+      ctx.announce(`Hit. Health ${health}.`);
     };
     const addScore = (n: number, now: number) => {
       // The counter never passes 1337, whatever the last hit was worth.
@@ -873,6 +917,11 @@ export const room: Stage = {
           score = Math.min(HI - 1, Math.max(0, n));
           drawScore();
         },
+        health: () => health,
+        setHealth: (n: number) => {
+          health = Math.max(1, Math.min(PLAYER_HEALTH, Math.round(n)));
+          drawHealth();
+        },
         god: (on: boolean) => {
           god = on;
         },
@@ -1008,12 +1057,18 @@ export const room: Stage = {
       } else if (phase === 'sticker') {
         stickerStep = runSteps(STICKER_STEPS, stickerStep, t);
       } else if (phase === 'fight') {
-        // The death beat: nothing moves until it is over, then the fight goes on.
+        if (hurtUntil && now >= hurtUntil) {
+          hurtUntil = 0;
+          hurtEl.hidden = true;
+        }
+        // The death beat: nothing moves until it is over, then the fight goes on, health full.
         if (deathUntil) {
           if (now < deathUntil) return;
           deathUntil = 0;
           frozenAt = null;
           deathEl.hidden = true;
+          health = PLAYER_HEALTH;
+          drawHealth();
           pipsEl.classList.remove('is-hurt');
           nextAttackAt = now + RESPAWN_MS;
         }
@@ -1066,7 +1121,7 @@ export const room: Stage = {
           if (!s.hit && !s.shot && now - s.at >= STAPLE_MS) {
             s.hit = true;
             sounds.stapleHit();
-            die(now);
+            hurt('staple', now);
           }
         }
         staples = staples.filter((s) => !s.hit && !s.shot);
@@ -1078,7 +1133,7 @@ export const room: Stage = {
           if (!p.shot && p.landedAt === null && now - p.at >= PAGE_MS) {
             p.landedAt = now;
             sounds.paperSlap();
-            die(now);
+            hurt('page', now);
           }
         }
         pages = pages.filter((p) => !p.shot && (p.landedAt === null || now - p.landedAt < PAGE_LANDED_MS + PAGE_SLIDE_MS));
@@ -1090,7 +1145,7 @@ export const room: Stage = {
           if (!s.done && s.stoppedAt === null && now >= splatAt(s)) {
             s.done = true;
             sounds.inkSplat();
-            die(now);
+            hurt('ink', now);
           }
         }
         sprays = sprays.filter((s) => now < splatAt(s) + INK_LANDED_MS + INK_SLIDE_MS);
