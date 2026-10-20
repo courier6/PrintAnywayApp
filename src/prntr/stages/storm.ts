@@ -8,7 +8,8 @@
  * is drawn on one canvas over the viewport in whole "pixels" of P screen px (P from the
  * title's font size). Under reduced motion only the cloud is drawn, in its weather's colours.
  * While the title comes in (and, glitched, through the flicker) the cloud is one small cute
- * one; the dark bank of three is the storm's alone (Edgar, 2026-10-20). While the credit
+ * one; the dark bank of three is the storm's alone (Edgar, 2026-10-20). The clouds are drawn in
+ * cells half the size of the rain's pixel, so their puffs are round and thin where they meet. While the credit
  * flickers the cute cloud is red and torn: cut into bands and blocks that jump along random
  * angles, some tilted, re-rolled every few frames.
  * The storm sounds like one, in the room's style: rain, a gusting wind, thunder after each
@@ -173,63 +174,65 @@ const STRIKE_MIN_MS = 4000;
 const STRIKE_MAX_MS = 9000;
 const FLASH_MS = 220;
 
-/** A cloud's shades: its top edge, its body, its underside. */
-type Shades = readonly [string, string, string];
-const STORM: Shades = ['#575770', '#3C3C50', '#2C2C3C'];
+/** A cloud's shades: its lit top edge, its body, the shade in its saddles and above its
+ * underside, its underside. */
+type Shades = readonly [string, string, string, string];
+const STORM: Shades = ['#575770', '#3C3C50', '#343446', '#2C2C3C'];
 /** A storm cloud lit all over by a strike. */
 const CLOUD_LIT = '#8C8CB4';
-const CALM: Shades = ['#F4F4F8', '#DCDCE4', '#B4B4C0'];
+const CALM: Shades = ['#F4F4F8', '#DCDCE4', '#C8C8D4', '#B4B4C0'];
 /** The door's light (`.prntr-room-light`): its gradient's stops, and its glow. */
-const RED: Shades = ['#8A1410', '#5A0A0A', '#2A0404'];
+const RED: Shades = ['#8A1410', '#5A0A0A', '#420707', '#2A0404'];
 const RED_GLOW = 'rgba(138, 20, 16, 0.6)';
 const WATER = '#7FC8FF';
 const WATER_LIGHT = '#BFE7FF';
 const BOLT = '#FFFFFF';
 const BOLT_EDGE = '#9FD8FF';
 
-/** A cloud's cells (true = cloud): a slab four rows deep with bumps on top, `rows` high and
- * `cols` wide in units of U; `seed` varies the bumps. */
-function makeCloud(cols: number, rows: number, seed: number): boolean[][] {
+/** A cloud as a union of round puffs on a flat base with rounded ends (`baseH` rows deep):
+ * `cols` wide and `rows` high in cells of U. Where two puffs meet the cloud thins to a saddle,
+ * unless `core` (a row) fills the strip between the first and last puff from there down. */
+function makePuffs(cols: number, rows: number, baseH: number, puffs: { cx: number; cy: number; r: number }[], core = rows): boolean[][] {
   const cells = Array.from({ length: rows }, () => new Array<boolean>(cols).fill(false));
-  const slab = rows - 4;
-  for (let r = slab; r < rows; r++) for (let c = 0; c < cols; c++) cells[r][c] = r < rows - 1 || (c > 0 && c < cols - 1);
-  const bumps = Math.max(3, Math.round(cols / 5));
-  for (let b = 0; b < bumps; b++) {
-    const cx = ((b + 0.5) / bumps) * cols + (hash(b * 13 + seed * 101) - 0.5) * 2;
-    const rad = 2 + Math.round(hash(b * 29 + seed * 101) * 1.5);
-    for (let r = 0; r < rows; r++) {
-      for (let c = 0; c < cols; c++) {
-        const dx = c + 0.5 - cx;
-        const dy = r + 0.5 - (slab + 0.5);
-        if (dx * dx + dy * dy <= rad * rad) cells[r][c] = true;
-      }
+  const br = baseH / 2;
+  const by = rows - br;
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const x = c + 0.5;
+      const y = r + 0.5;
+      const sx = Math.min(cols - br, Math.max(br, x));
+      const inCore = r >= core && x >= Math.min(...puffs.map((p) => p.cx)) && x <= Math.max(...puffs.map((p) => p.cx));
+      cells[r][c] = inCore || (x - sx) ** 2 + (y - by) ** 2 <= br * br || puffs.some((p) => (x - p.cx) ** 2 + (y - p.cy) ** 2 <= p.r * p.r);
     }
   }
   return cells;
+}
+
+/** A storm cloud (Edgar, 2026-10-20): fat peaks, big then small, with thin saddles between
+ * them; `seed` varies the radii and which end starts big. */
+function makeBank(cols: number, rows: number, seed: number): boolean[][] {
+  const baseH = Math.max(3, Math.round(rows * 0.28));
+  const n = Math.max(3, Math.round(cols / (rows * 0.62)));
+  const puffs: { cx: number; cy: number; r: number }[] = [];
+  for (let i = 0; i < n; i++) {
+    const r = rows * ((i + seed) % 2 === 0 ? 0.38 : 0.24) * (0.9 + hash(i * 13 + seed * 101) * 0.2);
+    const cx = Math.min(cols - r - 0.5, Math.max(r + 0.5, ((i + 0.5) / n) * cols));
+    puffs.push({ cx, cy: rows - baseH - r * 0.55, r });
+  }
+  return makePuffs(cols, rows, baseH, puffs);
 }
 
 /** The cute cloud (Edgar, 2026-10-20): `cols` wide, three round puffs, the middle one the
  * biggest, on a flat base with rounded ends. */
 function makeCute(cols: number): boolean[][] {
   const R = Math.max(2.5, cols * 0.2);
-  const rows = Math.round(2 * R + 3);
-  const cells = Array.from({ length: rows }, () => new Array<boolean>(cols).fill(false));
-  const puffs = [
+  const baseH = Math.max(3, Math.round(R * 0.5));
+  const rows = Math.round(2 * R + baseH);
+  return makePuffs(cols, rows, baseH, [
     { cx: cols * 0.5, cy: R + 0.5, r: R },
-    { cx: cols * 0.24, cy: rows - 1.5 - 0.75 * R, r: 0.75 * R },
-    { cx: cols * 0.76, cy: rows - 1.5 - 0.65 * R, r: 0.65 * R },
-  ];
-  const baseY = rows - 1.5;
-  for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < cols; c++) {
-      const x = c + 0.5;
-      const y = r + 0.5;
-      const sx = Math.min(cols - 1.5, Math.max(1.5, x));
-      const inBase = (x - sx) ** 2 + (y - baseY) ** 2 <= 2.25;
-      cells[r][c] = inBase || puffs.some((p) => (x - p.cx) ** 2 + (y - p.cy) ** 2 <= p.r * p.r);
-    }
-  }
-  return cells;
+    { cx: cols * 0.24, cy: rows - baseH / 2 - 0.75 * R, r: 0.75 * R },
+    { cx: cols * 0.76, cy: rows - baseH / 2 - 0.65 * R, r: 0.65 * R },
+  ], rows - baseH - Math.round(R * 0.4));
 }
 
 /** A cheap hash to 0..1. */
@@ -265,7 +268,7 @@ export function startStorm(root: HTMLElement, h1: HTMLElement, slots: StormSlot[
   let wordRight = 0;
   let wordTop = 0;
   let wordBottom = 0;
-  /** The cloud: its cells (true = cloud) in units of U = 2P, and where it sits. */
+  /** The cloud: its cells (true = cloud) in units of U, half a pixel, and where it sits. */
   let cloud: boolean[][] = [];
   let U = 8;
   let cloudX = 0;
@@ -286,7 +289,7 @@ export function startStorm(root: HTMLElement, h1: HTMLElement, slots: StormSlot[
     const style = getComputedStyle(h1);
     const F = parseFloat(style.fontSize) || 100;
     P = Math.max(2, Math.round(F / 24));
-    U = 2 * P;
+    U = Math.max(2, Math.round(P / 2));
     // the mask: each letter drawn as the page draws it (same face, size, place and wobble)
     const m = document.createElement('canvas');
     m.width = W;
@@ -341,16 +344,16 @@ export function startStorm(root: HTMLElement, h1: HTMLElement, slots: StormSlot[
     const wordH = wordBottom - wordTop;
     const wordW = wordRight - wordLeft;
     const cols = Math.max(8, Math.round((0.85 * wordW) / U));
-    const rows = 7;
-    cloud = makeCloud(cols, rows, 0);
+    const rows = Math.round((14 * P) / U);
+    cloud = makeBank(cols, rows, 0);
     cloudX = Math.round((wordLeft + wordRight) / 2 - (cols * U) / 2);
     cloudY = wordTop - wordH - rows * U;
-    // two more for the storm, one each side, behind the first and a row lower: together they
+    // two more for the storm, one each side, behind the first and a pixel-row lower: together they
     // cover the word and a tenth of its width beyond each end. The rain is the first one's.
     const side = Math.max(6, Math.round((0.4 * wordW) / U));
     extras = [
-      { cells: makeCloud(side, rows - 1, 1), x: Math.round(wordLeft - 0.1 * wordW), y: cloudY + U },
-      { cells: makeCloud(side, rows - 1, 2), x: Math.round(wordRight + 0.1 * wordW - side * U), y: cloudY + U },
+      { cells: makeBank(side, rows - 2, 1), x: Math.round(wordLeft - 0.1 * wordW), y: cloudY + 2 * U },
+      { cells: makeBank(side, rows - 2, 2), x: Math.round(wordRight + 0.1 * wordW - side * U), y: cloudY + 2 * U },
     ];
     // about a third of the word wide, but never so tall that its top leaves the viewport
     const bankBottom = cloudY + cloud.length * U;
@@ -409,11 +412,24 @@ export function startStorm(root: HTMLElement, h1: HTMLElement, slots: StormSlot[
     const cols = cells[0].length;
     buf.width = cols * U;
     buf.height = rows * U;
+    // each column's top and bottom row, to light the top edges and shade the saddles and the underside
+    const tops = new Array<number>(cols).fill(rows);
+    const bottoms = new Array<number>(cols).fill(-1);
+    for (let c = 0; c < cols; c++) {
+      for (let r = 0; r < rows; r++) {
+        if (!cells[r][c]) continue;
+        if (tops[c] === rows) tops[c] = r;
+        bottoms[c] = r;
+      }
+    }
     for (let r = 0; r < rows; r++) {
       for (let c = 0; c < cols; c++) {
         if (!cells[r][c]) continue;
-        const topmost = r === 0 || !cells[r - 1][c];
-        bg.fillStyle = lit ? CLOUD_LIT : shades[r >= rows - 2 ? 2 : topmost ? 0 : 1];
+        const depth = r - tops[c];
+        const above = bottoms[c] - r;
+        const valley = tops[c] > (tops[Math.max(0, c - 4)] ?? rows) && tops[c] > (tops[Math.min(cols - 1, c + 4)] ?? rows);
+        const tone = depth <= 1 ? 0 : above <= 1 ? 3 : above <= 3 || (valley && depth <= 3) ? 2 : 1;
+        bg.fillStyle = lit ? CLOUD_LIT : shades[tone];
         bg.fillRect(c * U, r * U, U, U);
       }
     }
