@@ -63,36 +63,6 @@
   white-space: nowrap;
 }
 
-/* Provisional stub after "press start" (handoff §8.2). */
-.prntr-end {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 28px;
-  background: #000000;
-  font-family: 'Press Start 2P', 'Courier New', monospace;
-  font-size: 13px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: #EDEDED;
-}
-
-.prntr-end p {
-  margin: 0;
-}
-
-.prntr-end-btn {
-  border: 0;
-  background: none;
-  font: inherit;
-  letter-spacing: inherit;
-  text-transform: inherit;
-  color: #FFD91A;
-  cursor: pointer;
-}
 
 /* ---- Stage 0: the opening ---- */
 

@@ -351,6 +351,7 @@ export default function App() {
             stage={prntrStage}
             audioContext={prntrAudio.current}
             onExit={exitPrntr}
+            onDone={exitPrntr}
           />
         )}
         {appState === 'error' && (

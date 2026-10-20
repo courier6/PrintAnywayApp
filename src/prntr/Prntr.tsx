@@ -14,16 +14,24 @@ interface Props {
   stage: number;
   /** Created by the host inside the user's gesture when there is one; null without Web Audio. */
   audioContext: AudioContext | null;
+  /** Esc or ✕: the host cuts straight back. */
   onExit: () => void;
+  /**
+   * The chain finished (the room was cleared): `prntr:done` with reason complete.
+   * The host drops its UI over the last frame, then unmounts Prntr.
+   */
+  onDone: () => void;
 }
 
-export default function Prntr({ source, recolored, inkHex, stage, audioContext, onExit }: Props) {
+export default function Prntr({ source, recolored, inkHex, stage, audioContext, onExit, onDone }: Props) {
   const rootRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
   const [live, setLive] = useState('');
-  const [finished, setFinished] = useState(false);
+  const [done, setDone] = useState(false);
   const onExitRef = useRef(onExit);
   onExitRef.current = onExit;
+  const onDoneRef = useRef(onDone);
+  onDoneRef.current = onDone;
 
   // Esc leaves from any stage. Added on mount, removed on unmount: nothing leaks
   // into the host app after Prntr closes.
@@ -73,8 +81,12 @@ export default function Prntr({ source, recolored, inkHex, stage, audioContext, 
       announce: setLive,
     };
     const startAt = Math.min(Math.max(0, stage), STAGES.length - 1);
+    // After the last stage the frame stays painted: the host drops its UI over it
+    // and unmounts us (PRNTR-STAGE-1.md §4.10).
     void runChain(ctx, STAGES, startAt).then((result) => {
-      if (result === 'finished') setFinished(true);
+      if (result !== 'finished') return;
+      setDone(true);
+      onDoneRef.current();
     });
     return () => {
       controller.abort();
@@ -86,22 +98,15 @@ export default function Prntr({ source, recolored, inkHex, stage, audioContext, 
   return (
     <div className="prntr" ref={rootRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="Prntr">
       <div className="prntr-stage" ref={stageRef} />
-      {/* Provisional: the exit's place on the black screen is not designed (handoff §8.1). */}
-      <button className="prntr-exit" aria-label="Leave" onClick={onExit}>
-        ✕
-      </button>
+      {/* Provisional: the exit's place is not designed (handoff §5.2). Gone once the chain has finished. */}
+      {!done && (
+        <button className="prntr-exit" aria-label="Leave" onClick={onExit}>
+          ✕
+        </button>
+      )}
       <span className="prntr-live" aria-live="polite">
         {live}
       </span>
-      {finished && (
-        // Provisional stub after "press start"; stage 1 is not designed (handoff §8.2).
-        <div className="prntr-end">
-          <p>That's all for now.</p>
-          <button className="prntr-end-btn" onClick={onExit}>
-            Back to your page
-          </button>
-        </div>
-      )}
     </div>
   );
 }
