@@ -8,7 +8,9 @@
  * is drawn on one canvas over the viewport in whole "pixels" of P screen px (P from the
  * title's font size). Under reduced motion only the cloud is drawn, in its weather's colours.
  * While the title comes in (and, glitched, through the flicker) the cloud is one small cute
- * one; the dark bank of three is the storm's alone (Edgar, 2026-10-20).
+ * one; the dark bank of three is the storm's alone (Edgar, 2026-10-20). While the credit
+ * flickers the cute cloud is red and torn: cut into bands and blocks that jump along random
+ * angles, some tilted, re-rolled every few frames.
  * The storm sounds like one, in the room's style: rain, a gusting wind, thunder after each
  * strike (Edgar, 2026-10-20).
  */
@@ -401,7 +403,7 @@ export function startStorm(root: HTMLElement, h1: HTMLElement, slots: StormSlot[
    * weather with the door's glow around it. */
   const buf = document.createElement('canvas');
   const bg = buf.getContext('2d');
-  const drawCloud = (cells: boolean[][], x: number, y: number, shades: Shades, lit: boolean) => {
+  const paint = (cells: boolean[][], shades: Shades, lit: boolean) => {
     if (!bg) return;
     const rows = cells.length;
     const cols = cells[0].length;
@@ -415,11 +417,82 @@ export function startStorm(root: HTMLElement, h1: HTMLElement, slots: StormSlot[
         bg.fillRect(c * U, r * U, U, U);
       }
     }
-    if (weather === 'red') {
-      g.shadowColor = RED_GLOW;
-      g.shadowBlur = 6 * P;
-    }
+  };
+  const drawCloud = (cells: boolean[][], x: number, y: number, shades: Shades, lit: boolean) => {
+    paint(cells, shades, lit);
     g.drawImage(buf, x, y);
+  };
+
+  // ---- the torn red cloud ------------------------------------------------
+  /** A piece of the cloud's picture: a source rectangle, and where and how it is shown now. */
+  interface Piece {
+    sx: number;
+    sy: number;
+    sw: number;
+    sh: number;
+    dx: number;
+    dy: number;
+    vx: number;
+    vy: number;
+    rot: number;
+    ghost: boolean;
+  }
+  let pieces: Piece[] = [];
+  let rollAt = 0;
+  /** Cut the picture into 6–9 bands of random height and 2–3 blocks cut across them. */
+  const tear = () => {
+    const w = buf.width;
+    const h = buf.height;
+    pieces = [];
+    const bands = 6 + Math.floor(Math.random() * 4);
+    const cuts = [0];
+    for (let i = 1; i < bands; i++) cuts.push(Math.round((i / bands) * h + (Math.random() - 0.5) * (h / bands) * 0.8));
+    cuts.push(h);
+    for (let i = 0; i < bands; i++) {
+      if (cuts[i + 1] > cuts[i]) pieces.push({ sx: 0, sy: cuts[i], sw: w, sh: cuts[i + 1] - cuts[i], dx: 0, dy: 0, vx: 0, vy: 0, rot: 0, ghost: false });
+    }
+    const blocks = 2 + Math.floor(Math.random() * 2);
+    for (let i = 0; i < blocks; i++) {
+      const sw = Math.max(U, Math.round(w * (0.25 + Math.random() * 0.15)));
+      const sh = Math.max(U, Math.round(h * (0.25 + Math.random() * 0.15)));
+      pieces.push({ sx: Math.round(Math.random() * (w - sw)), sy: Math.round(Math.random() * (h - sh)), sw, sh, dx: 0, dy: 0, vx: 0, vy: 0, rot: 0, ghost: false });
+    }
+  };
+  /** Throw every piece along a random angle (diagonals too): mostly a short way, one in four far;
+   * a third are tilted, now and then one leaves a ghost. */
+  const roll = (now: number) => {
+    rollAt = now;
+    for (const p of pieces) {
+      const a = Math.random() * 2 * Math.PI;
+      const len = (Math.random() < 0.25 ? 6 + Math.random() * 8 : Math.random() * 6) * P;
+      p.dx = Math.cos(a) * len;
+      p.dy = Math.sin(a) * len;
+      p.vx = Math.cos(a) * 3 * P;
+      p.vy = Math.sin(a) * 3 * P;
+      p.rot = Math.random() < 0.33 ? ((Math.random() < 0.5 ? -1 : 1) * (8 + Math.random() * 12) * Math.PI) / 180 : 0;
+      p.ghost = Math.random() < 0.08;
+    }
+  };
+  const drawTorn = (now: number) => {
+    paint(cute, RED, false);
+    if (!pieces.length) tear();
+    // re-rolled every ~60 ms; under reduced motion once
+    if (now - rollAt >= 60 && (!reduced || rollAt === 0)) roll(now);
+    const t = reduced ? 0 : (now - rollAt) / 1000;
+    g.imageSmoothingEnabled = false;
+    g.shadowColor = RED_GLOW;
+    g.shadowBlur = 6 * P;
+    for (const p of pieces) {
+      for (const ghost of p.ghost ? [true, false] : [false]) {
+        const k = ghost ? -1.2 : 1;
+        g.save();
+        g.globalAlpha = ghost ? 0.5 : 1;
+        g.translate(cuteX + p.sx + p.sw / 2 + (p.dx + p.vx * t) * k, cuteY + p.sy + p.sh / 2 + (p.dy + p.vy * t) * k);
+        g.rotate(p.rot * k);
+        g.drawImage(buf, p.sx, p.sy, p.sw, p.sh, -p.sw / 2, -p.sh / 2, p.sw, p.sh);
+        g.restore();
+      }
+    }
     g.shadowBlur = 0;
   };
 
@@ -495,10 +568,12 @@ export function startStorm(root: HTMLElement, h1: HTMLElement, slots: StormSlot[
     if (weather === 'storm') {
       for (const e of extras) drawCloud(e.cells, e.x, e.y, STORM, lit);
       drawCloud(cloud, cloudX, cloudY, STORM, lit);
+    } else if (weather === 'red') {
+      drawTorn(now);
     } else {
       // it bobs a pixel up and down
       const bob = reduced ? 0 : Math.round(Math.sin((now / 2400) * 2 * Math.PI) * 1.4) * P;
-      drawCloud(cute, cuteX, cuteY + bob, weather === 'red' ? RED : CALM, false);
+      drawCloud(cute, cuteX, cuteY + bob, CALM, false);
     }
     if (reduced) return;
     // the rain
@@ -560,6 +635,8 @@ export function startStorm(root: HTMLElement, h1: HTMLElement, slots: StormSlot[
     setWeather(w) {
       if (w === weather) return;
       weather = w;
+      pieces = [];
+      rollAt = 0;
       if (w === 'storm') {
         nextStrike = performance.now() + STRIKE_FIRST_MS;
         if (audio.context && audio.master && !sound) sound = startStormSound(audio.context, audio.master);
