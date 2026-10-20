@@ -63,36 +63,6 @@
   white-space: nowrap;
 }
 
-/* Provisional stub after "press start" (handoff §8.2). */
-.prntr-end {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 28px;
-  background: #000000;
-  font-family: 'Press Start 2P', 'Courier New', monospace;
-  font-size: 13px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: #EDEDED;
-}
-
-.prntr-end p {
-  margin: 0;
-}
-
-.prntr-end-btn {
-  border: 0;
-  background: none;
-  font: inherit;
-  letter-spacing: inherit;
-  text-transform: inherit;
-  color: #FFD91A;
-  cursor: pointer;
-}
 
 /* ---- Stage 0: the opening ---- */
 
@@ -149,6 +119,30 @@
   font-family: 'Helvetica Neue', Helvetica, sans-serif;
   opacity: 0;
   animation: prntr-card 1250ms linear forwards;
+}
+
+/* The cut after the card: the card inverted, white, the logo alone in black. */
+.prntr-card.is-beep {
+  background: #FFFFFF;
+  opacity: 1;
+  animation: none;
+}
+
+.prntr-card.is-beep .prntr-card-name,
+.prntr-card.is-beep .prntr-card-presents {
+  display: none;
+}
+
+.prntr-card.is-beep .prntr-card-logo {
+  fill: #000000;
+}
+
+.prntr-card.is-beep .prntr-card-logo path {
+  stroke: #000000;
+}
+
+.prntr-card.is-beep .prntr-card-logo [fill="#000000"] {
+  fill: #FFFFFF;
 }
 
 .prntr-card-brand {
@@ -214,18 +208,46 @@
   opacity: 0;
 }
 
-.prntr-arcade {
+/* The room's frame (240×160 virtual px at --s, set by the stage), centred: the prompt and the
+   footer are placed in it as the room's caption and CREDIT are, so CREDIT stays put at the cut
+   (the handoff had the footer 48 px in and 40 px up from the viewport). */
+/* The storm over the title: one canvas over the viewport for the cloud, the
+   rain and the water on the letters, and the lightning's flash over everything. */
+.prntr-storm {
   position: absolute;
   inset: 0;
+  pointer-events: none;
+  image-rendering: pixelated;
+}
+
+/* The lightning's flash: a canvas with the place it lights drawn in it,
+   white or blue, shown at the flash's opacity. */
+.prntr-flash {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.prntr-arcade {
+  position: absolute;
+  left: calc(50% - 120px * var(--s));
+  top: calc(50% - 80px * var(--s));
+  width: calc(240px * var(--s));
+  height: calc(160px * var(--s));
   font-family: 'Press Start 2P', 'Courier New', monospace;
   text-transform: uppercase;
 }
 
+/* On the line the room's caption will use (132 virtual px: 660 on the 800 frame). */
 .prntr-prompt-row {
   position: absolute;
   left: 0;
   right: 0;
-  top: 75%;
+  top: calc(132px * var(--s));
   display: flex;
   justify-content: center;
 }
@@ -243,9 +265,9 @@
 
 .prntr-footer {
   position: absolute;
-  left: 48px;
-  right: 48px;
-  bottom: 40px;
+  left: calc(8px * var(--s));
+  right: calc(8px * var(--s));
+  bottom: calc(6.4px * var(--s));
   display: flex;
   justify-content: space-between;
   align-items: baseline;
@@ -304,8 +326,745 @@
   .prntr-card-name { font-size: 18px; letter-spacing: 0.3em; padding-left: 0.3em; }
   .prntr-card-presents { font-size: 15px; }
   .prntr-title { gap: 2px; font-size: min(112px, 23.4vw); }
-  .prntr-prompt-row { top: 70%; }
   .prntr-prompt { font-size: 16px; letter-spacing: 0.06em; }
-  .prntr-footer { left: 24px; right: 24px; bottom: 32px; font-size: 9px; }
+  .prntr-footer { font-size: 9px; }
   .prntr-copyright-corrupt { font-size: 11px; }
 }
+
+/* ---- Stage 1: the room ---- */
+
+/* Virtual px (240×160) times --s, the frame's whole-number scale, set by the stage.
+   Font sizes are screen px: the handoff's values on the 1200×800 frame (--s 5);
+   .is-small (--s ≤ 3, phones) is provisional, the designer has not drawn it. */
+
+.prntr-room {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #000000;
+  font-family: 'Press Start 2P', 'Courier New', monospace;
+  text-transform: uppercase;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  touch-action: none;
+}
+
+/* Several HUD parts are flex containers; keep the hidden attribute winning. */
+.prntr-room [hidden] {
+  display: none !important;
+}
+
+.prntr-room-frame {
+  position: relative;
+  flex: none;
+  overflow: hidden;
+  cursor: none; /* the POINTER and CROSSHAIR sprites are drawn on .prntr-room-cursor */
+}
+
+.prntr-room-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+}
+
+/* The scan's one inverted frame. */
+.prntr-room-canvas.is-inverted,
+.prntr-room-art.is-inverted,
+.prntr-room-front.is-inverted {
+  filter: invert(1);
+}
+
+/* The print on the wall: a canvas at four cells to the room's pixel over the
+   frame's inside (ART_AT in art.ts), under the light and the washes like the wall it hangs on. */
+.prntr-room-art {
+  position: absolute;
+  left: calc(88px * var(--s));
+  top: calc(36px * var(--s));
+  width: calc(44px * var(--s));
+  height: calc(32px * var(--s));
+  image-rendering: pixelated;
+  pointer-events: none;
+}
+
+/* What the machine throws (pages, staples, ink): a transparent canvas over the slot's red
+   light and the door's, so the glow is behind the paper. */
+.prntr-room-front {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+  pointer-events: none;
+}
+
+/* The pointer and crosshair: a transparent canvas of their own above the door's light,
+   the spill and the glows, so the cursor never sits behind a glow. */
+.prntr-room-cursor {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+  pointer-events: none;
+}
+
+/* The light in the door: deliberately the one unpixelated thing in the room
+   (handoff §2.3). Never captioned, never explained. */
+.prntr-room-light {
+  position: absolute;
+  left: calc(13px * var(--s));
+  top: calc(43px * var(--s));
+  width: calc(6px * var(--s));
+  height: calc(65px * var(--s));
+  background: linear-gradient(to bottom, #2A0404 0%, #5A0A0A 45%, #8A1410 100%);
+  box-shadow: 0 0 calc(4.4px * var(--s)) calc(1.6px * var(--s)) rgba(120, 14, 12, 0.42);
+  transition: box-shadow 1500ms ease-out;
+  pointer-events: none;
+}
+
+.prntr-room-spill {
+  position: absolute;
+  left: calc(4px * var(--s));
+  top: calc(104px * var(--s));
+  width: calc(38px * var(--s));
+  height: calc(8.8px * var(--s));
+  border-radius: 50%;
+  background: radial-gradient(ellipse at center, rgba(140, 18, 14, 0.5) 0%, rgba(140, 18, 14, 0) 70%);
+  filter: blur(calc(0.6px * var(--s)));
+  transition:
+    left 1500ms ease-out,
+    top 1500ms ease-out,
+    width 1500ms ease-out,
+    height 1500ms ease-out;
+  pointer-events: none;
+}
+
+/* Once the door has creaked open (the EXIT sign shot down): the light in it
+   is wider (the stage sets its width as the door swings), its glow reaches further, the spill
+   on the carpet is larger, and the red from inside reaches the wall around the door, the
+   cooler, the poster and the near side of the machine, the whole room a shade darker and
+   redder with it. The wash multiplies, so every pixel keeps its edges; the HUD, the glows
+   and the cursor sit above it. */
+.prntr-room-frame.is-open .prntr-room-light {
+  box-shadow: 0 0 calc(9px * var(--s)) calc(3px * var(--s)) rgba(140, 16, 12, 0.55);
+}
+
+.prntr-room-frame.is-open .prntr-room-spill {
+  left: calc(-6px * var(--s));
+  top: calc(98px * var(--s));
+  width: calc(74px * var(--s));
+  height: calc(22px * var(--s));
+}
+
+/* The mad machine's output slot (MFC_MAD row 11 at 3×: 84,113 69×3), lit like the door's light
+   and glowing the same way, fading in over 1.5 s once the frame has .is-mad. */
+.prntr-room-slot-light {
+  position: absolute;
+  left: calc(84px * var(--s));
+  top: calc(113px * var(--s));
+  width: calc(69px * var(--s));
+  height: calc(3px * var(--s));
+  background: linear-gradient(to bottom, #8A1410 0%, #5A0A0A 55%, #2A0404 100%);
+  box-shadow: 0 0 calc(4.4px * var(--s)) calc(1.6px * var(--s)) rgba(140, 16, 12, 0.5);
+  opacity: 0;
+  transition: opacity 1500ms ease-out;
+  pointer-events: none;
+}
+
+.prntr-room-frame.is-mad .prntr-room-slot-light {
+  opacity: 1;
+}
+
+/* A bullet hole through the door or the window's blind: the 2×2 px hole
+   lit like the light in the door, glowing past its edges. */
+.prntr-room-hole-lights {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.prntr-room-hole-light {
+  position: absolute;
+  width: calc(2px * var(--s));
+  height: calc(2px * var(--s));
+  border-radius: 30%;
+  background: radial-gradient(circle, #B01A12 0%, #8A1410 45%, #5A0A0A 100%);
+  box-shadow: 0 0 calc(2.4px * var(--s)) calc(0.8px * var(--s)) rgba(140, 16, 12, 0.55);
+}
+
+/* The window shot open: the red from behind the door pours through the
+   gap where the blind was (163,39 58×48), glowing past the frame, and fades in over 1.5 s. The
+   fill is clipped off the machine's corner (x < 165 below y 79), which stands in front of the
+   window; the blind's remnants are drawn over it on the front canvas. */
+.prntr-room-window-light {
+  position: absolute;
+  left: calc(163px * var(--s));
+  top: calc(39px * var(--s));
+  width: calc(58px * var(--s));
+  height: calc(48px * var(--s));
+  box-shadow: 0 0 calc(9px * var(--s)) calc(3px * var(--s)) rgba(140, 16, 12, 0.55);
+  opacity: 0;
+  transition: opacity 1500ms ease-out;
+  pointer-events: none;
+}
+
+.prntr-room-window-fill {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at 50% 60%, #B01A12 0%, #8A1410 35%, #5A0A0A 75%, #2A0404 100%);
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 3.45% 100%, 3.45% 83.33%, 0 83.33%);
+}
+
+.prntr-room-frame.is-window-open .prntr-room-window-light {
+  opacity: 1;
+}
+
+/* The red from the window reaching the plant, the right wall and the machine's far side; it
+   fades out at its edge, so the rest of the room keeps the light it had. */
+.prntr-room-dread-window {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse 45% 62% at 80% 40%, rgba(255, 60, 30, 0.9) 0%, rgba(210, 40, 20, 0.7) 25%, rgba(170, 70, 60, 0.3) 60%, rgba(170, 70, 60, 0) 100%);
+  mix-blend-mode: multiply;
+  opacity: 0;
+  transition: opacity 1500ms ease-out;
+  pointer-events: none;
+}
+
+.prntr-room-frame.is-window-open .prntr-room-dread-window {
+  opacity: 1;
+}
+
+/* The fire's light: an orange glow the size of the flames, set each frame. */
+.prntr-room-fire-light {
+  position: absolute;
+  border-radius: 50%;
+  box-shadow:
+    0 0 calc(4px * var(--s)) calc(1.5px * var(--s)) rgba(255, 150, 40, 0.35),
+    0 0 calc(9px * var(--s)) calc(4px * var(--s)) rgba(255, 90, 20, 0.3);
+  pointer-events: none;
+}
+
+.prntr-room-dread {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse 48% 68% at 11% 48%, rgba(255, 60, 30, 0.9) 0%, rgba(210, 40, 20, 0.7) 25%, rgba(140, 75, 75, 0.38) 55%, rgba(130, 80, 80, 0.35) 100%);
+  mix-blend-mode: multiply;
+  opacity: 0;
+  transition: opacity 1500ms ease-out;
+  pointer-events: none;
+}
+
+.prntr-room-frame.is-open .prntr-room-dread {
+  opacity: 1;
+}
+
+/* PROTECT YOURSELF. on the wall between the clock and the machine, the binding under it; in over 300 ms with the
+   fight HUD, out over 500 ms two seconds later (HINT_MS / HINT_FADE_MS in the stage). */
+.prntr-room-hint {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(58px * var(--s));
+  text-align: center;
+  opacity: 0;
+  transition: opacity 500ms linear;
+}
+
+.prntr-room-hint.is-in {
+  opacity: 1;
+  transition-duration: 300ms;
+}
+
+.prntr-room-hint-title {
+  font-size: 28px;
+  letter-spacing: 0.08em;
+  color: #FFD91A;
+}
+
+.prntr-room-hint-keys {
+  margin-top: calc(4px * var(--s));
+  font-size: 13px;
+  color: #EDEDED;
+}
+
+/* The scan flash's white wash (the Continue dim is .prntr-room-continue). */
+/* Everything that can be shot glows red, the door's kind of light: a transparent box
+   the size of the sprite with the glow outside it, so the pixels stay crisp. */
+.prntr-room-glows {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.prntr-room-glow {
+  position: absolute;
+  border-radius: 40%;
+  box-shadow:
+    0 0 calc(2px * var(--s)) calc(0.8px * var(--s)) rgba(255, 90, 60, 0.45),
+    0 0 calc(5px * var(--s)) calc(2px * var(--s)) rgba(184, 20, 10, 0.5);
+}
+
+.prntr-room-wash {
+  position: absolute;
+  inset: 0;
+  background: #FFFFFF;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.prntr-room-wash.is-on {
+  opacity: 0.14;
+}
+
+.prntr-room-hud {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  color: #FFFFFF;
+  letter-spacing: 0.06em;
+  text-shadow: 2px 2px 0 #1E1433, -1px -1px 0 #1E1433, 1px -1px 0 #1E1433, -1px 1px 0 #1E1433;
+}
+
+.prntr-room-score {
+  position: absolute;
+  left: calc(8px * var(--s));
+  top: calc(6.4px * var(--s));
+  font-size: 18px;
+}
+
+.prntr-room-hi {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(6.4px * var(--s));
+  text-align: center;
+  font-size: 18px;
+  color: #FFD91A;
+}
+
+.prntr-room-credit {
+  position: absolute;
+  left: calc(8px * var(--s));
+  bottom: calc(6.4px * var(--s));
+  font-size: 13px;
+}
+
+.prntr-room-credit.is-after {
+  animation: prntr-after 600ms linear forwards;
+}
+
+/* At the INSERT COIN line (top 660 on the 800 frame), set like the closed captions on an old
+   TV: white capitals on an opaque black box that hugs each row with a
+   character's width of black either side, rows stacked with no gap, no outline or shadow. */
+.prntr-room-caption {
+  position: absolute;
+  left: calc(8px * var(--s));
+  right: calc(8px * var(--s));
+  /* one row's middle on the line the plain text used (132); more rows grow upwards */
+  bottom: calc(28px * var(--s) - 0.875em);
+  text-align: center;
+  font-size: 16px;
+  line-height: 1.75;
+  letter-spacing: 0;
+  color: #FFFFFF;
+  text-shadow: none;
+}
+
+.prntr-room-caption-text {
+  padding: 0.3em 0.5em;
+  background: #000000;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone; /* a wrapped row gets a box of its own */
+}
+
+.prntr-room-caption-text:empty {
+  display: none;
+}
+
+.prntr-room-fight-ui {
+  opacity: 0;
+  transition: opacity 300ms linear;
+}
+
+.prntr-room-fight-ui.is-in {
+  opacity: 1;
+}
+
+/* No label; magenta; it empties as the score rises. */
+.prntr-room-health {
+  position: absolute;
+  left: calc(60px * var(--s));
+  right: calc(60px * var(--s));
+  top: calc(14px * var(--s));
+  height: 16px;
+  border: 3px solid #1E1433;
+  background: #1E1433;
+}
+
+/* The machine's name, above the left end of its bar. */
+.prntr-room-health-name {
+  position: absolute;
+  left: calc(60px * var(--s));
+  top: calc(14px * var(--s) - 16px);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+}
+
+.prntr-room-health-fill {
+  height: 100%;
+  background: #F0288C;
+}
+
+/* The player's health: the machine's bar in green, along the bottom
+   between CREDIT and the shots; it blinks twice when it takes a hit. */
+.prntr-room-life {
+  position: absolute;
+  left: calc(70px * var(--s));
+  right: calc(70px * var(--s));
+  bottom: calc(6px * var(--s));
+  height: 16px;
+  border: 3px solid #1E1433;
+  background: #1E1433;
+}
+
+.prntr-room-life-fill {
+  height: 100%;
+  background: #46D36E;
+  transition: width 200ms linear;
+}
+
+.prntr-room-life.is-hurt .prntr-room-life-fill {
+  animation: prntr-hurt 250ms steps(1, end) 2;
+}
+
+/* The player's name under the left end of their bar, NEW PLAYER until there
+   is a login. Worn (half the health or less) it shivers now and then; rough (a quarter or less,
+   the end of this life near) it jitters, flickers and splits into red and cyan, while the stage
+   breaks its letters up. */
+.prntr-room-life-name {
+  position: absolute;
+  left: calc(70px * var(--s));
+  bottom: calc(6px * var(--s) - 13px);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  white-space: pre;
+}
+
+.prntr-room-life-name.is-worn {
+  animation: prntr-name-worn 1600ms steps(1, end) infinite;
+}
+
+.prntr-room-life-name.is-rough {
+  color: #FFE4E0;
+  text-shadow: -1px 0 #19B8F0, 1px 0 #B8140A, 2px 2px 0 #1E1433;
+  animation: prntr-name-rough 180ms steps(1, end) infinite;
+}
+
+@keyframes prntr-name-worn {
+  0%, 100% { transform: none; opacity: 1; }
+  62% { transform: translate(1px, 0); opacity: 0.75; }
+  66% { transform: none; opacity: 1; }
+  90% { transform: translate(-1px, 1px); }
+  93% { transform: none; }
+}
+
+@keyframes prntr-name-rough {
+  0% { transform: translate(0, 0); opacity: 1; }
+  20% { transform: translate(2px, -1px); opacity: 0.7; }
+  40% { transform: translate(-1px, 1px); opacity: 1; }
+  60% { transform: translate(1px, 2px); opacity: 0.85; }
+  80% { transform: translate(-2px, 0); opacity: 0.6; }
+  100% { transform: translate(0, -1px); opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .prntr-room-life-name.is-worn,
+  .prntr-room-life-name.is-rough {
+    animation: none;
+  }
+
+  .prntr-room-life-name.is-worn {
+    opacity: 0.7;
+  }
+}
+
+/* A hit that leaves health: a short red flash over the room. */
+.prntr-room-hurt {
+  position: absolute;
+  inset: 0;
+  background: rgba(184, 20, 10, 0.2);
+  pointer-events: none;
+}
+
+/* The lives: red hearts at the lower right, above the shot pips, so a lost
+   heart's ghost has the whole room to float up through. */
+.prntr-room-pips {
+  position: absolute;
+  right: calc(8px * var(--s));
+  bottom: calc(6px * var(--s) + 34px);
+  display: flex;
+  gap: 10px;
+}
+
+/* A 7×6 pixel heart cut from a box, so no image (two lives out of three). An empty slot is
+   the dark silhouette. */
+.prntr-room-pips span {
+  width: 28px;
+  height: 24px;
+  background: #FF2A1A;
+  clip-path: polygon(14.29% 0, 42.86% 0, 42.86% 16.67%, 57.14% 16.67%, 57.14% 0, 85.71% 0, 85.71% 16.67%, 100% 16.67%, 100% 50%, 85.71% 50%, 85.71% 66.67%, 71.43% 66.67%, 71.43% 83.33%, 57.14% 83.33%, 57.14% 100%, 42.86% 100%, 42.86% 83.33%, 28.57% 83.33%, 28.57% 66.67%, 14.29% 66.67%, 14.29% 50%, 0 50%, 0 16.67%, 14.29% 16.67%);
+}
+
+.prntr-room-pips span.is-off {
+  background: #1E1433;
+}
+
+/* The player's health bar blinks with this when it takes a hit. */
+@keyframes prntr-hurt {
+  0% { opacity: 1; }
+  50% { opacity: 0.3; }
+  100% { opacity: 1; }
+}
+
+/* A lost heart's ghost: pale and see-through, it floats from the hearts to the top of the
+   frame over 5 s (--rise, set by the stage, is the way up), swaying and growing a little, and
+   fades out as it gets there (only fades under reduced motion). It can be shot on the way. */
+@keyframes prntr-heart-ghost {
+  0% { opacity: 0.95; transform: translate(0, 0) scale(1); }
+  25% { opacity: 0.9; transform: translate(calc(-2px * var(--s)), calc(var(--rise) * -0.25)) scale(1.05); }
+  50% { opacity: 0.85; transform: translate(calc(1.5px * var(--s)), calc(var(--rise) * -0.5)) scale(1.1); }
+  75% { opacity: 0.7; transform: translate(calc(-2.5px * var(--s)), calc(var(--rise) * -0.75)) scale(1.15); }
+  100% { opacity: 0; transform: translate(0, calc(var(--rise) * -1)) scale(1.2); }
+}
+
+@keyframes prntr-heart-ghost-still {
+  from { opacity: 0.9; }
+  to { opacity: 0; }
+}
+
+.prntr-room-heart-ghost {
+  position: absolute;
+  background: #FFD6D2;
+  clip-path: polygon(14.29% 0, 42.86% 0, 42.86% 16.67%, 57.14% 16.67%, 57.14% 0, 85.71% 0, 85.71% 16.67%, 100% 16.67%, 100% 50%, 85.71% 50%, 85.71% 66.67%, 71.43% 66.67%, 71.43% 83.33%, 57.14% 83.33%, 57.14% 100%, 42.86% 100%, 42.86% 83.33%, 28.57% 83.33%, 28.57% 66.67%, 14.29% 66.67%, 14.29% 50%, 0 50%, 0 16.67%, 14.29% 16.67%);
+  --rise: 100px;
+  animation: prntr-heart-ghost 5000ms linear forwards;
+  pointer-events: none;
+}
+
+.prntr-room-heart-ghost.is-still {
+  animation: prntr-heart-ghost-still 1800ms linear forwards;
+}
+
+/* A ghost shot pops like a balloon: the heart swells for two frames and is
+   gone, and six pale bits fly out from its middle and fade over 0.4 s. */
+@keyframes prntr-heart-pop {
+  0% { opacity: 1; transform: scale(1.35); }
+  100% { opacity: 0; transform: scale(1.35); }
+}
+
+@keyframes prntr-heart-shard {
+  0% { opacity: 1; transform: translate(0, 0); }
+  100% { opacity: 0; transform: translate(var(--dx), var(--dy)); }
+}
+
+.prntr-room-heart-pop {
+  position: absolute;
+  pointer-events: none;
+}
+
+.prntr-room-heart-pop-heart {
+  position: absolute;
+  inset: 0;
+  background: #FFFFFF;
+  clip-path: polygon(14.29% 0, 42.86% 0, 42.86% 16.67%, 57.14% 16.67%, 57.14% 0, 85.71% 0, 85.71% 16.67%, 100% 16.67%, 100% 50%, 85.71% 50%, 85.71% 66.67%, 71.43% 66.67%, 71.43% 83.33%, 57.14% 83.33%, 57.14% 100%, 42.86% 100%, 42.86% 83.33%, 28.57% 83.33%, 28.57% 66.67%, 14.29% 66.67%, 14.29% 50%, 0 50%, 0 16.67%, 14.29% 16.67%);
+  animation: prntr-heart-pop 70ms steps(1, end) forwards;
+}
+
+.prntr-room-heart-shard {
+  position: absolute;
+  left: calc(50% - 0.5px * var(--s));
+  top: calc(50% - 0.5px * var(--s));
+  width: calc(1px * var(--s));
+  height: calc(1px * var(--s));
+  background: #FFD6D2;
+  --dx: 0px;
+  --dy: 0px;
+  animation: prntr-heart-shard 400ms ease-out forwards;
+}
+
+/* The shots: rounds standing in a magazine lying on its side at the lower
+   right, tips up over its feed lips. Each pip is a round, a copper tip on a brass case with a
+   rim at its base; a spent slot shows the magazine's spring where the round was. The button is
+   also the RELOAD button, at least 44 px tall for phones; the magazine is drawn along its bottom. */
+.prntr-room-shots {
+  position: absolute;
+  right: calc(8px * var(--s));
+  bottom: calc(6px * var(--s));
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  min-height: 44px;
+  margin: 0;
+  padding: 0 5px 4px;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+/* the magazine body: dark steel, open along the top, a thicker baseplate along the bottom */
+.prntr-room-shots::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 26px;
+  box-sizing: border-box;
+  border: 2px solid #4A3A66;
+  border-top-width: 0;
+  border-bottom-width: 5px;
+  border-radius: 2px 2px 5px 5px;
+  background: #1E1433;
+}
+
+.prntr-room-shots span {
+  position: relative;
+  width: 10px;
+  height: 24px;
+  background: linear-gradient(to right, #C9A227 0 2px, #FFD91A 2px 7px, #B8860B 7px);
+  clip-path: polygon(0 24%, 20% 8%, 50% 0, 80% 8%, 100% 24%, 100% 100%, 0 100%);
+}
+
+/* the tip, and the rim */
+.prntr-room-shots span::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 30%;
+  background: linear-gradient(to right, #B86B3A 0 2px, #FF6A2B 2px 7px, #8A4A22 7px);
+}
+
+.prntr-room-shots span::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  background: #8C6A1C;
+}
+
+.prntr-room-shots span.is-off {
+  background: repeating-linear-gradient(to bottom, transparent 0 2px, #4A3A66 2px 4px);
+  clip-path: inset(6px 3px 0 3px);
+}
+
+.prntr-room-shots span.is-off::before,
+.prntr-room-shots span.is-off::after {
+  display: none;
+}
+
+.prntr-room-continue {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: calc(6px * var(--s));
+  background: rgba(0, 0, 0, 0.42);
+  color: #FFFFFF;
+  text-shadow: 2px 2px 0 #1E1433, -1px -1px 0 #1E1433, 1px -1px 0 #1E1433, -1px 1px 0 #1E1433;
+  pointer-events: none;
+}
+
+/* Game over: the same dim, nothing on it, half a second before the host drops in. */
+/* The death beat (the hearts are lives): a red dim while the room is frozen. */
+.prntr-room-death {
+  position: absolute;
+  inset: 0;
+  background: rgba(184, 20, 10, 0.3);
+  pointer-events: none;
+}
+
+.prntr-room-over {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.42);
+  pointer-events: none;
+}
+
+/* GAME OVER: two giant words in the title's Comic Sans, red with a plum
+   shadow, popping in like the title's letters, over the dim for two seconds. */
+.prntr-room-over-text {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Comic Sans MS', 'Comic Sans', 'Comic Neue', cursive;
+  font-weight: 700;
+  font-size: calc(44px * var(--s));
+  line-height: 0.92;
+  letter-spacing: -0.02em;
+  text-transform: none;
+  color: #E8102A;
+  text-shadow: calc(1.2px * var(--s)) calc(1.2px * var(--s)) 0 #1E1433;
+  animation: prntr-pop 250ms ease-out both;
+}
+
+.prntr-room-over-text span:last-child {
+  transform: rotate(-3deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .prntr-room-over-text {
+    animation: none;
+  }
+}
+
+.prntr-room-continue-label {
+  font-size: 36px;
+  letter-spacing: 0.08em;
+  color: #FFD91A;
+}
+
+.prntr-room-continue-count {
+  font-size: 110px;
+}
+
+.prntr-room-frame.is-small .prntr-room-score,
+.prntr-room-frame.is-small .prntr-room-hi { font-size: 10px; }
+.prntr-room-frame.is-small .prntr-room-credit { font-size: 8px; }
+.prntr-room-frame.is-small .prntr-room-caption { font-size: 9px; }
+.prntr-room-frame.is-small .prntr-room-hud,
+.prntr-room-frame.is-small .prntr-room-continue {
+  text-shadow: 1px 1px 0 #1E1433, -1px -1px 0 #1E1433, 1px -1px 0 #1E1433, -1px 1px 0 #1E1433;
+}
+.prntr-room-frame.is-small .prntr-room-health,
+.prntr-room-frame.is-small .prntr-room-life { height: 10px; border-width: 2px; }
+/* small frames: CREDIT and the shots fill the bottom row, so the bar sits just above CREDIT */
+.prntr-room-frame.is-small .prntr-room-life { left: calc(8px * var(--s)); right: auto; width: calc(90px * var(--s)); bottom: calc(6px * var(--s) + 14px); }
+.prntr-room-frame.is-small .prntr-room-health-name { top: calc(14px * var(--s) - 10px); font-size: 7px; }
+/* small frames: CREDIT is right under the bar, so the name goes over it */
+.prntr-room-frame.is-small .prntr-room-life-name { left: calc(8px * var(--s)); bottom: calc(6px * var(--s) + 26px); font-size: 7px; }
+.prntr-room-frame.is-small .prntr-room-pips { gap: 6px; bottom: calc(6px * var(--s) + 24px); }
+.prntr-room-frame.is-small .prntr-room-pips span { width: 14px; height: 12px; }
+.prntr-room-frame.is-small .prntr-room-shots { gap: 2px; padding: 0 4px 3px; }
+.prntr-room-frame.is-small .prntr-room-shots::before { height: 18px; border-bottom-width: 4px; }
+.prntr-room-frame.is-small .prntr-room-shots span { width: 7px; height: 16px; }
+.prntr-room-frame.is-small .prntr-room-shots span::after { height: 2px; }
+.prntr-room-frame.is-small .prntr-room-shots span.is-off { clip-path: inset(4px 2px 0 2px); }
+.prntr-room-frame.is-small .prntr-room-hint-title { font-size: 16px; }
+.prntr-room-frame.is-small .prntr-room-hint-keys { font-size: 8px; }
+.prntr-room-frame.is-small .prntr-room-continue-label { font-size: 20px; }
+.prntr-room-frame.is-small .prntr-room-continue-count { font-size: 64px; }

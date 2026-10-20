@@ -1,17 +1,22 @@
 import { nextInput, reducedMotion, wait } from '../anim';
 import type { Stage } from '../types';
+import { playBeep, playCardJingle } from './jingle';
+import { H, W } from './room/pixels';
+import { startGlitchPulse, startStorm, type StormSlot } from './storm';
 
 /** 0 = every letter on the baseline, 1 = approved, 2 = twice as messy. */
 const WOBBLE = 1;
 const POP_MS = 200;
 /** The Simple Products card, fades included. */
 const CARD_MS = 1250;
+/** Then the cut: the card inverted, the logo alone on white, under a beep. */
+const BEEP_MS = 250;
 /** From the last letter landing to the credit flip and its coin cue. */
 const CREDIT_AFTER_TITLE_MS = 2000;
 /** Length of the credit glow (must match prntr-glow in prntr.css). */
 const GLOW_MS = 1500;
 /**
- * The flicker before the flip (Edgar, 2026-10-19; not in the design handoff):
+ * The flicker before the flip (not in the design handoff):
  * the same view, corrupted, shown twice for a few frames. Pairs of
  * [on, off] in ms before the flip.
  */
@@ -79,12 +84,23 @@ export const opening: Stage = {
       `<div class="prntr-card-brand">${LOGO}<div class="prntr-card-name">SIMPLE PRODUCTS</div></div>` +
       '<div class="prntr-card-presents">presents…</div>';
     root.append(card);
+    // Under the card, as long as it is on: the jingle. Cut with the stage.
+    const jingle = audio.context && audio.master ? playCardJingle(audio.context, audio.master, CARD_MS / 1000) : null;
+    if (jingle) signal.addEventListener('abort', () => jingle.stop(), { once: true });
     const t0 = performance.now();
     await wait(Math.max(0, t0 + CARD_MS - performance.now()), signal);
+    if (signal.aborted) return { kind: 'start' };
+    // The cut: the same card inverted, white with the logo in black and nothing else, under the
+    // bleep of a cut between scenes, for BEEP_MS; then black.
+    card.classList.add('is-beep');
+    const beep = audio.context && audio.master ? playBeep(audio.context, audio.master, BEEP_MS / 1000) : null;
+    if (beep) signal.addEventListener('abort', () => beep.stop(), { once: true });
+    ctx.announce('Beep.');
+    await wait(BEEP_MS, signal);
+    card.remove();
     // The title must not flash a fallback face: hold (black) until the fonts are in, at most 1.5s more.
     await Promise.race([ctx.fontsReady, wait(1500, signal)]);
     if (signal.aborted) return { kind: 'start' };
-    card.remove();
 
     // Beat 3: the title. The cue and the first letter start together; the last
     // letter lands exactly as the cue's first pass ends. The cue then keeps
@@ -97,8 +113,13 @@ export const opening: Stage = {
     const wrap = el('div', 'prntr-title-wrap');
     const h1 = el('h1', 'prntr-title');
     h1.setAttribute('aria-label', 'prntr');
+    const stormSlots: StormSlot[] = [];
+    /** When each letter is solid (its pop done), so the rain lands on it only then. */
+    const inAt: number[] = [];
     LETTERS.forEach((l, i) => {
       const slot = el('span', 'prntr-title-slot');
+      stormSlots.push({ el: slot, ch: l.ch, rot: l.rot * WOBBLE });
+      inAt.push(reduced ? d : Math.round((i * (d - POP_MS)) / 4) + POP_MS);
       slot.setAttribute('aria-hidden', 'true');
       slot.style.color = l.color;
       if (l.y !== 0 || l.rot !== 0) {
@@ -114,11 +135,21 @@ export const opening: Stage = {
     });
     wrap.append(h1);
     root.append(wrap);
+    // The cloud over the word: white now, red through the flicker, the storm
+    // from the flip on (2026-10-20). Stopped with the stage.
+    const storm = startStorm(root, h1, stormSlots, (i) => performance.now() >= t1 + inAt[i], reduced, audio);
+    signal.addEventListener('abort', () => storm.stop(), { once: true });
     ctx.announce('Simple Products presents prntr');
 
     // Beat 4: INSERT COIN, half a second after the last letter lands. Input does nothing.
     await at(d + 500);
+    // The arcade layer is the room's frame (240×160 at the largest whole-number scale,
+    // centred), so INSERT COIN and the footer sit where the room's HUD will put its caption
+    // and CREDIT, and nothing jumps at the cut.
     const arcade = el('div', 'prntr-arcade');
+    const fit = () => arcade.style.setProperty('--s', String(Math.max(1, Math.floor(Math.min(root.clientWidth / W, root.clientHeight / H)))));
+    fit();
+    window.addEventListener('resize', fit, { signal });
     const promptRow = el('div', 'prntr-prompt-row');
     const prompt = el('div', 'prntr-prompt', 'INSERT COIN');
     if (!reduced) prompt.classList.add('is-blinking');
@@ -138,10 +169,18 @@ export const opening: Stage = {
     credit.classList.add('is-glowing');
     // The flicker: something shows through. Under reduced motion one steady
     // corrupted frame instead of two flashes.
-    const corrupt = (on: boolean) => root.classList.toggle('is-corrupt', on);
+    // While the frame is corrupted a low tone pulses very fast, and stops with it.
+    let pulse: { stop(): void } | null = null;
+    const corrupt = (on: boolean) => {
+      root.classList.toggle('is-corrupt', on);
+      pulse?.stop();
+      pulse = on && audio.context && audio.master ? startGlitchPulse(audio.context, audio.master) : null;
+    };
+    signal.addEventListener('abort', () => pulse?.stop(), { once: true });
     for (const [on, off] of reduced ? [[250, 90]] : FLICKER) {
       await at(d + CREDIT_AFTER_TITLE_MS - on);
       corrupt(true);
+      storm.setWeather('red');
       await at(d + CREDIT_AFTER_TITLE_MS - off);
       corrupt(false);
     }
@@ -150,6 +189,7 @@ export const opening: Stage = {
     credit.textContent = 'CREDIT 01';
     credit.classList.remove('is-glowing');
     credit.classList.add('is-after');
+    storm.setWeather('storm');
     prompt.textContent = 'PRESS START BUTTON';
     if (!reduced) {
       // Restart the blink so the new prompt is visible on the flip, not mid-"off".
@@ -162,6 +202,9 @@ export const opening: Stage = {
     ctx.announce('Credit 1. Press start button.');
 
     await nextInput(root, signal);
+    // one last strike as the title is left; its thunder rolls on under the room's hum
+    if (!signal.aborted) await wait(storm.finale(), signal);
+    storm.stop();
     root.replaceChildren();
     return { kind: 'start' };
   },

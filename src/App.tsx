@@ -5,9 +5,10 @@ import { ProcessingState } from './components/ProcessingState';
 import { PreviewState } from './components/PreviewState';
 import { PrntrHost, prefetchPrntr } from './components/PrntrHost';
 import { prntrAudioContext } from './components/prntrAudio';
+import type { Certificate } from './prntr/types';
 import { ErrorState, type ErrorKind } from './components/ErrorState';
 import { t, useLocale } from './i18n';
-import { INKS } from './lib/inks';
+import { GOLD_INK, INKS } from './lib/inks';
 import { fileKind, loadDocument } from './lib/loadDocument';
 import { classifyError, logAppError, type ErrorCode } from './lib/errors';
 import { PageStore } from './lib/pageStore';
@@ -43,6 +44,9 @@ export default function App() {
     kind: 'processing',
   });
   const [inkIndex, setInkIndex] = useState(0);
+  // Gold, the secret ink, is on offer once Prntr's room has been won, until the page is reloaded.
+  const [goldUnlocked, setGoldUnlocked] = useState(false);
+  const inks = goldUnlocked ? [...INKS, GOLD_INK] : INKS;
   const [fileName, setFileName] = useState('');
   const [format, setFormat] = useState<ExportFormat>('pdf');
   const [pageCount, setPageCount] = useState(0);
@@ -58,6 +62,9 @@ export default function App() {
   const prntrPage = useRef<{ source: HTMLCanvasElement; recolored: HTMLCanvasElement } | null>(null);
   const prntrAudio = useRef<AudioContext | null>(null);
   const prntrReturn = useRef<AppState>('preview');
+  // Set while the app's UI falls back into place over Prntr's last frame: the sky
+  // drop after the room is cleared, the Tetris drop after a game over.
+  const [prntrDrop, setPrntrDrop] = useState<'sky' | 'tetris' | null>(null);
 
   const storeRef = useRef(new PageStore());
   const store = storeRef.current;
@@ -210,7 +217,7 @@ export default function App() {
 
   function selectInk(index: number) {
     setInkIndex(index);
-    const hex = INKS[index].hex;
+    const hex = inks[index].hex;
     inkRef.current = hex;
     // Visible page synchronously; the rest catch up in idle time.
     store.ensureRecolored(currentPage, hex);
@@ -261,6 +268,53 @@ export default function App() {
     setAppState(prntrReturn.current);
   }
 
+  // The drops (PRNTR-STAGE-1.md §4.10): after the room is cleared the app's UI falls
+  // into place from the sky in one piece; after a game over its blocks fall in one by
+  // one like Tetris pieces. Either way over the frozen last frame of Prntr, which stays
+  // mounted until the drop has landed. Reduced motion is a plain cut, as is any exit.
+  // The room cleared, the page the app comes back to is the certificate of completion,
+  // in place of whatever document it had.
+  function finishPrntr(outcome: 'cleared' | 'over', certificate?: Certificate) {
+    if (certificate) loadCertificate(certificate);
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      exitPrntr();
+      return;
+    }
+    setPrntrDrop(outcome === 'over' ? 'tetris' : 'sky');
+    setAppState(prntrReturn.current);
+  }
+
+  // The certificate becomes the loaded document: one page, a PDF to download, recoloured
+  // in the chosen ink like any other. A document still processing is dropped.
+  function loadCertificate({ id, page }: Certificate) {
+    runToken.current++;
+    lastFile.current = null;
+    setShowPrintReminder(false);
+    setPrintImages([]);
+    setHolding(false);
+    setFileName(`prntr-certificate-${id.slice(-9).replace('-', '')}.pdf`);
+    setFormat('pdf');
+    // the certificate comes up in gold, the secret ink, which stays on offer from here on
+    setGoldUnlocked(true);
+    setInkIndex(INKS.length);
+    inkRef.current = GOLD_INK.hex;
+    store.reset(1);
+    store.setSource(0, page);
+    store.ensureRecolored(0, inkRef.current);
+    setPageCount(1);
+    setProcessedCount(1);
+    setCurrentPage(0);
+    setPagesVersion((v) => v + 1);
+    prntrReturn.current = 'preview';
+  }
+
+  // Safety net: Prntr never stays mounted if the drop's animationend does not arrive.
+  useEffect(() => {
+    if (!prntrDrop) return;
+    const id = window.setTimeout(() => setPrntrDrop(null), prntrDrop === 'tetris' ? 2000 : 1200);
+    return () => window.clearTimeout(id);
+  }, [prntrDrop]);
+
   async function collectAllRecolored(): Promise<HTMLCanvasElement[]> {
     const out: HTMLCanvasElement[] = [];
     for (let i = 0; i < store.pageCount; i++) {
@@ -302,7 +356,7 @@ export default function App() {
     else setAppState('empty');
   }
 
-  const inkHex = INKS[inkIndex].hex;
+  const inkHex = inks[inkIndex].hex;
   const recoloredCanvas = appState === 'preview' ? store.getRecolored(currentPage, inkHex) : null;
   const sourceCanvas = appState === 'preview' ? store.getSource(currentPage) : null;
   const firstPage = appState === 'processing' ? store.getRecolored(0, inkHex) : null;
@@ -312,7 +366,14 @@ export default function App() {
       className={'app' + (printImages.length > 0 ? ' has-print-pages' : '')}
       style={{ '--ink': INKS[0].hex } as CSSProperties}
     >
-      <div className="no-print">
+      <div
+        className={'no-print' + (prntrDrop === 'sky' ? ' is-sky-drop' : prntrDrop === 'tetris' ? ' is-tetris-drop' : '')}
+        onAnimationEnd={(e) => {
+          // The sky drop animates .no-print itself; the Tetris drop's last piece is the header.
+          const landed = prntrDrop === 'tetris' ? (e.target as HTMLElement).classList.contains('header') : e.target === e.currentTarget;
+          if (landed) setPrntrDrop(null);
+        }}
+      >
         <Header />
         {appState === 'empty' && (
           <EmptyState onFile={(f) => void handleFile(f)} onChoose={openPicker} />
@@ -327,6 +388,7 @@ export default function App() {
             pageCount={pageCount}
             currentPage={currentPage}
             onPageChange={goToPage}
+            inks={inks}
             inkIndex={inkIndex}
             onSelectInk={selectInk}
             onChooseFile={openPicker}
@@ -341,16 +403,6 @@ export default function App() {
             onDismissReminder={() => setShowPrintReminder(false)}
             onOpenPrntr={() => enterPrntr(0)}
             onPrefetchPrntr={prefetchPrntr}
-          />
-        )}
-        {appState === 'prntr' && prntrPage.current && (
-          <PrntrHost
-            source={prntrPage.current.source}
-            recolored={prntrPage.current.recolored}
-            inkHex={inkHex}
-            stage={prntrStage}
-            audioContext={prntrAudio.current}
-            onExit={exitPrntr}
           />
         )}
         {appState === 'error' && (
@@ -372,6 +424,19 @@ export default function App() {
           </div>
         )}
       </div>
+      {/* Outside .no-print: the sky drop transforms .no-print, which would carry the fixed
+          Prntr layer along with it. */}
+      {(appState === 'prntr' || prntrDrop !== null) && prntrPage.current && (
+        <PrntrHost
+          source={prntrPage.current.source}
+          recolored={prntrPage.current.recolored}
+          inkHex={inkHex}
+          stage={prntrStage}
+          audioContext={prntrAudio.current}
+          onExit={exitPrntr}
+          onDone={finishPrntr}
+        />
+      )}
       <input
         ref={fileInput}
         type="file"

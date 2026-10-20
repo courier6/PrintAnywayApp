@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { t, tPlural, useLocale } from '../i18n';
 import type { ExportFormat } from '../lib/exportFile';
-import { INKS } from '../lib/inks';
+import type { Ink } from '../lib/inks';
 import { OTHER_TIP, PRINTER_TIPS } from '../lib/printerTips';
 import { PageCanvas } from './PageCanvas';
 import { PrintReminder } from './PrintReminder';
@@ -12,6 +12,8 @@ interface Props {
   pageCount: number;
   currentPage: number;
   onPageChange: (page: number) => void;
+  /** The inks on offer (the four, and gold once Prntr's room is won). */
+  inks: readonly Ink[];
   inkIndex: number;
   onSelectInk: (index: number) => void;
   onChooseFile: () => void;
@@ -34,6 +36,7 @@ export function PreviewState({
   pageCount,
   currentPage,
   onPageChange,
+  inks,
   inkIndex,
   onSelectInk,
   onChooseFile,
@@ -51,7 +54,7 @@ export function PreviewState({
 }: Props) {
   const pageReady = recoloredCanvas !== null;
   const locale = useLocale();
-  const inkHex = INKS[inkIndex].hex;
+  const inkHex = inks[inkIndex].hex;
 
   // Transient confirmation after a swatch click; flashKey restarts the
   // glow animation even when clicks come in quick succession.
@@ -139,7 +142,7 @@ export function PreviewState({
             {holding
               ? t('preview.captionOriginal')
               : justInked
-                ? t('preview.captionInked', { ink: t(INKS[inkIndex].nameKey) })
+                ? t('preview.captionInked', { ink: t(inks[inkIndex].nameKey) })
                 : t('preview.captionDefault')}
           </span>
           {pageCount > 1 && (
@@ -203,7 +206,7 @@ export function PreviewState({
           <div>
             <div className="side-label">{t('preview.inkLabel')}</div>
             <div className="swatch-row">
-              {INKS.map((ink, i) => (
+              {inks.map((ink, i) => (
                 <button
                   key={ink.hex}
                   className="swatch"
@@ -211,7 +214,7 @@ export function PreviewState({
                   title={t(ink.nameKey)}
                   aria-pressed={i === inkIndex}
                   style={{
-                    background: ink.hex,
+                    background: ink.swatch ?? ink.hex,
                     boxShadow:
                       i === inkIndex
                         ? `0 0 0 2px #ffffff, 0 0 0 4px ${ink.hex}`
@@ -221,7 +224,7 @@ export function PreviewState({
                 />
               ))}
             </div>
-            <div className="ink-name">{t(INKS[inkIndex].nameKey)}</div>
+            <div className="ink-name">{t(inks[inkIndex].nameKey)}</div>
           </div>
 
           <p className="side-note">{t('preview.sideNote')}</p>
