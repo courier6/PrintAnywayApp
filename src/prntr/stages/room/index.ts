@@ -56,11 +56,16 @@ const AUTO_RELOAD_MS = 800;
  * after the slide is racked (the sound in sounds.ts ends at 330 ms). */
 const RELOAD_STEP_MS = 360;
 /** The cross reports the gun, not the mouse (PRNTR-FIGHT-DESIGN.md §3). A shot throws it up
- * KICK_UP, easing back over KICK_MS; the shot goes where the cross is. A shot also opens the
- * four lines over the BLOOM_BASE gap, cooling at BLOOM_COOL px/s; the gap is the spread. */
+ * KICK_UP and KICK_SIDE either way at random, easing back over KICK_MS; the shot goes where
+ * the cross is. A shot also opens the four lines by BLOOM_PER_SHOT over the BLOOM_BASE gap,
+ * at most BLOOM_MAX, cooling at BLOOM_COOL px/s; the gap is the spread, and the round lands
+ * at a random point inside it. A reload cools it at once. */
 const KICK_UP = 3;
+const KICK_SIDE = 1;
 const KICK_MS = 150;
 const BLOOM_BASE = 1;
+const BLOOM_PER_SHOT = 3;
+const BLOOM_MAX = 12;
 const BLOOM_COOL = 6;
 /** Slowed to 2.5 / 3 / 2 s, then made a quarter faster. */
 const FIRST_ATTACK_MS = 2000;
@@ -1056,6 +1061,20 @@ export const room: Stage = {
       const k = (1 - u) * (1 - u);
       return { x: kickDx * k, y: -KICK_UP * k };
     };
+    /** Where a shot at `v` goes: where the cross is (the kick), scattered inside its gap (the bloom). */
+    const aim = (v: { x: number; y: number }, now: number) => {
+      const k = kickNow(now);
+      const r = (spreadNow(now) - BLOOM_BASE) * Math.sqrt(Math.random());
+      const a = Math.random() * 2 * Math.PI;
+      return { x: v.x + k.x + r * Math.cos(a), y: v.y + k.y + r * Math.sin(a) };
+    };
+    /** The shot's recoil: the lines open and the cross kicks. */
+    const recoil = (now: number) => {
+      heat = Math.min(BLOOM_MAX - BLOOM_BASE, spreadNow(now) - BLOOM_BASE + BLOOM_PER_SHOT);
+      heatAt = now;
+      kickAt = now;
+      kickDx = (Math.floor(Math.random() * 3) - 1) * KICK_SIDE;
+    };
     /** The cross on the cursor layer: a dot at (cx, cy) and four lines, `spread` empty px between the dot and each cap. */
     const drawCross = (cx: number, cy: number, spread: number) => {
       cpix.set(cx, cy, 'W');
@@ -1068,6 +1087,7 @@ export const room: Stage = {
       if (phase !== 'fight' || frozenAt !== null) return;
       if (shots === SHOTS || reloadSecondAt !== null) return;
       sounds.reload();
+      heat = 0;
       autoReloadAt = null;
       shots = Math.max(shots, SHOTS / 2);
       drawShots();
@@ -1081,6 +1101,7 @@ export const room: Stage = {
       shots--;
       drawShots();
       sounds.shot();
+      recoil(now);
       // The first shot: a woman screams somewhere off and people run out. Nobody is seen,
       // and nothing else changes.
       if (!panicked) {
@@ -1420,7 +1441,10 @@ export const room: Stage = {
         }
         if (e.button !== 0) return;
         if (phase === 'look') clickRoom(v, now);
-        else if (phase === 'fight' && frozenAt === null) fire(v.x, v.y, now);
+        else if (phase === 'fight' && frozenAt === null) {
+          const a = aim(v, now);
+          fire(a.x, a.y, now);
+        }
         else if (phase === 'continue') answerContinue(now);
       },
       { signal },
@@ -1520,6 +1544,18 @@ export const room: Stage = {
         windowOpen: () => scene.windowOpen,
         /** The x of a nozzle spraying right now, or null. */
         nozzle: () => sprays.find((s) => spraying(s, performance.now()))?.nx ?? null,
+        /** The cross's gap and its offset from the mouse now (the bloom and the kick). `spread` is taken by the fire. */
+        gap: () => spreadNow(performance.now()),
+        kick: () => kickNow(performance.now()),
+        /** A shot at a virtual point through the gun (the kick, the bloom, the recoil): where it went
+         * and the shots left, or null outside the fight. */
+        shoot: (x: number, y: number) => {
+          if (phase !== 'fight' || frozenAt !== null) return null;
+          const now = performance.now();
+          const a = aim({ x, y }, now);
+          fire(a.x, a.y, now);
+          return { x: a.x, y: a.y, shots };
+        },
       };
     }
 
