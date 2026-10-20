@@ -1,6 +1,6 @@
 import { nextInput, reducedMotion, wait } from '../anim';
 import type { Stage } from '../types';
-import { playCardJingle } from './jingle';
+import { playBeep, playCardJingle } from './jingle';
 import { H, W } from './room/pixels';
 import { startGlitchPulse, startStorm, type StormSlot } from './storm';
 
@@ -9,6 +9,8 @@ const WOBBLE = 1;
 const POP_MS = 200;
 /** The Simple Products card, fades included. */
 const CARD_MS = 1250;
+/** Then the cut (Edgar, 2026-10-20): the card inverted, the logo alone on white, under a beep. */
+const BEEP_MS = 250;
 /** From the last letter landing to the credit flip and its coin cue. */
 const CREDIT_AFTER_TITLE_MS = 2000;
 /** Length of the credit glow (must match prntr-glow in prntr.css). */
@@ -87,10 +89,18 @@ export const opening: Stage = {
     if (jingle) signal.addEventListener('abort', () => jingle.stop(), { once: true });
     const t0 = performance.now();
     await wait(Math.max(0, t0 + CARD_MS - performance.now()), signal);
+    if (signal.aborted) return { kind: 'start' };
+    // The cut: the same card inverted, white with the logo in black and nothing else, under the
+    // bleep of a cut between scenes, for BEEP_MS; then black.
+    card.classList.add('is-beep');
+    const beep = audio.context && audio.master ? playBeep(audio.context, audio.master, BEEP_MS / 1000) : null;
+    if (beep) signal.addEventListener('abort', () => beep.stop(), { once: true });
+    ctx.announce('Beep.');
+    await wait(BEEP_MS, signal);
+    card.remove();
     // The title must not flash a fallback face: hold (black) until the fonts are in, at most 1.5s more.
     await Promise.race([ctx.fontsReady, wait(1500, signal)]);
     if (signal.aborted) return { kind: 'start' };
-    card.remove();
 
     // Beat 3: the title. The cue and the first letter start together; the last
     // letter lands exactly as the cue's first pass ends. The cue then keeps

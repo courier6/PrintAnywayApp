@@ -121,6 +121,30 @@
   animation: prntr-card 1250ms linear forwards;
 }
 
+/* The cut after the card (Edgar, 2026-10-20): the card inverted, white, the logo alone in black. */
+.prntr-card.is-beep {
+  background: #FFFFFF;
+  opacity: 1;
+  animation: none;
+}
+
+.prntr-card.is-beep .prntr-card-name,
+.prntr-card.is-beep .prntr-card-presents {
+  display: none;
+}
+
+.prntr-card.is-beep .prntr-card-logo {
+  fill: #000000;
+}
+
+.prntr-card.is-beep .prntr-card-logo path {
+  stroke: #000000;
+}
+
+.prntr-card.is-beep .prntr-card-logo [fill="#000000"] {
+  fill: #FFFFFF;
+}
+
 .prntr-card-brand {
   display: flex;
   flex-direction: column;

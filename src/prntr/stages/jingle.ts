@@ -13,6 +13,31 @@ const UP = 2;
 const ARP = [523.3, 659.3, 784, 1046.5, 1318.5, 1568, 2093, 1568, 1318.5, 1046.5, 784, 659.3, 523.3, 659.3, 784, 1046.5, 1318.5, 1568, 2093, 2637, 3136, 4186].map((f) => f * UP);
 const STEP_S = 0.07;
 
+/** The beep between the card and the title (Edgar, 2026-10-20): the bleep of a cut between
+ * scenes, a 1 kHz sine for the whole of `durationS`, hard on and hard off. */
+export function playBeep(ctx: AudioContext, out: AudioNode, durationS: number): { stop(): void } {
+  const t0 = ctx.currentTime;
+  const o = ctx.createOscillator();
+  o.frequency.value = 1000;
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0, t0);
+  g.gain.linearRampToValueAtTime(0.18, t0 + 0.003);
+  g.gain.setValueAtTime(0.18, t0 + durationS - 0.004);
+  g.gain.linearRampToValueAtTime(0, t0 + durationS);
+  o.connect(g);
+  g.connect(out);
+  o.start(t0);
+  o.stop(t0 + durationS + 0.01);
+  o.onended = () => g.disconnect();
+  return {
+    stop() {
+      const t = ctx.currentTime;
+      g.gain.cancelScheduledValues(t);
+      g.gain.setTargetAtTime(0, t, 0.003);
+    },
+  };
+}
+
 export function playCardJingle(ctx: AudioContext, out: AudioNode, durationS: number): { stop(): void } {
   const t0 = ctx.currentTime;
   const master = ctx.createGain();
