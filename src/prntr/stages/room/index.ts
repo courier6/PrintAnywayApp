@@ -272,6 +272,15 @@ export const room: Stage = {
     cursor.setAttribute('aria-hidden', 'true');
     const cg = cursor.getContext('2d');
     if (!cg) throw new Error('prntr: no 2d context');
+    // The things the machine throws (pages, staples, ink) on a transparent canvas of their own,
+    // above the slot's red light, so the glow is behind the paper (Edgar, 2026-10-20).
+    const front = document.createElement('canvas');
+    front.className = 'prntr-room-front';
+    front.width = W;
+    front.height = H;
+    front.setAttribute('aria-hidden', 'true');
+    const fg = front.getContext('2d', { willReadFrequently: true });
+    if (!fg) throw new Error('prntr: no 2d context');
     const light = el('div', 'prntr-room-light');
     const spill = el('div', 'prntr-room-spill');
     // The fire's light: an unpixelated orange glow sized to the flames each frame.
@@ -327,7 +336,7 @@ export const room: Stage = {
     const deathEl = el('div', 'prntr-room-death');
     deathEl.setAttribute('aria-hidden', 'true');
     deathEl.hidden = true;
-    frame.append(canvas, light, spill, fireLight, slotLight, dread, wash, glows, hud, cursor, deathEl, continueEl, overEl);
+    frame.append(canvas, light, spill, fireLight, slotLight, front, dread, wash, glows, hud, cursor, deathEl, continueEl, overEl);
     wrap.append(frame);
     root.append(wrap);
 
@@ -349,6 +358,7 @@ export const room: Stage = {
 
     // ---- state ------------------------------------------------------------
     const pix = new Pix();
+    const fpix = new Pix();
     const cpix = new Pix();
     const scene: SceneState = {
       lights: [true, true],
@@ -1184,27 +1194,29 @@ export const room: Stage = {
         }
       }
       drawRoom(pix, scene);
+      // What the machine throws goes on the front layer, over the slot's light.
+      fpix.clear();
       // Out of the slot: only the top rows of the sprite so far, then the whole thing.
       for (const s of staples) {
         if (now < s.at || s.hit || s.shot) continue;
         const r = staplePose(s, now);
         const spr = SPR.STAPLE;
-        if (r.h < spr.h) pix.blit(r.x, r.y, { w: spr.w, h: r.h, rows: spr.rows.slice(0, r.h) });
-        else pix.blit(r.x, r.y, spr, r.w / spr.w);
+        if (r.h < spr.h) fpix.blit(r.x, r.y, { w: spr.w, h: r.h, rows: spr.rows.slice(0, r.h) });
+        else fpix.blit(r.x, r.y, spr, r.w / spr.w);
       }
       for (const p of pages) {
         if (p.shot || now < p.at || p.landedAt !== null) continue;
         const r = pagePose(p, now);
         const spr = SPR.PAGE_PRINTED;
-        if (r.h < spr.h) pix.blit(r.x, r.y, { w: spr.w, h: r.h, rows: spr.rows.slice(0, r.h) });
-        else pix.blit(r.x, r.y, spr, r.w / spr.w);
+        if (r.h < spr.h) fpix.blit(r.x, r.y, { w: spr.w, h: r.h, rows: spr.rows.slice(0, r.h) });
+        else fpix.blit(r.x, r.y, spr, r.w / spr.w);
       }
       // A page on the glass: big, at a slight angle, then it slides off.
       for (const p of pages) {
         if (p.landedAt === null) continue;
         const lt = now - p.landedAt;
         const slide = lt > PAGE_LANDED_MS ? ((lt - PAGE_LANDED_MS) / PAGE_SLIDE_MS) * 80 : 0;
-        pix.blit(Math.floor(p.x1 - 20), Math.floor(p.y1 - 26 + slide), SPR.PAGE_PRINTED, 4, { skew: 10 });
+        fpix.blit(Math.floor(p.x1 - 20), Math.floor(p.y1 - 26 + slide), SPR.PAGE_PRINTED, 4, { skew: 10 });
       }
       // Ink: the particles on the near half of their flight (the far half is behind the machine),
       // and the splat building up on the glass, then running down.
@@ -1214,13 +1226,13 @@ export const room: Stage = {
         for (let tau = s.at; tau < end; tau += SPRAY_EVERY_MS) {
           if (now - tau >= SPRAY_FLIGHT_MS || now - tau < SPRAY_FLIGHT_MS / 2) continue;
           const q = particlePose(s, tau, now);
-          pix.rect(q.x, q.y, q.x + q.size, q.y + q.size, s.color);
+          fpix.rect(q.x, q.y, q.x + q.size, q.y + q.size, s.color);
         }
         const sc = splatScale(s, now);
         if (sc === 0) continue;
         const lt = now - splatAt(s);
         const slide = lt > INK_LANDED_MS ? ((lt - INK_LANDED_MS) / INK_SLIDE_MS) * 60 : 0;
-        pix.blit(Math.floor(s.x - 8 * sc), Math.floor(s.y - 7 * sc + slide), SPR.SPLAT, sc, { remap: { c: s.color } });
+        fpix.blit(Math.floor(s.x - 8 * sc), Math.floor(s.y - 7 * sc + slide), SPR.SPLAT, sc, { remap: { c: s.color } });
       }
       cpix.clear();
       if (pointer) {
@@ -1229,9 +1241,11 @@ export const room: Stage = {
         else cpix.blit(Math.floor(pointer.x) - 2, Math.floor(pointer.y), SPR.POINTER);
       }
       pix.present(g);
+      fpix.present(fg);
       cpix.present(cg);
       drawGlows(now);
       canvas.classList.toggle('is-inverted', invertFrame);
+      front.classList.toggle('is-inverted', invertFrame);
       invertFrame = false;
     };
 

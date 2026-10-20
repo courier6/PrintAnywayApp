@@ -345,8 +345,20 @@
 }
 
 /* The scan's one inverted frame. */
-.prntr-room-canvas.is-inverted {
+.prntr-room-canvas.is-inverted,
+.prntr-room-front.is-inverted {
   filter: invert(1);
+}
+
+/* What the machine throws (pages, staples, ink): a transparent canvas over the slot's red
+   light and the door's, so the glow is behind the paper (Edgar, 2026-10-20). */
+.prntr-room-front {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+  pointer-events: none;
 }
 
 /* The pointer and crosshair: a transparent canvas of their own above the door's light,
