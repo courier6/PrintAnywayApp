@@ -525,6 +525,7 @@ export const room: Stage = {
       holes: [],
       windowOpen: false,
       pieces: [],
+      damage: 0,
     };
     /** Holes in the blind so far. */
     let windowShots = 0;
@@ -1757,6 +1758,7 @@ export const room: Stage = {
       poseDoor(now);
       poseFire(now);
       scene.flashWhite = flashFrames > 0;
+      scene.damage = score / HI;
       if (flashFrames > 0) flashFrames--;
       scene.buttonBright = phase === 'fight' && scene.printer === 'mad' && (mad || buttonBright(now));
       if (scene.printer === 'wreck') posePieces(now);

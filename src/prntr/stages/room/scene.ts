@@ -173,6 +173,8 @@ export interface SceneState {
   windowOpen: boolean;
   /** The burst machine's pieces, where they are this frame (printer `wreck`). */
   pieces: Piece[];
+  /** How much of the machine's health is gone, 0..1 (Edgar, 2026-10-20): it wears with it. */
+  damage: number;
 }
 
 /** Where the clock hangs (16×15) and where the post-it board does (20×18): swapped on Edgar's
@@ -281,6 +283,46 @@ export function drawWindowWreck(p: Pix): void {
   // the bottom slat's right half
   p.rect(196, 85, 221, 87, 's');
   p.rect(196, 85, 221, 86, 'a');
+}
+
+/** A one-pixel line from (x0,y0) to (x1,y1). */
+function line(p: Pix, x0: number, y0: number, x1: number, y1: number, key: PalKey): void {
+  const n = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0), 1);
+  for (let i = 0; i <= n; i++) p.set(Math.round(x0 + ((x1 - x0) * i) / n), Math.round(y0 + ((y1 - y0) * i) / n), key);
+}
+
+/** The machine's wear (Edgar, 2026-10-20), in px off the 3× pose's corner, by the damage that brings each on. */
+const CRACKS: { at: number; pts: [number, number][] }[] = [
+  { at: 0.25, pts: [[10, 4], [14, 9], [12, 15], [17, 20], [15, 26]] },
+  { at: 0.5, pts: [[80, 30], [76, 36], [79, 42], [74, 48], [77, 55], [73, 61]] },
+  { at: 0.5, pts: [[58, 9], [62, 14], [59, 19]] },
+  { at: 0.75, pts: [[40, 0], [44, 6], [41, 12], [47, 18], [45, 25]] },
+  { at: 0.75, pts: [[20, 28], [26, 34], [22, 41], [30, 47], [27, 55], [33, 62]] },
+];
+/** Scorch marks on the body, from half the damage on. */
+const SCORCH: [number, number][] = [[14, 50], [15, 51], [17, 53], [16, 55], [19, 56], [13, 57], [21, 58], [18, 60], [84, 46], [86, 48], [83, 50]];
+
+/**
+ * The machine wearing as its health goes (Edgar, 2026-10-20): at a quarter of the damage a crack
+ * down the lid's left; at half a crack down the right of the body with a scorched patch on the
+ * lower left and a nick in the band; at three quarters a crack through the lid into the body, a
+ * long one across the body, and the lid's right corner knocked out to the wall behind.
+ */
+function drawWear(p: Pix, x: number, y: number, damage: number, wall: PalKey): void {
+  if (damage >= 0.75) {
+    for (let r = 0; r < 9; r++) p.rect(x + 82 + Math.floor(r * 1.3), y + r, x + 94, y + r + 1, wall);
+    line(p, x + 82, y, x + 93, y + 8, 'K');
+    line(p, x + 94, y + 8, x + 94, y + 9, 'K');
+  }
+  if (damage >= 0.5) for (const [sx, sy] of SCORCH) p.set(x + sx, y + sy, 'G');
+  for (const c of CRACKS) {
+    if (damage < c.at) continue;
+    for (let i = 1; i < c.pts.length; i++) {
+      line(p, x + c.pts[i - 1][0], y + c.pts[i - 1][1], x + c.pts[i][0], y + c.pts[i][1], 'K');
+      line(p, x + c.pts[i - 1][0] + 1, y + c.pts[i - 1][1], x + c.pts[i][0] + 1, y + c.pts[i][1], 'd');
+    }
+    for (let i = 1; i < c.pts.length; i++) line(p, x + c.pts[i - 1][0], y + c.pts[i - 1][1], x + c.pts[i][0], y + c.pts[i][1], 'K');
+  }
 }
 
 /** A wall hole is a dark cross; a door or blind hole goes through to the black behind. */
@@ -414,6 +456,7 @@ export function drawRoom(p: Pix, s: SceneState): void {
       p.rect(84 + x, 146 + y, 176 + x, 152 + y, 'X');
       p.blit(72 + x, 80 + y, SPR.MFC_MAD, 3, { white, remap: s.buttonBright ? { R: 'Q' } : undefined });
       if (s.scanRow && !white) p.rect(72 + x + 3 * 2, 80 + y + 3 * s.scanRow, 72 + x + 3 * 23, 80 + y + 3 * (s.scanRow + 1), 'c');
+      if (!white) drawWear(p, 72 + x, 80 + y, s.damage, s.lights[1] ? 'A' : 'a');
       break;
     }
     case 'between':
