@@ -91,6 +91,8 @@ export interface RoomSounds {
   whoosh(): void;
   /** The engulfed machine bursting apart: a bang, then its pieces coming down. */
   burst(): void;
+  /** The first aid kit shot: a clasp's snap and a rising three-note chime (Edgar, 2026-10-20). */
+  heal(): void;
   /** A tube shot to pieces: a pop, the hose's hiss, its bits clattering down. */
   tubeBurst(): void;
   /** Ink landing in the fire: a hiss of steam. */
@@ -139,6 +141,7 @@ const SILENT: RoomSounds = {
   burst: noop,
   sizzle: noop,
   tubeBurst: noop,
+  heal: noop,
   fanfare: noop,
 };
 
@@ -644,6 +647,15 @@ export function createRoomSounds(audio: PrntrAudio): RoomSounds {
       for (const [at, f0, dur] of bass) tone(t + at, dur, { type: 'triangle', f0, gain: 0.22, attack: 0.005, release: 0.04 });
       for (const f0 of [293.7, 370]) tone(t + 2.14, 1.0, { type: 'square', f0, gain: 0.05, attack: 0.02, release: 0.2 });
       for (const at of [0.39, 1.12, 2.14]) noise(t + at, 0.06, { lp: 3000, gain: 0.3, decay: 0.02 });
+    },
+    // the kit: a snap of its clasp, then G5, B5, D6 sines 90 ms apart with a soft square under each
+    heal() {
+      const t = now();
+      noise(t, 0.03, { hp: 2000, gain: 0.4, decay: 0.005 });
+      [784, 987.8, 1174.7].forEach((f0, i) => {
+        tone(t + 0.06 + i * 0.09, 0.3, { f0, gain: 0.22, attack: 0.005, decay: 0.08 });
+        tone(t + 0.06 + i * 0.09, 0.12, { type: 'square', f0: f0 / 2, gain: 0.06, attack: 0.005, release: 0.03 });
+      });
     },
     // a tube blown up: a crack and a 120 ms burst, a short hiss of the hose venting, and two
     // small clatters of its bits coming down at 0.25 and 0.4 s

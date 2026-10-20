@@ -25,6 +25,8 @@ export const SPR = {
   EXIT_BROKEN: parseSprite(SPRITES.EXIT_BROKEN),
   SPLAT: parseSprite(SPRITES.SPLAT),
   TUBE_HEAD: parseSprite(SPRITES.TUBE_HEAD),
+  KIT: parseSprite(SPRITES.KIT),
+  KIT_OPEN: parseSprite(SPRITES.KIT_OPEN),
 };
 /** The clock at each quarter turn, for rolling (Edgar, 2026-10-20). */
 const CLOCK_ROT = [0, 1, 2, 3].map((q) => rotateSprite(SPR.CLOCK, q));
@@ -44,6 +46,8 @@ export interface Broken {
   plant: boolean;
   /** The pot. */
   vase: boolean;
+  /** The first aid kit, shot open (Edgar, 2026-10-20): it gave the player full health, once. */
+  kit: boolean;
 }
 
 /**
@@ -182,6 +186,8 @@ export interface SceneState {
  * board at 66,40 and the clock at 112,36. */
 export const CLOCK_AT = { x: 68, y: 41 };
 export const BOARD_AT = { x: 136, y: 46 };
+/** The first aid kit (13×10), on the wall at the lower right of the window (Edgar, 2026-10-20). */
+export const KIT_AT = { x: 226, y: 79 };
 
 /** A cheap hash to 0..1, so a flame column flickers on its own without random state. */
 function hash(n: number): number {
@@ -392,6 +398,8 @@ export function drawRoom(p: Pix, s: SceneState): void {
     p.rect(163, 39, 221, 87, 's');
     for (let y = 41; y < 87; y += 4) p.rect(163, y, 221, y + 1, 'a');
   }
+  // the first aid kit by the window's lower right corner, green where a kit is red
+  p.blit(KIT_AT.x, KIT_AT.y, s.broken.kit ? SPR.KIT_OPEN : SPR.KIT);
   // the bullet holes, under the cooler, the plant and the machine, which stand in front of the wall
   drawHoles(p, s);
   // cooler and plant, their shadows to the left (the window is the light)

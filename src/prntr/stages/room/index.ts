@@ -1,7 +1,7 @@
 import { reducedMotion, wait } from '../../anim';
 import type { Handoff, Stage } from '../../types';
 import { H, Pix, W, rotateSprite } from './pixels';
-import { CLOCK_AT, MACHINE_PIECES, SPR, drawFireFront, drawFlame, drawRoom, drawWindowWreck, fireRect, inDoorway, type Broken, type ExitSign, type Hole, type SceneState } from './scene';
+import { CLOCK_AT, KIT_AT, MACHINE_PIECES, SPR, drawFireFront, drawFlame, drawRoom, drawWindowWreck, fireRect, inDoorway, type Broken, type ExitSign, type Hole, type SceneState } from './scene';
 import type { PalKey } from './palette';
 import { createRoomSounds, type FireSound, type Hum } from './sounds';
 
@@ -229,6 +229,9 @@ const PAGE_ORIGINS_X = [94, 107, 120, 133, 146];
 const USB = { x: 176, y: 141 };
 const USB_CAPTION = 'YOU FOUND A USB. YOU PLUG IT INTO THE PRINTER.';
 const USB_PLUG_MS = 2200;
+/** The first aid kit's hotspot and hit box: its sprite (KIT_AT in scene.ts) plus 3 px. Shot, it gives
+ * the player full health, once, and hangs open and empty after (Edgar, 2026-10-20). No points. */
+const KIT_HIT = { x0: KIT_AT.x - 3, y0: KIT_AT.y - 3, x1: KIT_AT.x + 16, y1: KIT_AT.y + 13 };
 /** The clock's and the post-it board's hotspots: their sprites (CLOCK_AT, BOARD_AT in scene.ts) plus 4 px. */
 const CLOCK_HIT = { x0: 64, y0: 37, x1: 88, y1: 60 };
 const BOARD_HIT = { x0: 132, y0: 42, x1: 160, y1: 68 };
@@ -278,13 +281,14 @@ const HOTSPOTS: Hotspot[] = [
   { id: 'poster', ...BOARD_HIT, captions: ['SIMPLE PRODUCTS. WE PRINT.', 'SIMPLE PRODUCTS. WE PRINT.'] },
   { id: 'clock', ...CLOCK_HIT, captions: ['1:37.', '1:37.'] },
   // The blind is down over it (Edgar, 2026-10-20; the handoff had IT'S BRIGHT OUT.).
+  { id: 'kit', ...KIT_HIT, captions: ['A FIRST AID KIT. GREEN.', 'A FIRST AID KIT. GREEN.'] },
   { id: 'window', x0: 156, y0: 32, x1: 228, y1: 94, captions: ['UNABLE TO OPEN.', 'STILL UNABLE TO OPEN.'] },
   { id: 'cooler', x0: 46, y0: 88, x1: 78, y1: 140, captions: ['WATER COOLER. FULL.', 'STILL FULL.'] },
   { id: 'plant', x0: 196, y0: 99, x1: 232, y1: 139, captions: ["A PLANT. IT'S REAL.", "A PLANT. IT'S REAL."] },
 ];
 
 const ROOM_ALT =
-  'A quiet office: drop ceiling with two fluorescent panels, a door ajar on black with an EXIT sign, a clock, a Simple Products board with notes on it by a bright window with nothing outside, a water cooler, a plant, one large copier in the middle, and a USB stick on the carpet beside it';
+  'A quiet office: drop ceiling with two fluorescent panels, a door ajar on black with an EXIT sign, a clock, a Simple Products board with notes on it by a window with its blind down and a green first aid kit at its lower right, a water cooler, a plant, one large copier in the middle, and a USB stick on the carpet beside it';
 
 type Phase = 'look' | 'sticker' | 'fight' | 'continue' | 'over' | 'end';
 type AttackKind = 'scan' | 'staples' | 'pages' | 'ink' | 'bolts';
@@ -513,7 +517,7 @@ export const room: Stage = {
       scanRow: 0,
       flashWhite: false,
       buttonBright: false,
-      broken: { clock: false, poster: false, tank: false, plant: false, vase: false },
+      broken: { clock: false, poster: false, tank: false, plant: false, vase: false, kit: false },
       clock: { state: 'up', x: CLOCK_AT.x, y: CLOCK_AT.y, rot: 0 },
       exit: { state: 'up', x: EXIT_WALL.x, y: EXIT_WALL.y, tilt: 0, lit: true },
       doorGap: DOOR_AJAR,
@@ -1110,6 +1114,15 @@ export const room: Stage = {
         addScore(BREAK_POINTS, now);
         return;
       }
+      // The first aid kit: shot open, it is the player's full health, once; no points for it.
+      if (!scene.broken.kit && x >= KIT_HIT.x0 && x < KIT_HIT.x1 && y >= KIT_HIT.y0 && y < KIT_HIT.y1) {
+        scene.broken.kit = true;
+        health = PLAYER_HEALTH;
+        drawHealth();
+        sounds.heal();
+        ctx.announce('First aid. Health full.');
+        return;
+      }
       const thing = BREAKABLES.find((b) => !scene.broken[b.id] && x >= b.x0 && x < b.x1 && y >= b.y0 && y < b.y1);
       if (thing) {
         scene.broken[thing.id] = true;
@@ -1415,6 +1428,7 @@ export const room: Stage = {
           }
         },
         broken: () => BREAKABLES.filter((b) => scene.broken[b.id]).map((b) => b.id),
+        kit: () => scene.broken.kit,
         attackGap,
         exit: (): ExitSign['state'] => scene.exit.state,
         doorGap: () => scene.doorGap,

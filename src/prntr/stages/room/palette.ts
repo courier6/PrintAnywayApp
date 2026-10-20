@@ -264,6 +264,33 @@ KccccccccccccccK
 ...KKK....KK....
 ..........K.....
 `,
+  // 13 × 10: a first aid kit on the wall by the window (Edgar, 2026-10-20; not in sprites.txt):
+  // a white box with a plum outline, its cross and its clasp green instead of red, so it reads as
+  // good; KIT_OPEN is the same box shot open and empty, its lid hanging
+  KIT: `
+.KKKKKKKKKKK.
+KwwwwwnwwwwwK
+KwwwwnnnwwwwK
+KwwnnnnnnnwwK
+KwwnnnnnnnwwK
+KwwwwnnnwwwwK
+KwwwwwnwwwwwK
+KwwwwwwwwwwwK
+KwwwwnnnwwwwK
+.KKKKKKKKKKK.
+`,
+  KIT_OPEN: `
+KKKKKK.......
+KwwwwwK......
+KwwnwwwK.....
+.KwwwwwK.....
+..KKKKKKKKKK.
+..KdddddddddK
+..KdKKdddKKdK
+..KdddddddddK
+..KdddddddddK
+..KKKKKKKKKKK
+`,
   // 6 × 4: the head of an ink tube up from behind the machine; its mouth (c) takes the ink's
   // colour (Edgar, 2026-10-20; not in sprites.txt)
   TUBE_HEAD: `
