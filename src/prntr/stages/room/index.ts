@@ -65,9 +65,10 @@ const BLINK_MAX_MS = 9000;
 const BLINK_FIRST_MS = 1500;
 /** Virtual px of the button on the 3× pose (MFC_MAD row 7, columns 24–26). */
 const BUTTON = { x: 144, y: 101, w: 9, h: 3 };
-/** A hit on the button (± BUTTON_HIT_PAD): more damage than the machine, and the attacks come
- * sooner, the gap × RAGE_STEP per hit, at most RAGE_MAX times (Edgar, 2026-10-19). */
-const BUTTON_POINTS = 15;
+/** A hit on the button (± BUTTON_HIT_PAD): more damage than the machine (15, then a quarter more:
+ * Edgar, 2026-10-20), and the attacks come sooner, the gap × RAGE_STEP per hit, at most RAGE_MAX
+ * times (Edgar, 2026-10-19). */
+const BUTTON_POINTS = 19;
 const BUTTON_HIT_PAD = 1;
 const RAGE_STEP = 0.85;
 const RAGE_MAX = 4;
