@@ -185,15 +185,17 @@ const WINDOW = { x0: 160, y0: 36, x1: 224, y1: 90 };
 const FLOOR_Y = 109;
 /** This many holes in the blind and it comes apart, for BREAK_POINTS (Edgar, 2026-10-20; six, then half again as many). */
 const WINDOW_BREAK_SHOTS = 9;
-/** The quiet room after 1337, before Prntr ends: 0.5 s of lights coming back, then a full second of nothing. */
-const HOLD_END_MS = 1500;
-/** Engulfed, the machine bursts apart (Edgar, 2026-10-20): its eight pieces fly out and up and fall
- * under PIECE_GRAVITY px/s² to the floor, each a little nearer than the last; the fire rages on,
- * its flames on the machine growing by RAGE_MORE over the end's first second instead of dying
- * down, and the stage ends BURN_END_MS after 1337. */
+/** Beaten, the machine bursts apart (Edgar, 2026-10-20): engulfed by the fire, or at 1337 by the
+ * gun. Its eight pieces fly out and up and fall under PIECE_GRAVITY px/s² to the floor, each a
+ * little nearer than the last; if there is a fire it rages on, its flames on the machine growing
+ * by RAGE_MORE over the second after the score runs out instead of dying down; without one the
+ * machine just falls apart in the dark room. A triumphant tune starts FANFARE_AFTER_MS after the
+ * bang (the stage is won: there is no stage after this one), and the stage ends WIN_END_MS after
+ * the burst, once the tune is over. */
 const PIECE_GRAVITY = 260;
 const RAGE_MORE = 0.25;
-const BURN_END_MS = 2500;
+const FANFARE_AFTER_MS = 500;
+const WIN_END_MS = 4300;
 
 /** The machine at 3×: the gun's target. */
 const MACHINE = { x0: 72, y0: 80, x1: 168, y1: 146 };
@@ -838,6 +840,10 @@ export const room: Stage = {
       washUntil = 0;
       flashFrames = HIT_FLASH_FRAMES * 2;
       sounds.burst();
+      // the tune, once the pieces are coming down
+      window.setTimeout(() => {
+        if (!signal.aborted) sounds.fanfare();
+      }, FANFARE_AFTER_MS);
       ctx.announce('The printer bursts apart.');
     };
     const posePieces = (now: number) => {
@@ -848,20 +854,13 @@ export const room: Stage = {
         return { spr: pc.spr, x: q.hx + q.vx * tt, y: tt >= q.land ? q.floor - pc.spr.h * 3 : q.hy + q.vy * tt + 0.5 * PIECE_GRAVITY * tt * tt };
       });
     };
+    // 1337: the machine is beaten. By the gun it bursts apart now; by the fire it already has.
     const startEnd = (now: number) => {
       phase = 'end';
       phaseAt = now;
       endStep = 0;
       hideHint();
-      staples = [];
-      pages = [];
-      sprays = [];
-      scanAt = null;
-      scene.scanRow = 0;
-      scene.shake = { x: 0, y: 0 };
-      frame.classList.remove('is-mad');
-      wash.classList.remove('is-on');
-      washUntil = 0;
+      if (scene.printer !== 'wreck') burst(now);
       setCaption('');
       ctx.announce('1337.');
     };
@@ -1401,42 +1400,10 @@ export const room: Stage = {
       [1600, () => (scene.printer = 'mad')],
       [1900, () => startFight(performance.now())],
     ];
-    const END_STEPS: [number, () => void][] = [
-      [
-        0,
-        () => {
-          sounds.lidShut();
-          showFightUi(false);
-          scene.trayPage = false;
-        },
-      ],
-      [
-        300,
-        () => {
-          scene.printer = 'idle';
-          scene.lights[1] = true;
-          sounds.lightTick();
-        },
-      ],
-      [
-        500,
-        () => {
-          scene.lights[0] = true;
-          sounds.lightTick();
-          hum.setFlat(false);
-          scene.ledRed = false;
-          scene.trayPage = true;
-        },
-      ],
-      // One second of the quiet room, exactly as at the start. Do not shorten it.
-      [HOLD_END_MS, () => finish()],
-    ];
-    // The end by fire (Edgar, 2026-10-20): the machine in pieces, the fire raging on in the dark
-    // room, the HUD gone; then out. The lights stay off and nothing comes back.
-    const BURN_END_STEPS: [number, () => void][] = [
-      [0, () => showFightUi(false)],
-      [BURN_END_MS, () => finish()],
-    ];
+    // The end (Edgar, 2026-10-20): the machine in pieces, the fire (if there is one) raging on in
+    // the dark room, the HUD gone, the tune; then out, WIN_END_MS after the burst. The lights stay
+    // off and nothing comes back. (Until then it ended on the quiet room, lit again, the lid shut.)
+    const END_STEPS: [number, () => void][] = [[0, () => showFightUi(false)]];
     const runSteps = (steps: [number, () => void][], index: number, t: number): number => {
       while (index < steps.length && t >= steps[index][0]) steps[index++][1]();
       return index;
@@ -1610,7 +1577,8 @@ export const room: Stage = {
       } else if (phase === 'over') {
         if (t >= OVER_HOLD_MS) finish();
       } else if (phase === 'end') {
-        endStep = runSteps(scene.printer === 'wreck' ? BURN_END_STEPS : END_STEPS, endStep, t);
+        endStep = runSteps(END_STEPS, endStep, t);
+        if (now - burstAt >= WIN_END_MS) finish();
       }
     };
 
@@ -1682,13 +1650,12 @@ export const room: Stage = {
         for (const [hole, box] of holeLightOf) box.hidden = inDoorway(hole, scene.doorGap);
       }
     };
-    /** The spread onto the machine, 0..1. Won by the gun, it dies down over the end's first second as
-     * the machine shuts; won by the fire, it rages on, up to 1 + RAGE_MORE over that second. */
+    /** The spread onto the machine, 0..1; once the machine has burst it rages on, up to 1 + RAGE_MORE
+     * over the second after its score has run out. */
     const spreadU = (now: number) => {
       if (spreadAt === null) return 0;
       const v = Math.min(1, (now - spreadAt) / spreadMs);
-      if (scene.printer === 'wreck') return v + RAGE_MORE * Math.min(1, Math.max(0, now - burstAt - DEPLETE_MS) / 1000);
-      return phase === 'end' ? v * Math.max(0, 1 - (now - phaseAt) / 1000) : v;
+      return scene.printer === 'wreck' ? v + RAGE_MORE * Math.min(1, Math.max(0, now - burstAt - DEPLETE_MS) / 1000) : v;
     };
     // The fire grows for FIRE_GROW_MS, then holds; its glow box follows the flames.
     const poseFire = (now: number) => {

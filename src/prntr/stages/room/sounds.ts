@@ -89,6 +89,8 @@ export interface RoomSounds {
   burst(): void;
   /** Ink landing in the fire: a hiss of steam. */
   sizzle(): void;
+  /** The stage won (Edgar, 2026-10-20): a triumphant tune in squares, about 3.2 s. */
+  fanfare(): void;
 }
 
 const noop = () => undefined;
@@ -128,6 +130,7 @@ const SILENT: RoomSounds = {
   whoosh: noop,
   burst: noop,
   sizzle: noop,
+  fanfare: noop,
 };
 
 /** Two seconds of white noise, made once per context. */
@@ -583,6 +586,40 @@ export function createRoomSounds(audio: PrntrAudio): RoomSounds {
         noise(t + d, 0.08, { lp: 2500, gain: 0.45, decay: 0.015 });
         tone(t + d, 0.1, { f0: 140, f1: 50, gain: 0.35, decay: 0.03 });
       }
+    },
+    // the win: a D major fanfare in squares over a triangle bass, a rising arpeggio to D6, a
+    // step up to E6, a turn down from F#6, and D6 held a second over a D–F# pad, with a
+    // noise hit on each downbeat; about 3.2 s
+    fanfare() {
+      const t = now();
+      const lead: [number, number, number][] = [
+        [0, 587.3, 0.11],
+        [0.13, 740, 0.11],
+        [0.26, 880, 0.11],
+        [0.39, 1174.7, 0.3],
+        [0.8, 1108.7, 0.14],
+        [0.96, 1174.7, 0.14],
+        [1.12, 1318.5, 0.42],
+        [1.66, 1480, 0.14],
+        [1.82, 1318.5, 0.14],
+        [1.98, 1108.7, 0.14],
+        [2.14, 1174.7, 1.0],
+      ];
+      for (const [at, f0, dur] of lead) {
+        tone(t + at, dur, { type: 'square', f0, gain: 0.14, attack: 0.005, release: 0.03 });
+        if (dur >= 0.3) tone(t + at, dur, { type: 'square', f0: f0 * 1.004, gain: 0.07, attack: 0.005, release: 0.03 });
+      }
+      const bass: [number, number, number][] = [
+        [0, 146.8, 0.38],
+        [0.39, 146.8, 0.38],
+        [0.8, 220, 0.3],
+        [1.12, 220, 0.5],
+        [1.66, 196, 0.45],
+        [2.14, 146.8, 1.0],
+      ];
+      for (const [at, f0, dur] of bass) tone(t + at, dur, { type: 'triangle', f0, gain: 0.22, attack: 0.005, release: 0.04 });
+      for (const f0 of [293.7, 370]) tone(t + 2.14, 1.0, { type: 'square', f0, gain: 0.05, attack: 0.02, release: 0.2 });
+      for (const at of [0.39, 1.12, 2.14]) noise(t + at, 0.06, { lp: 3000, gain: 0.3, decay: 0.02 });
     },
     // water on the fire: a bright hiss over 0.7 s with a low puff under it
     sizzle() {
