@@ -111,7 +111,8 @@ const SILENT: RoomSounds = {
 
 /** Two seconds of white noise, made once per context. */
 const noiseBuffers = new WeakMap<AudioContext, AudioBuffer>();
-function noiseBuffer(ctx: AudioContext): AudioBuffer {
+/** Two seconds of white noise, one buffer per context (the storm over the title uses it too). */
+export function noiseBuffer(ctx: AudioContext): AudioBuffer {
   let buf = noiseBuffers.get(ctx);
   if (!buf) {
     const n = Math.floor(ctx.sampleRate * 2);

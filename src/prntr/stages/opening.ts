@@ -123,7 +123,7 @@ export const opening: Stage = {
     root.append(wrap);
     // The cloud over the word (Edgar, 2026-10-19): white now, red through the flicker, the storm
     // from the flip on (2026-10-20). Stopped with the stage.
-    const storm = startStorm(root, h1, stormSlots, (i) => performance.now() >= t1 + inAt[i], reduced);
+    const storm = startStorm(root, h1, stormSlots, (i) => performance.now() >= t1 + inAt[i], reduced, audio);
     signal.addEventListener('abort', () => storm.stop(), { once: true });
     ctx.announce('Simple Products presents prntr');
 

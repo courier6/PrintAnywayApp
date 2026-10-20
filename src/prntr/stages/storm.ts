@@ -7,7 +7,12 @@
  * undersides. Now and then lightning strikes and the screen flashes white or blue. Everything
  * is drawn on one canvas over the viewport in whole "pixels" of P screen px (P from the
  * title's font size). Under reduced motion only the cloud is drawn, in its weather's colours.
+ * The storm sounds like one, in the room's style: rain, a gusting wind, thunder after each
+ * strike (Edgar, 2026-10-20).
  */
+
+import type { PrntrAudio } from '../audio';
+import { noiseBuffer } from './room/sounds';
 
 export interface StormSlot {
   /** The letter's slot (an inline-block the size of its advance, wobbled by a transform). */
@@ -24,6 +29,134 @@ export type Weather = 'calm' | 'red' | 'storm';
 export interface Storm {
   setWeather(w: Weather): void;
   stop(): void;
+}
+
+/** The storm's sound: the rain and wind loop from the storm's start; thunder on request. */
+export interface StormSound {
+  /** Thunder `delaySec` after now: a crack and a clap when near, only the roll when far. */
+  thunder(delaySec: number, near: boolean): void;
+  stop(): void;
+}
+
+/** The rain's and the wind's gain, and how long each takes to come in. */
+const RAIN_GAIN = 0.07;
+const RAIN_IN_S = 1.5;
+const WIND_GAIN = 0.09;
+const WIND_IN_S = 2.5;
+
+/**
+ * The storm's sound, in the room's style (noise shaped by filters, through Prntr's master
+ * gain): the rain a hiss above 2.5 kHz swelling a little at 0.3 Hz, the wind a rush below a
+ * lowpass that gusts between 100 and 540 Hz at 0.11 Hz, and thunder as bursts of low noise:
+ * a short crack and a clap for a near strike, a long roll for every strike.
+ */
+export function startStormSound(ctx: AudioContext, out: AudioNode): StormSound {
+  const NOISE = noiseBuffer(ctx);
+  const t0 = ctx.currentTime;
+  const loop = () => {
+    const src = ctx.createBufferSource();
+    src.buffer = NOISE;
+    src.loop = true;
+    src.loopStart = Math.random();
+    return src;
+  };
+  const filter = (type: BiquadFilterType, frequency: number) => {
+    const f = ctx.createBiquadFilter();
+    f.type = type;
+    f.frequency.value = frequency;
+    return f;
+  };
+  const lfo = (hz: number, depth: number, target: AudioParam) => {
+    const o = ctx.createOscillator();
+    o.frequency.value = hz;
+    const g = ctx.createGain();
+    g.gain.value = depth;
+    o.connect(g);
+    g.connect(target);
+    o.start();
+    return o;
+  };
+  // the rain
+  const rain = loop();
+  const rainG = ctx.createGain();
+  rainG.gain.setValueAtTime(0, t0);
+  rainG.gain.linearRampToValueAtTime(RAIN_GAIN, t0 + RAIN_IN_S);
+  const rainHp = filter('highpass', 2500);
+  const rainLp = filter('lowpass', 8000);
+  rain.connect(rainHp);
+  rainHp.connect(rainLp);
+  rainLp.connect(rainG);
+  rainG.connect(out);
+  const swell = lfo(0.3, RAIN_GAIN * 0.35, rainG.gain);
+  // the wind
+  const wind = loop();
+  const windG = ctx.createGain();
+  windG.gain.setValueAtTime(0, t0);
+  windG.gain.linearRampToValueAtTime(WIND_GAIN, t0 + WIND_IN_S);
+  const windLp = filter('lowpass', 320);
+  wind.connect(windLp);
+  windLp.connect(windG);
+  windG.connect(out);
+  const gust = lfo(0.11, 220, windLp.frequency);
+  rain.start();
+  wind.start();
+  // a burst of noise: in over `attack`, out at `decay`, shaped by the filters
+  const burst = (when: number, dur: number, hp: number, lp: number, gain: number, attack: number, decay: number) => {
+    const src = ctx.createBufferSource();
+    src.buffer = NOISE;
+    src.loop = true;
+    let node: AudioNode = src;
+    if (hp > 0) {
+      const f = filter('highpass', hp);
+      node.connect(f);
+      node = f;
+    }
+    if (lp < 20000) {
+      const f = filter('lowpass', lp);
+      node.connect(f);
+      node = f;
+    }
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, when);
+    g.gain.linearRampToValueAtTime(gain, when + attack);
+    g.gain.setTargetAtTime(0, when + attack, decay);
+    node.connect(g);
+    g.connect(out);
+    src.start(when);
+    src.stop(when + dur);
+  };
+  let stopped = false;
+  return {
+    thunder(delaySec, near) {
+      if (stopped) return;
+      const when = ctx.currentTime + delaySec;
+      if (near) {
+        burst(when, 0.4, 400, 5000, 0.5, 0.004, 0.08);
+        burst(when + 0.1, 3.5, 0, 160, 5, 0.04, 0.7);
+      }
+      burst(when + (near ? 0.5 : 0), 5, 0, 80, near ? 4 : 2.5, 0.6, 1.3);
+    },
+    stop() {
+      if (stopped) return;
+      stopped = true;
+      const t = ctx.currentTime;
+      for (const g of [rainG, windG]) {
+        g.gain.cancelScheduledValues(t);
+        g.gain.setTargetAtTime(0, t, 0.05);
+      }
+      window.setTimeout(() => {
+        for (const n of [rain, wind, swell, gust]) {
+          try {
+            n.stop();
+          } catch {
+            // already stopped
+          }
+        }
+        rainG.disconnect();
+        windG.disconnect();
+      }, 400);
+    },
+  };
 }
 
 /** The rain and the water on the letters. */
@@ -80,7 +213,7 @@ function hash(n: number): number {
   return (x >>> 0) / 4294967296;
 }
 
-export function startStorm(root: HTMLElement, h1: HTMLElement, slots: StormSlot[], letterIn: (i: number) => boolean, reduced: boolean): Storm {
+export function startStorm(root: HTMLElement, h1: HTMLElement, slots: StormSlot[], letterIn: (i: number) => boolean, reduced: boolean, audio: PrntrAudio): Storm {
   const canvas = document.createElement('canvas');
   canvas.className = 'prntr-storm';
   canvas.setAttribute('aria-hidden', 'true');
@@ -212,6 +345,9 @@ export function startStorm(root: HTMLElement, h1: HTMLElement, slots: StormSlot[
   let rainDue = 0;
   let weather: Weather = 'calm';
   let nextStrike = Infinity;
+  let sound: StormSound | null = null;
+  /** The first strike is near; after that, half of them. */
+  let strikes = 0;
   let bolt: { pts: [number, number][]; until: number; again: number } | null = null;
   let flashAt = 0;
   let flashBlue = false;
@@ -265,6 +401,9 @@ export function startStorm(root: HTMLElement, h1: HTMLElement, slots: StormSlot[
     }
     pts.push([x, target]);
     bolt = { pts, until: now + 60, again: now + 130 };
+    // the thunder: right on a near strike, a second or so after a far one
+    const near = strikes++ === 0 || Math.random() < 0.5;
+    sound?.thunder(near ? 0.15 : 0.6 + Math.random() * 0.8, near);
     flashAt = now;
     flashBlue = !flashBlue;
     nextStrike = now + STRIKE_MIN_MS + Math.random() * (STRIKE_MAX_MS - STRIKE_MIN_MS);
@@ -379,11 +518,15 @@ export function startStorm(root: HTMLElement, h1: HTMLElement, slots: StormSlot[
     setWeather(w) {
       if (w === weather) return;
       weather = w;
-      if (w === 'storm') nextStrike = performance.now() + STRIKE_FIRST_MS;
+      if (w === 'storm') {
+        nextStrike = performance.now() + STRIKE_FIRST_MS;
+        if (audio.context && audio.master && !sound) sound = startStormSound(audio.context, audio.master);
+      }
     },
     stop() {
       if (stopped) return;
       stopped = true;
+      sound?.stop();
       cancelAnimationFrame(raf);
       window.removeEventListener('resize', onResize);
       canvas.remove();
