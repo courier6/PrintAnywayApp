@@ -769,6 +769,43 @@
   animation: prntr-heart-ghost-still 1800ms linear forwards;
 }
 
+/* A ghost shot pops like a balloon (Edgar, 2026-10-20): the heart swells for two frames and is
+   gone, and six pale bits fly out from its middle and fade over 0.4 s. */
+@keyframes prntr-heart-pop {
+  0% { opacity: 1; transform: scale(1.35); }
+  100% { opacity: 0; transform: scale(1.35); }
+}
+
+@keyframes prntr-heart-shard {
+  0% { opacity: 1; transform: translate(0, 0); }
+  100% { opacity: 0; transform: translate(var(--dx), var(--dy)); }
+}
+
+.prntr-room-heart-pop {
+  position: absolute;
+  pointer-events: none;
+}
+
+.prntr-room-heart-pop-heart {
+  position: absolute;
+  inset: 0;
+  background: #FFFFFF;
+  clip-path: polygon(14.29% 0, 42.86% 0, 42.86% 16.67%, 57.14% 16.67%, 57.14% 0, 85.71% 0, 85.71% 16.67%, 100% 16.67%, 100% 50%, 85.71% 50%, 85.71% 66.67%, 71.43% 66.67%, 71.43% 83.33%, 57.14% 83.33%, 57.14% 100%, 42.86% 100%, 42.86% 83.33%, 28.57% 83.33%, 28.57% 66.67%, 14.29% 66.67%, 14.29% 50%, 0 50%, 0 16.67%, 14.29% 16.67%);
+  animation: prntr-heart-pop 70ms steps(1, end) forwards;
+}
+
+.prntr-room-heart-shard {
+  position: absolute;
+  left: calc(50% - 0.5px * var(--s));
+  top: calc(50% - 0.5px * var(--s));
+  width: calc(1px * var(--s));
+  height: calc(1px * var(--s));
+  background: #FFD6D2;
+  --dx: 0px;
+  --dy: 0px;
+  animation: prntr-heart-shard 400ms ease-out forwards;
+}
+
 .prntr-room-shots span.is-off {
   background: transparent;
 }

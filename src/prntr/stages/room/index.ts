@@ -33,6 +33,10 @@ const RESPAWN_MS = 2000;
 const PLAYER_HEALTH = 100;
 const HIT_DAMAGE = { staple: 25, page: 34, ink: 50 } as const;
 const HURT_MS = 150;
+/** A lost heart's ghost floating up can be shot (± GHOST_HIT_PAD virtual px around it): it pops
+ * like a balloon, its bits gone after POP_MS (Edgar, 2026-10-20). No points: it was the player's. */
+const GHOST_HIT_PAD = 3;
+const POP_MS = 450;
 /** The printer's standby tick while the room is idle. */
 const TICK_MS = 4000;
 const AUTO_RELOAD_MS = 800;
@@ -537,8 +541,44 @@ export const room: Stage = {
       ghost.style.width = `${hr.width}px`;
       ghost.style.height = `${hr.height}px`;
       ghost.style.setProperty('--rise', `${hr.bottom - fr.top}px`);
-      ghost.addEventListener('animationend', () => ghost.remove(), { once: true });
+      ghost.addEventListener(
+        'animationend',
+        () => {
+          ghost.remove();
+          ghosts.splice(ghosts.indexOf(ghost), 1);
+        },
+        { once: true },
+      );
       hud.append(ghost);
+      ghosts.push(ghost);
+    };
+    /** The ghosts still floating, oldest first. */
+    const ghosts: HTMLElement[] = [];
+    // A ghost shot pops like a balloon: the heart swells and is gone, six pale bits fly out.
+    const popGhost = (ghost: HTMLElement) => {
+      ghosts.splice(ghosts.indexOf(ghost), 1);
+      const gr = ghost.getBoundingClientRect();
+      const fr = frame.getBoundingClientRect();
+      ghost.remove();
+      sounds.pop();
+      if (reduced) return;
+      const pop = el('span', 'prntr-room-heart-pop');
+      pop.setAttribute('aria-hidden', 'true');
+      pop.style.left = `${gr.left - fr.left}px`;
+      pop.style.top = `${gr.top - fr.top}px`;
+      pop.style.width = `${gr.width}px`;
+      pop.style.height = `${gr.height}px`;
+      pop.append(el('span', 'prntr-room-heart-pop-heart'));
+      for (let i = 0; i < 6; i++) {
+        const shard = el('span', 'prntr-room-heart-shard');
+        const a = (i / 6) * 2 * Math.PI + Math.random() * 0.5;
+        const d = (5 + Math.random() * 4) * scale;
+        shard.style.setProperty('--dx', `${Math.cos(a) * d}px`);
+        shard.style.setProperty('--dy', `${Math.sin(a) * d - 2 * scale}px`);
+        pop.append(shard);
+      }
+      hud.append(pop);
+      window.setTimeout(() => pop.remove(), POP_MS);
     };
     const drawShots = () => {
       Array.from(shotsBtn.children).forEach((p, i) => p.classList.toggle('is-off', i >= shots));
@@ -785,6 +825,21 @@ export const room: Stage = {
         sounds.panic();
       }
       if (shots === 0) autoReloadAt = now + AUTO_RELOAD_MS;
+      // A heart's ghost floating up, above everything: it pops (Edgar, 2026-10-20).
+      if (ghosts.length) {
+        const fr = frame.getBoundingClientRect();
+        const sx = fr.left + x * scale;
+        const sy = fr.top + y * scale;
+        const pad = GHOST_HIT_PAD * scale;
+        const ghost = ghosts.find((gh) => {
+          const b = gh.getBoundingClientRect();
+          return sx >= b.left - pad && sx < b.right + pad && sy >= b.top - pad && sy < b.bottom + pad;
+        });
+        if (ghost) {
+          popGhost(ghost);
+          return;
+        }
+      }
       const page = pages.find((p) => {
         if (p.shot || p.landedAt !== null || now < p.at) return false;
         const r = pagePose(p, now);
@@ -1073,6 +1128,7 @@ export const room: Stage = {
         sprays: () => sprays.length,
         tubes: () => scene.tubes.map((t) => ({ ...t })),
         holes: () => scene.holes.map((h) => h.kind),
+        ghosts: () => ghosts.length,
         windowOpen: () => scene.windowOpen,
         /** The x of a nozzle spraying right now, or null. */
         nozzle: () => sprays.find((s) => spraying(s, performance.now()))?.nx ?? null,

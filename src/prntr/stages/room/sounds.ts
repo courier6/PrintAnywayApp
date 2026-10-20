@@ -75,6 +75,8 @@ export interface RoomSounds {
   inkSplat(): void;
   /** The fire's roar and crackle; loops until stop(), at the level set. */
   fire(): FireSound;
+  /** A heart's ghost shot: a balloon's pop. */
+  pop(): void;
 }
 
 const noop = () => undefined;
@@ -107,6 +109,7 @@ const SILENT: RoomSounds = {
   inkSpray: noop,
   inkSplat: noop,
   fire: () => ({ setLevel: noop, stop: noop }),
+  pop: noop,
 };
 
 /** Two seconds of white noise, made once per context. */
@@ -515,7 +518,17 @@ export function createRoomSounds(audio: PrntrAudio): RoomSounds {
         },
       };
     },
+    pop,
   };
+
+  // a balloon's pop: an 8 ms crack, a 60 ms burst through a 1.5 kHz lowpass, and a hollow
+  // thump falling 220 → 70 Hz
+  function pop() {
+    const t = now();
+    noise(t, 0.008, { hp: 2000, gain: 0.7, decay: 0.002 });
+    noise(t, 0.06, { lp: 1500, gain: 0.5, decay: 0.012 });
+    tone(t, 0.09, { f0: 220, f1: 70, gain: 0.4, decay: 0.025 });
+  }
 
   // A scream, faint and far: a sawtooth with a 6.5 Hz wobble, 700 Hz up to 1100 and down to
   // 500 over 0.9 s, lowpassed at 2.2 kHz, breath noise under it.
