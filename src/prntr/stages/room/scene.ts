@@ -48,6 +48,8 @@ export interface Broken {
 export interface Fire {
   u: number;
   t: number;
+  /** How far it has spread onto the machine (0 none … 1 engulfed), once the machine is weak. */
+  v: number;
 }
 
 /** The EXIT sign (Edgar, 2026-10-19): shot once it hangs loose from its left corner, shot again it falls. */
@@ -145,7 +147,11 @@ function drawFire(p: Pix, f: Fire, layer: 'back' | 'mid' | 'front'): void {
   else if (layer === 'back') {
     drawFlame(p, 50, 7 * later(f.u, 0.35), 0.9 * h * later(f.u, 0.35), 142, 100, f.t);
     drawFlame(p, 70, 6 * later(f.u, 0.55), 0.95 * h * later(f.u, 0.55), 142, 200, f.t);
-  } else drawFlame(p, 76, 5 * later(f.u, 0.2), 0.3 * h * later(f.u, 0.2), 146, 300, f.t);
+  } else {
+    drawFlame(p, 76, 5 * later(f.u, 0.2), 0.3 * h * later(f.u, 0.2), 146, 300, f.t);
+    // onto the machine from its left side, until the whole of it is in flames (72–168 × 80–146)
+    if (f.v > 0) drawFlame(p, 80 + 40 * f.v, 8 + 42 * f.v, 20 + 48 * f.v, 146, 400, f.t);
+  }
 }
 
 /**

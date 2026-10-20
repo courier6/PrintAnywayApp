@@ -77,6 +77,12 @@ const FIRE_GROW_MS = 12_000;
  * the door, its button stays bright, and it trembles (a new offset every SHAKE_FRAMES frames). */
 const MAD_AFTER_MS = 1500;
 const SHAKE_FRAMES = 3;
+/** Once the machine's health is down to SPREAD_HEALTH and the fire is burning, it spreads onto the
+ * machine over FIRE_SPREAD_MS; engulfed, the machine's health runs out over DEPLETE_MS and the
+ * player wins, unless the machine gets them first (Edgar, 2026-10-19). */
+const SPREAD_HEALTH = 0.65;
+const FIRE_SPREAD_MS = 20_000;
+const DEPLETE_MS = 1500;
 /** The mad machine's fourth attack (Edgar, 2026-10-19): ink sprayed from the cartridge bay under
  * the open lid (a nozzle at one of NOZZLES_X on the lid line, NOZZLE_Y), cyan, magenta and yellow
  * in turn, never black (it cannot do that). SPRAY_COUNT jets a volley, SPRAY_STAGGER_MS apart; a
@@ -383,6 +389,10 @@ export const room: Stage = {
     /** When the fire started (the water jug broke), and its crackle. */
     let fireAt: number | null = null;
     let fireSound: FireSound | null = null;
+    /** When the fire began spreading onto the machine, and when its health began to run out (from this score). */
+    let spreadAt: number | null = null;
+    let depleteAt: number | null = null;
+    let depleteFrom = 0;
     /** The machine is mad (MAD_AFTER_MS into the fire): the cues above, and the ink to come. */
     let mad = false;
     let frameCount = 0;
@@ -825,6 +835,7 @@ export const room: Stage = {
         doorGap: () => scene.doorGap,
         fire: () => fireAt !== null,
         mad: () => mad,
+        spread: () => spreadAt !== null,
         /** The next attack, now: scan, staples, pages or (mad only) ink. */
         attack: (kind: 'scan' | 'staples' | 'pages' | 'ink') => {
           attackIndex = ['scan', 'staples', 'pages', 'ink'].indexOf(kind);
@@ -911,7 +922,7 @@ export const room: Stage = {
         hintFadeAt = 0;
       }
       if (hintHideAt && now >= hintHideAt) hideHint();
-      if (fireAt !== null) fireSound?.setLevel(Math.min(1, (now - fireAt) / FIRE_GROW_MS));
+      if (fireAt !== null) fireSound?.setLevel(Math.min(1, (now - fireAt) / FIRE_GROW_MS) + 0.5 * spreadU(now));
       if (fireAt !== null && !mad && now - fireAt >= MAD_AFTER_MS) {
         mad = true;
         frame.classList.add('is-mad');
@@ -938,6 +949,21 @@ export const room: Stage = {
       } else if (phase === 'sticker') {
         stickerStep = runSteps(STICKER_STEPS, stickerStep, t);
       } else if (phase === 'fight') {
+        // The fire takes the weak machine; engulfed, its health runs out and the fight is won.
+        if (fireAt !== null && spreadAt === null && score >= HI * (1 - SPREAD_HEALTH)) spreadAt = now;
+        if (spreadAt !== null && depleteAt === null && now - spreadAt >= FIRE_SPREAD_MS) {
+          depleteAt = now;
+          depleteFrom = score;
+        }
+        if (depleteAt !== null) {
+          const k = Math.min(1, (now - depleteAt) / DEPLETE_MS);
+          score = Math.max(score, Math.round(depleteFrom + (HI - depleteFrom) * k));
+          drawScore();
+          if (k >= 1) {
+            addScore(0, now);
+            return;
+          }
+        }
         if (shots === 0 && autoReloadAt !== null && now >= autoReloadAt) reload(now);
         if (reloadSecondAt !== null && now >= reloadSecondAt) {
           reloadSecondAt = null;
@@ -1058,10 +1084,16 @@ export const room: Stage = {
         light.style.width = `calc(${lightGap}px * var(--s))`;
       }
     };
+    /** The spread onto the machine, 0..1; it dies down over the end's first second as the machine shuts. */
+    const spreadU = (now: number) => {
+      if (spreadAt === null) return 0;
+      const v = Math.min(1, (now - spreadAt) / FIRE_SPREAD_MS);
+      return phase === 'end' ? v * Math.max(0, 1 - (now - phaseAt) / 1000) : v;
+    };
     // The fire grows for FIRE_GROW_MS, then holds; its glow box follows the flames.
     const poseFire = (now: number) => {
       if (fireAt === null) return;
-      scene.fire = { u: Math.min(1, (now - fireAt) / FIRE_GROW_MS), t: reduced ? 0 : now };
+      scene.fire = { u: Math.min(1, (now - fireAt) / FIRE_GROW_MS), t: reduced ? 0 : now, v: spreadU(now) };
       const r = fireRect(scene.fire.u);
       fireLight.hidden = false;
       fireLight.style.left = `${r.x0 * scale}px`;
