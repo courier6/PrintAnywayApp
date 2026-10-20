@@ -90,7 +90,8 @@ interface Hotspot {
 const HOTSPOTS: Hotspot[] = [
   { id: 'page', x0: 94, y0: 114, x1: 112, y1: 135, captions: ['A PAGE. BLANK.', 'A PAGE. BLANK.'] },
   { id: 'printer', x0: 84, y0: 96, x1: 156, y1: 148, captions: ["A PRINTER. IT'S ON.", "IT'S WARM."] },
-  { id: 'door', x0: 6, y0: 27, x1: 48, y1: 112, captions: ['LOCKED.', 'STILL LOCKED.'] },
+  // Too frightening to go through (Edgar, 2026-10-19; the handoff had LOCKED. / STILL LOCKED.).
+  { id: 'door', x0: 6, y0: 27, x1: 48, y1: 112, captions: ['NOT IN THERE.', "IT KNOWS YOU'RE HERE."] },
   { id: 'poster', x0: 62, y0: 36, x1: 90, y1: 62, captions: ['SIMPLE PRODUCTS. WE PRINT.', 'SIMPLE PRODUCTS. WE PRINT.'] },
   { id: 'clock', x0: 108, y0: 32, x1: 132, y1: 55, captions: ['1:37.', '1:37.'] },
   { id: 'window', x0: 156, y0: 32, x1: 228, y1: 94, captions: ["IT'S BRIGHT OUT.", "IT'S BRIGHT OUT."] },
