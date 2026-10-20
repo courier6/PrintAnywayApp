@@ -30,9 +30,9 @@ export interface StageContext {
  * What one stage passes to the next. Every stage MUST accept `{ kind: 'start' }`
  * and build its own input from `ctx.page` (that is what lets the dev entrance
  * `?prntr=N` begin at any stage), plus the kind its predecessor emits. New kinds
- * are added here as stages land.
+ * are added here as stages land: `cleared` is what the room (stage 1) ends with.
  */
-export type Handoff = { kind: 'start' };
+export type Handoff = { kind: 'start' } | { kind: 'cleared'; score: number };
 
 export interface Stage {
   name: string;

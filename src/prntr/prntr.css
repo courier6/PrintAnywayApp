@@ -309,3 +309,248 @@
   .prntr-footer { left: 24px; right: 24px; bottom: 32px; font-size: 9px; }
   .prntr-copyright-corrupt { font-size: 11px; }
 }
+
+/* ---- Stage 1: the room ---- */
+
+/* Virtual px (240×160) times --s, the frame's whole-number scale, set by the stage.
+   Font sizes are screen px: the handoff's values on the 1200×800 frame (--s 5);
+   .is-small (--s ≤ 3, phones) is provisional, the designer has not drawn it. */
+
+.prntr-room {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #000000;
+  font-family: 'Press Start 2P', 'Courier New', monospace;
+  text-transform: uppercase;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  touch-action: none;
+}
+
+/* Several HUD parts are flex containers; keep the hidden attribute winning. */
+.prntr-room [hidden] {
+  display: none !important;
+}
+
+.prntr-room-frame {
+  position: relative;
+  flex: none;
+  overflow: hidden;
+  cursor: none; /* the POINTER and CROSSHAIR sprites are drawn in the pixel layer */
+}
+
+.prntr-room-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+}
+
+/* The scan's one inverted frame. */
+.prntr-room-canvas.is-inverted {
+  filter: invert(1);
+}
+
+/* The light in the door: deliberately the one unpixelated thing in the room
+   (handoff §2.3). Never captioned, never explained. */
+.prntr-room-light {
+  position: absolute;
+  left: calc(13px * var(--s));
+  top: calc(43px * var(--s));
+  width: calc(6px * var(--s));
+  height: calc(65px * var(--s));
+  background: linear-gradient(to bottom, #2A0404 0%, #5A0A0A 45%, #8A1410 100%);
+  box-shadow: 0 0 calc(4.4px * var(--s)) calc(1.6px * var(--s)) rgba(120, 14, 12, 0.42);
+  pointer-events: none;
+}
+
+.prntr-room-spill {
+  position: absolute;
+  left: calc(4px * var(--s));
+  top: calc(104px * var(--s));
+  width: calc(38px * var(--s));
+  height: calc(8.8px * var(--s));
+  border-radius: 50%;
+  background: radial-gradient(ellipse at center, rgba(140, 18, 14, 0.5) 0%, rgba(140, 18, 14, 0) 70%);
+  filter: blur(calc(0.6px * var(--s)));
+  pointer-events: none;
+}
+
+/* The scan flash's white wash (the Continue dim is .prntr-room-continue). */
+.prntr-room-wash {
+  position: absolute;
+  inset: 0;
+  background: #FFFFFF;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.prntr-room-wash.is-on {
+  opacity: 0.14;
+}
+
+.prntr-room-hud {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  color: #FFFFFF;
+  letter-spacing: 0.06em;
+  text-shadow: 2px 2px 0 #1E1433, -1px -1px 0 #1E1433, 1px -1px 0 #1E1433, -1px 1px 0 #1E1433;
+}
+
+.prntr-room-score {
+  position: absolute;
+  left: calc(8px * var(--s));
+  top: calc(6.4px * var(--s));
+  font-size: 18px;
+}
+
+.prntr-room-hi {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(6.4px * var(--s));
+  text-align: center;
+  font-size: 18px;
+  color: #FFD91A;
+}
+
+.prntr-room-credit {
+  position: absolute;
+  left: calc(8px * var(--s));
+  bottom: calc(6.4px * var(--s));
+  font-size: 13px;
+}
+
+.prntr-room-credit.is-glowing {
+  animation: prntr-glow 1500ms linear forwards;
+}
+
+.prntr-room-credit.is-after {
+  animation: prntr-after 600ms linear forwards;
+}
+
+/* At the INSERT COIN line (top 660 on the 800 frame). */
+.prntr-room-caption {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(132px * var(--s));
+  text-align: center;
+  font-size: 16px;
+  letter-spacing: 0.08em;
+  color: #EDEDED;
+}
+
+.prntr-room-fight-ui {
+  opacity: 0;
+  transition: opacity 300ms linear;
+}
+
+.prntr-room-fight-ui.is-in {
+  opacity: 1;
+}
+
+/* No label; magenta; it empties as the score rises. */
+.prntr-room-health {
+  position: absolute;
+  left: calc(60px * var(--s));
+  right: calc(60px * var(--s));
+  top: calc(14px * var(--s));
+  height: 16px;
+  border: 3px solid #1E1433;
+  background: #1E1433;
+}
+
+.prntr-room-health-fill {
+  height: 100%;
+  background: #F0288C;
+}
+
+.prntr-room-pips {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(6px * var(--s));
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+}
+
+.prntr-room-pips span {
+  width: 22px;
+  height: 22px;
+  border: 3px solid #1E1433;
+  background: #46D36E;
+}
+
+.prntr-room-pips span.is-off,
+.prntr-room-shots span.is-off {
+  background: transparent;
+}
+
+/* The shot pips are also the RELOAD button, at least 44 px tall for phones. */
+.prntr-room-shots {
+  position: absolute;
+  right: calc(8px * var(--s));
+  bottom: calc(6px * var(--s));
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  min-height: 44px;
+  margin: 0;
+  padding: 0 0 0 12px;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.prntr-room-shots span {
+  width: 10px;
+  height: 24px;
+  border: 3px solid #1E1433;
+  background: #FFD91A;
+}
+
+.prntr-room-continue {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: calc(6px * var(--s));
+  background: rgba(0, 0, 0, 0.42);
+  color: #FFFFFF;
+  text-shadow: 2px 2px 0 #1E1433, -1px -1px 0 #1E1433, 1px -1px 0 #1E1433, -1px 1px 0 #1E1433;
+  pointer-events: none;
+}
+
+.prntr-room-continue-label {
+  font-size: 36px;
+  letter-spacing: 0.08em;
+  color: #FFD91A;
+}
+
+.prntr-room-continue-count {
+  font-size: 110px;
+}
+
+.prntr-room-frame.is-small .prntr-room-score,
+.prntr-room-frame.is-small .prntr-room-hi { font-size: 10px; }
+.prntr-room-frame.is-small .prntr-room-credit { font-size: 8px; }
+.prntr-room-frame.is-small .prntr-room-caption { font-size: 9px; letter-spacing: 0.04em; }
+.prntr-room-frame.is-small .prntr-room-hud,
+.prntr-room-frame.is-small .prntr-room-continue {
+  text-shadow: 1px 1px 0 #1E1433, -1px -1px 0 #1E1433, 1px -1px 0 #1E1433, -1px 1px 0 #1E1433;
+}
+.prntr-room-frame.is-small .prntr-room-health { height: 10px; border-width: 2px; }
+.prntr-room-frame.is-small .prntr-room-pips span { width: 14px; height: 14px; border-width: 2px; }
+.prntr-room-frame.is-small .prntr-room-shots span { width: 7px; height: 16px; border-width: 2px; }
+.prntr-room-frame.is-small .prntr-room-continue-label { font-size: 20px; }
+.prntr-room-frame.is-small .prntr-room-continue-count { font-size: 64px; }
