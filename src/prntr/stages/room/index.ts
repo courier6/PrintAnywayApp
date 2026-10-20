@@ -1800,7 +1800,7 @@ export const room: Stage = {
       );
       finish = () => {
         stop();
-        resolve(outcome === 'over' ? { kind: 'over', score } : { kind: 'cleared', score });
+        resolve(outcome === 'over' ? { kind: 'over', score } : { kind: 'cleared', score, player: PLAYER_NAME });
       };
       const loop = (now: number) => {
         if (done) return;

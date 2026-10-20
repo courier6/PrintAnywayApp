@@ -5,6 +5,7 @@ import { ProcessingState } from './components/ProcessingState';
 import { PreviewState } from './components/PreviewState';
 import { PrntrHost, prefetchPrntr } from './components/PrntrHost';
 import { prntrAudioContext } from './components/prntrAudio';
+import type { Certificate } from './prntr/types';
 import { ErrorState, type ErrorKind } from './components/ErrorState';
 import { t, useLocale } from './i18n';
 import { INKS } from './lib/inks';
@@ -268,13 +269,36 @@ export default function App() {
   // into place from the sky in one piece; after a game over its blocks fall in one by
   // one like Tetris pieces. Either way over the frozen last frame of Prntr, which stays
   // mounted until the drop has landed. Reduced motion is a plain cut, as is any exit.
-  function finishPrntr(outcome: 'cleared' | 'over') {
+  // The room cleared, the page the app comes back to is the certificate of completion,
+  // in place of whatever document it had (Edgar, 2026-10-20).
+  function finishPrntr(outcome: 'cleared' | 'over', certificate?: Certificate) {
+    if (certificate) loadCertificate(certificate);
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
       exitPrntr();
       return;
     }
     setPrntrDrop(outcome === 'over' ? 'tetris' : 'sky');
     setAppState(prntrReturn.current);
+  }
+
+  // The certificate becomes the loaded document: one page, a PDF to download, recoloured
+  // in the chosen ink like any other. A document still processing is dropped.
+  function loadCertificate({ id, page }: Certificate) {
+    runToken.current++;
+    lastFile.current = null;
+    setShowPrintReminder(false);
+    setPrintImages([]);
+    setHolding(false);
+    setFileName(`prntr-certificate-${id.slice(-9).replace('-', '')}.pdf`);
+    setFormat('pdf');
+    store.reset(1);
+    store.setSource(0, page);
+    store.ensureRecolored(0, inkRef.current);
+    setPageCount(1);
+    setProcessedCount(1);
+    setCurrentPage(0);
+    setPagesVersion((v) => v + 1);
+    prntrReturn.current = 'preview';
   }
 
   // Safety net: Prntr never stays mounted if the drop's animationend does not arrive.

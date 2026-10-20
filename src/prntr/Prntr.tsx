@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import './prntr.css';
 import { createPrntrAudio } from './audio';
+import { makeCertificate } from './certificate';
 import { capturePage } from './page';
 import { runChain } from './runner';
 import { STAGES } from './stages';
-import type { StageContext } from './types';
+import type { Certificate, StageContext } from './types';
 
 interface Props {
   source: HTMLCanvasElement;
@@ -18,10 +19,11 @@ interface Props {
   onExit: () => void;
   /**
    * The chain finished: `prntr:done` with reason complete. `cleared` is the room won
-   * (the sky drop), `over` a game over (the Tetris drop). Either way the host drops
-   * its UI over the last frame, then unmounts Prntr.
+   * (the sky drop, with the certificate of completion as the page the app comes back
+   * to; Edgar, 2026-10-20), `over` a game over (the Tetris drop). Either way the host
+   * drops its UI over the last frame, then unmounts Prntr.
    */
-  onDone: (outcome: 'cleared' | 'over') => void;
+  onDone: (outcome: 'cleared' | 'over', certificate?: Certificate) => void;
 }
 
 export default function Prntr({ source, recolored, inkHex, stage, audioContext, onExit, onDone }: Props) {
@@ -87,7 +89,8 @@ export default function Prntr({ source, recolored, inkHex, stage, audioContext, 
     void runChain(ctx, STAGES, startAt).then((handoff) => {
       if (!handoff) return;
       setDone(true);
-      onDoneRef.current(handoff.kind === 'over' ? 'over' : 'cleared');
+      if (handoff.kind === 'cleared') onDoneRef.current('cleared', makeCertificate(handoff.player, handoff.score, 1337));
+      else onDoneRef.current('over');
     });
     return () => {
       controller.abort();

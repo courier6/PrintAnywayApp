@@ -1,4 +1,5 @@
 import { Component, Suspense, lazy, type ReactNode } from 'react';
+import type { Certificate } from '../prntr/types';
 
 const loadPrntr = () => import('../prntr/Prntr');
 const Prntr = lazy(loadPrntr);
@@ -26,8 +27,8 @@ export interface PrntrHostProps {
   stage: number;
   audioContext: AudioContext | null;
   onExit: () => void;
-  /** The chain finished: the room was cleared, or it was a game over. */
-  onDone: (outcome: 'cleared' | 'over') => void;
+  /** The chain finished: the room was cleared (with the certificate to load as the page), or it was a game over. */
+  onDone: (outcome: 'cleared' | 'over', certificate?: Certificate) => void;
 }
 
 /** Whatever breaks inside Prntr, the user lands back on the preview. */
