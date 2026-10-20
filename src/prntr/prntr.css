@@ -477,6 +477,15 @@
   background: #1E1433;
 }
 
+/* The machine's name, above the left end of its bar (Edgar, 2026-10-19). */
+.prntr-room-health-name {
+  position: absolute;
+  left: calc(60px * var(--s));
+  top: calc(14px * var(--s) - 16px);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+}
+
 .prntr-room-health-fill {
   height: 100%;
   background: #F0288C;
@@ -585,6 +594,7 @@
   text-shadow: 1px 1px 0 #1E1433, -1px -1px 0 #1E1433, 1px -1px 0 #1E1433, -1px 1px 0 #1E1433;
 }
 .prntr-room-frame.is-small .prntr-room-health { height: 10px; border-width: 2px; }
+.prntr-room-frame.is-small .prntr-room-health-name { top: calc(14px * var(--s) - 10px); font-size: 7px; }
 .prntr-room-frame.is-small .prntr-room-pips { gap: 6px; }
 .prntr-room-frame.is-small .prntr-room-pips span { width: 14px; height: 12px; }
 .prntr-room-frame.is-small .prntr-room-shots span { width: 7px; height: 16px; border-width: 2px; }

@@ -12,6 +12,8 @@ import { createRoomSounds, type Hum } from './sounds';
 
 /** The high score that already exists, and the machine's life. */
 const HI = 1337;
+/** The machine's model number, on its health bar. Invented (Simple Products; 1337 backwards). */
+const MODEL = 'SP-7331';
 const HIT_POINTS = 10;
 const PAGE_POINTS = 1;
 const STAPLE_POINTS = 1;
@@ -157,9 +159,11 @@ export const room: Stage = {
     captionEl.setAttribute('aria-hidden', 'true');
     const healthEl = el('div', 'prntr-room-health prntr-room-fight-ui');
     healthEl.setAttribute('role', 'img');
-    healthEl.setAttribute('aria-label', 'Printer health');
+    healthEl.setAttribute('aria-label', `${MODEL}, printer health`);
     const healthFill = el('div', 'prntr-room-health-fill');
     healthEl.append(healthFill);
+    const healthName = el('div', 'prntr-room-health-name prntr-room-fight-ui', MODEL);
+    healthName.setAttribute('aria-hidden', 'true');
     const pipsEl = el('div', 'prntr-room-pips prntr-room-fight-ui');
     pipsEl.setAttribute('role', 'img');
     for (let i = 0; i < HEARTS_MAX; i++) pipsEl.append(el('span', ''));
@@ -167,14 +171,14 @@ export const room: Stage = {
     shotsBtn.type = 'button';
     shotsBtn.className = 'prntr-room-shots prntr-room-fight-ui';
     for (let i = 0; i < SHOTS; i++) shotsBtn.append(el('span', ''));
-    for (const n of [healthEl, pipsEl, shotsBtn]) n.hidden = true;
+    for (const n of [healthEl, healthName, pipsEl, shotsBtn]) n.hidden = true;
     // When the fight starts: what to do, and the one binding that matters (Edgar, 2026-10-19).
     const hintEl = el('div', 'prntr-room-hint');
     hintEl.setAttribute('aria-hidden', 'true');
     const touch = window.matchMedia('(hover: none)').matches;
     hintEl.append(el('div', 'prntr-room-hint-title', 'PROTECT YOURSELF.'), el('div', 'prntr-room-hint-keys', touch ? 'TAP TO SHOOT' : 'CLICK TO SHOOT'));
     hintEl.hidden = true;
-    hud.append(scoreEl, hiEl, creditEl, captionEl, healthEl, pipsEl, shotsBtn, hintEl);
+    hud.append(scoreEl, hiEl, creditEl, captionEl, healthEl, healthName, pipsEl, shotsBtn, hintEl);
     const continueEl = el('div', 'prntr-room-continue');
     const countEl = el('div', 'prntr-room-continue-count', '9');
     continueEl.append(el('div', 'prntr-room-continue-label', 'CONTINUE?'), countEl);
@@ -266,7 +270,7 @@ export const room: Stage = {
       shotsBtn.setAttribute('aria-label', `Shots ${shots} of ${SHOTS}. Reload`);
     };
     const showFightUi = (on: boolean) => {
-      for (const n of [healthEl, pipsEl, shotsBtn]) {
+      for (const n of [healthEl, healthName, pipsEl, shotsBtn]) {
         n.classList.remove('is-in');
         n.hidden = !on;
         if (on) {
