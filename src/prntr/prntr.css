@@ -965,6 +965,36 @@
   pointer-events: none;
 }
 
+/* GAME OVER (Edgar, 2026-10-20): two giant words in the title's Comic Sans, red with a plum
+   shadow, popping in like the title's letters, over the dim for two seconds. */
+.prntr-room-over-text {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Comic Sans MS', 'Comic Sans', 'Comic Neue', cursive;
+  font-weight: 700;
+  font-size: calc(44px * var(--s));
+  line-height: 0.92;
+  letter-spacing: -0.02em;
+  text-transform: none;
+  color: #E8102A;
+  text-shadow: calc(1.2px * var(--s)) calc(1.2px * var(--s)) 0 #1E1433;
+  animation: prntr-pop 250ms ease-out both;
+}
+
+.prntr-room-over-text span:last-child {
+  transform: rotate(-3deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .prntr-room-over-text {
+    animation: none;
+  }
+}
+
 .prntr-room-continue-label {
   font-size: 36px;
   letter-spacing: 0.08em;

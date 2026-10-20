@@ -87,7 +87,9 @@ const HIT_FLASH_FRAMES = 2;
 const CONTINUE_MS = 10_000;
 /** Clicks this soon after death do not count as yes: the shot that died must not answer. */
 const CONTINUE_ARM_MS = 300;
-/** The frozen, dimmed room before Prntr ends on a game over. */
+/** A game over (Edgar, 2026-10-20): GAME OVER giant in Comic Sans across the frozen, dimmed room
+ * for GAME_OVER_MS, then the dim alone for OVER_HOLD_MS as before, then Prntr ends. */
+const GAME_OVER_MS = 2000;
 const OVER_HOLD_MS = 500;
 /** PROTECT YOURSELF. and the binding under it stay this long, then fade (HINT_FADE_MS, as in prntr.css). */
 const HINT_MS = 2000;
@@ -476,6 +478,10 @@ export const room: Stage = {
     const overEl = el('div', 'prntr-room-over');
     overEl.setAttribute('aria-hidden', 'true');
     overEl.hidden = true;
+    // GAME OVER across the room, giant, in the title's face (Edgar, 2026-10-20).
+    const overText = el('div', 'prntr-room-over-text');
+    overText.append(el('span', '', 'GAME'), el('span', '', 'OVER'));
+    overEl.append(overText);
     // A hit that leaves health: the room flashes red, nothing stops.
     const hurtEl = el('div', 'prntr-room-hurt');
     hurtEl.setAttribute('aria-hidden', 'true');
@@ -842,6 +848,7 @@ export const room: Stage = {
       hideHint();
       continueEl.hidden = true;
       overEl.hidden = false;
+      overText.hidden = false;
       sounds.gameOver();
       ctx.announce('Game over.');
     };
@@ -1672,7 +1679,8 @@ export const room: Stage = {
         countEl.textContent = String(Math.max(0, 9 - Math.floor(t / 1000)));
         if (t >= CONTINUE_MS) startOver(now);
       } else if (phase === 'over') {
-        if (t >= OVER_HOLD_MS) finish();
+        if (t >= GAME_OVER_MS) overText.hidden = true;
+        if (t >= GAME_OVER_MS + OVER_HOLD_MS) finish();
       } else if (phase === 'end') {
         endStep = runSteps(END_STEPS, endStep, t);
         if (now - burstAt >= WIN_END_MS) finish();
