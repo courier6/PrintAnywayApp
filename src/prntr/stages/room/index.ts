@@ -483,6 +483,21 @@ export const room: Stage = {
       Array.from(pipsEl.children).forEach((p, i) => p.classList.toggle('is-off', i >= lives));
       pipsEl.setAttribute('aria-label', `Lives ${lives} of ${LIVES_MAX}`);
     };
+    // The heart just lost turns into its ghost and floats up off the HUD (Edgar, 2026-10-20).
+    const heartGhost = (i: number) => {
+      const heart = pipsEl.children[i] as HTMLElement | undefined;
+      if (!heart) return;
+      const hr = heart.getBoundingClientRect();
+      const fr = frame.getBoundingClientRect();
+      const ghost = el('span', reduced ? 'prntr-room-heart-ghost is-still' : 'prntr-room-heart-ghost');
+      ghost.setAttribute('aria-hidden', 'true');
+      ghost.style.left = `${hr.left - fr.left}px`;
+      ghost.style.top = `${hr.top - fr.top}px`;
+      ghost.style.width = `${hr.width}px`;
+      ghost.style.height = `${hr.height}px`;
+      ghost.addEventListener('animationend', () => ghost.remove(), { once: true });
+      hud.append(ghost);
+    };
     const drawShots = () => {
       Array.from(shotsBtn.children).forEach((p, i) => p.classList.toggle('is-off', i >= shots));
       shotsBtn.setAttribute('aria-label', `Shots ${shots} of ${SHOTS}. Reload`);
@@ -611,9 +626,7 @@ export const room: Stage = {
       drawHealth();
       hurtUntil = 0;
       hurtEl.hidden = true;
-      pipsEl.classList.remove('is-hurt');
-      void pipsEl.offsetWidth; // flush, so the blink restarts
-      pipsEl.classList.add('is-hurt');
+      heartGhost(lives);
       drawPips();
       staples = [];
       pages = [];
@@ -1069,7 +1082,6 @@ export const room: Stage = {
           deathEl.hidden = true;
           health = PLAYER_HEALTH;
           drawHealth();
-          pipsEl.classList.remove('is-hurt');
           nextAttackAt = now + RESPAWN_MS;
         }
         // The fire takes the weak machine; engulfed, its health runs out and the fight is won.

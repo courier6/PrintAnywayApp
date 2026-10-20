@@ -650,22 +650,21 @@
   pointer-events: none;
 }
 
+/* The lives (Edgar, 2026-10-20): red hearts at the top right, opposite the score. */
 .prntr-room-pips {
   position: absolute;
-  left: 0;
-  right: 0;
-  bottom: calc(16px * var(--s));
+  right: calc(8px * var(--s));
+  top: calc(6.4px * var(--s));
   display: flex;
-  justify-content: center;
   gap: 10px;
 }
 
-/* The player's hearts (Edgar, 2026-10-19: two lives out of three): a 7×6 pixel heart
-   cut from a box, so no image. An empty slot is the dark silhouette. */
+/* A 7×6 pixel heart cut from a box, so no image (two lives out of three). An empty slot is
+   the dark silhouette. */
 .prntr-room-pips span {
   width: 28px;
   height: 24px;
-  background: #46D36E;
+  background: #FF2A1A;
   clip-path: polygon(14.29% 0, 42.86% 0, 42.86% 16.67%, 57.14% 16.67%, 57.14% 0, 85.71% 0, 85.71% 16.67%, 100% 16.67%, 100% 50%, 85.71% 50%, 85.71% 66.67%, 71.43% 66.67%, 71.43% 83.33%, 57.14% 83.33%, 57.14% 100%, 42.86% 100%, 42.86% 83.33%, 28.57% 83.33%, 28.57% 66.67%, 14.29% 66.67%, 14.29% 50%, 0 50%, 0 16.67%, 14.29% 16.67%);
 }
 
@@ -673,15 +672,38 @@
   background: #1E1433;
 }
 
-/* For 1.5 s after a hit nothing hurts; the hearts blink three times, 2 Hz. */
+/* The player's health bar blinks with this when it takes a hit. */
 @keyframes prntr-hurt {
   0% { opacity: 1; }
   50% { opacity: 0.3; }
   100% { opacity: 1; }
 }
 
-.prntr-room-pips.is-hurt span {
-  animation: prntr-hurt 500ms steps(1, end) 3;
+/* A lost heart's ghost: pale and see-through, it drifts up and to the left, swaying and growing
+   a little, and fades over 1.8 s, staying in the frame
+   (only fades under reduced motion). */
+@keyframes prntr-heart-ghost {
+  0% { opacity: 0.95; transform: translate(0, 0) scale(1); }
+  30% { opacity: 0.8; transform: translate(-7px, -8px) scale(1.06); }
+  60% { opacity: 0.55; transform: translate(4px, -17px) scale(1.12); }
+  100% { opacity: 0; transform: translate(-12px, -26px) scale(1.18); }
+}
+
+@keyframes prntr-heart-ghost-still {
+  from { opacity: 0.9; }
+  to { opacity: 0; }
+}
+
+.prntr-room-heart-ghost {
+  position: absolute;
+  background: #FFD6D2;
+  clip-path: polygon(14.29% 0, 42.86% 0, 42.86% 16.67%, 57.14% 16.67%, 57.14% 0, 85.71% 0, 85.71% 16.67%, 100% 16.67%, 100% 50%, 85.71% 50%, 85.71% 66.67%, 71.43% 66.67%, 71.43% 83.33%, 57.14% 83.33%, 57.14% 100%, 42.86% 100%, 42.86% 83.33%, 28.57% 83.33%, 28.57% 66.67%, 14.29% 66.67%, 14.29% 50%, 0 50%, 0 16.67%, 14.29% 16.67%);
+  animation: prntr-heart-ghost 1800ms ease-out forwards;
+  pointer-events: none;
+}
+
+.prntr-room-heart-ghost.is-still {
+  animation: prntr-heart-ghost-still 1800ms linear forwards;
 }
 
 .prntr-room-shots span.is-off {
