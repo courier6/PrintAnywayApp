@@ -1,5 +1,6 @@
 import { nextInput, reducedMotion, wait } from '../anim';
 import type { Stage } from '../types';
+import { playCardJingle } from './jingle';
 import { H, W } from './room/pixels';
 import { startGlitchPulse, startStorm, type StormSlot } from './storm';
 
@@ -81,6 +82,9 @@ export const opening: Stage = {
       `<div class="prntr-card-brand">${LOGO}<div class="prntr-card-name">SIMPLE PRODUCTS</div></div>` +
       '<div class="prntr-card-presents">presents…</div>';
     root.append(card);
+    // Under the card, as long as it is on: the jingle (Edgar, 2026-10-20). Cut with the stage.
+    const jingle = audio.context && audio.master ? playCardJingle(audio.context, audio.master, CARD_MS / 1000) : null;
+    if (jingle) signal.addEventListener('abort', () => jingle.stop(), { once: true });
     const t0 = performance.now();
     await wait(Math.max(0, t0 + CARD_MS - performance.now()), signal);
     // The title must not flash a fallback face: hold (black) until the fonts are in, at most 1.5s more.
