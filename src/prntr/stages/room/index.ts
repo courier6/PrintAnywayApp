@@ -101,15 +101,16 @@ const FIRE_STOKE_SHOTS = 3;
 const STOKE_STEP = 0.8;
 const STOKE_MAX = 3;
 const STOKE_FLARE_MS = 400;
-/** The mad machine's fourth attack (Edgar, 2026-10-19): ink sprayed from behind the machine (a
- * nozzle at one of NOZZLES_X, NOZZLE_Y just inside its top edge, so each jet comes up from behind
- * the lid and the far half of a particle's flight is drawn behind the machine: Edgar, 2026-10-20),
- * cyan, magenta and yellow in turn, never black (it cannot do that). SPRAY_COUNT jets a volley,
- * SPRAY_STAGGER_MS apart; a jet runs SPRAY_MS, a particle every SPRAY_EVERY_MS, each flying
- * SPRAY_FLIGHT_MS along an arc SPRAY_ARC px high to the jet's target, where the splat builds up
- * as they land. Shooting the jet's root over the edge (± NOZZLE_HIT_PAD) stops it for INK_POINTS;
- * a splat that completes is a hit. The splat stays INK_LANDED_MS, then runs down over
- * INK_SLIDE_MS. */
+/** The mad machine's fourth attack (Edgar, 2026-10-19): ink sprayed from behind the machine,
+ * cyan, magenta and yellow in turn, never black (it cannot do that). Each jet comes out of a tube
+ * that rises from behind the machine's top edge at one of NOZZLES_X (Edgar, 2026-10-20): its head
+ * comes up to TUBE_TOP over TUBE_RISE_MS before the jet starts and sinks back as long after it
+ * ends; the tube is drawn behind the machine and the ink, and the first half of a particle's
+ * flight behind the machine too. SPRAY_COUNT jets a volley, SPRAY_STAGGER_MS apart; a jet runs
+ * SPRAY_MS, a particle every SPRAY_EVERY_MS, each flying SPRAY_FLIGHT_MS along an arc SPRAY_ARC
+ * px high from the tube's mouth to the jet's target, where the splat builds up as they land.
+ * Shooting the tube over the edge (± NOZZLE_HIT_PAD) stops the jet for INK_POINTS; a splat that
+ * completes is a hit. The splat stays INK_LANDED_MS, then runs down over INK_SLIDE_MS. */
 const SPRAY_COUNT = 3;
 const SPRAY_STAGGER_MS = 600;
 const SPRAY_MS = 1400;
@@ -117,9 +118,11 @@ const SPRAY_EVERY_MS = 40;
 const SPRAY_FLIGHT_MS = 700;
 const SPRAY_ARC = 24;
 const NOZZLES_X = [96, 108, 120, 132, 144];
-const NOZZLE_Y = 84;
-/** The jet's root: this far above the nozzle, over the machine's top edge (where it is shot). */
-const NOZZLE_ROOT = { dy: -4, h: 4 };
+/** The machine's top edge on the 3× pose (MACHINE.y0), the tube's head when it is up, and its mouth. */
+const TUBE_BASE = 80;
+const TUBE_TOP = 72;
+const TUBE_MOUTH = TUBE_TOP + 2;
+const TUBE_RISE_MS = 250;
 const NOZZLE_HIT_PAD = 4;
 const INK_POINTS = 1;
 const INK_LANDED_MS = 1500;
@@ -417,6 +420,7 @@ export const room: Stage = {
       fire: null,
       shake: { x: 0, y: 0 },
       inkBehind: [],
+      tubes: [],
       holes: [],
       windowOpen: false,
     };
@@ -746,7 +750,7 @@ export const room: Stage = {
       const spread = (((tau * 7919) % 97) / 97 - 0.5) * 6 * v;
       const size = v < 0.4 ? 1 : v < 0.75 ? 2 : 3;
       const x = s.nx + (s.x - s.nx) * v + spread;
-      const y = NOZZLE_Y + (s.y - NOZZLE_Y) * v - SPRAY_ARC * Math.sin(Math.PI * v);
+      const y = TUBE_MOUTH + (s.y - TUBE_MOUTH) * v - SPRAY_ARC * Math.sin(Math.PI * v);
       return { x: Math.floor(x - size / 2), y: Math.floor(y - size / 2), size };
     };
     /** The splat's scale from how much of the jet has landed: 0 (nothing yet) to 3. */
@@ -800,8 +804,8 @@ export const room: Stage = {
         addScore(STAPLE_POINTS, now);
         return;
       }
-      // A spraying nozzle: the jet stops; what is already in the air still lands.
-      const jet = sprays.find((s) => spraying(s, now) && Math.abs(x - s.nx) <= 3 + NOZZLE_HIT_PAD && Math.abs(y - (NOZZLE_Y + NOZZLE_ROOT.dy)) <= NOZZLE_ROOT.h + NOZZLE_HIT_PAD);
+      // A spraying tube, its head or the hose over the edge: the jet stops; what is already in the air still lands.
+      const jet = sprays.find((s) => spraying(s, now) && x >= s.nx - 3 - NOZZLE_HIT_PAD && x < s.nx + 3 + NOZZLE_HIT_PAD && y >= TUBE_TOP - NOZZLE_HIT_PAD && y < TUBE_BASE + NOZZLE_HIT_PAD);
       if (jet) {
         jet.stoppedAt = now;
         addScore(INK_POINTS, now);
@@ -922,9 +926,9 @@ export const room: Stage = {
       if (kind === 3) {
         const first = Math.floor(Math.random() * INK_COLORS.length);
         for (let i = 0; i < SPRAY_COUNT; i++) {
-          sprays.push({ nx: NOZZLES_X[Math.floor(Math.random() * NOZZLES_X.length)], x: 16 + Math.random() * 208, y: 24 + Math.random() * 112, at: now + i * SPRAY_STAGGER_MS, color: INK_COLORS[(first + i) % INK_COLORS.length], stoppedAt: null, done: false, fed: false });
+          sprays.push({ nx: NOZZLES_X[Math.floor(Math.random() * NOZZLES_X.length)], x: 16 + Math.random() * 208, y: 24 + Math.random() * 112, at: now + TUBE_RISE_MS + i * SPRAY_STAGGER_MS, color: INK_COLORS[(first + i) % INK_COLORS.length], stoppedAt: null, done: false, fed: false });
         }
-        nextAttackAt = now + (SPRAY_COUNT - 1) * SPRAY_STAGGER_MS + SPRAY_MS + SPRAY_FLIGHT_MS + gap;
+        nextAttackAt = now + TUBE_RISE_MS + (SPRAY_COUNT - 1) * SPRAY_STAGGER_MS + SPRAY_MS + SPRAY_FLIGHT_MS + gap;
       } else if (kind === 0) {
         scanAt = now;
         sounds.scanFlash();
@@ -1065,6 +1069,7 @@ export const room: Stage = {
           nextAttackAt = 0;
         },
         sprays: () => sprays.length,
+        tubes: () => scene.tubes.map((t) => ({ ...t })),
         holes: () => scene.holes.map((h) => h.kind),
         windowOpen: () => scene.windowOpen,
         /** The x of a nozzle spraying right now, or null. */
@@ -1284,7 +1289,7 @@ export const room: Stage = {
       const rects: { x: number; y: number; w: number; h: number }[] = [];
       for (const s of staples) if (now >= s.at && !s.hit && !s.shot) rects.push(staplePose(s, now));
       for (const p of pages) if (now >= p.at && !p.shot && p.landedAt === null) rects.push(pagePose(p, now));
-      for (const s of sprays) if (spraying(s, now)) rects.push({ x: s.nx - 3, y: NOZZLE_Y + NOZZLE_ROOT.dy - 2, w: 6, h: 6 });
+      for (const s of sprays) if (spraying(s, now)) rects.push({ x: s.nx - 3, y: TUBE_TOP, w: 6, h: TUBE_BASE - TUBE_TOP });
       if (scene.buttonBright) rects.push({ ...BUTTON, x: BUTTON.x + scene.shake.x, y: BUTTON.y + scene.shake.y });
       while (glows.children.length < rects.length) glows.append(el('div', 'prntr-room-glow'));
       Array.from(glows.children).forEach((n, i) => {
@@ -1358,6 +1363,18 @@ export const room: Stage = {
       }
       // The slot's red light is a DOM box over the canvas: it trembles with the machine (Edgar, 2026-10-20).
       slotLight.style.transform = scene.shake.x || scene.shake.y ? `translate(${scene.shake.x * scale}px, ${scene.shake.y * scale}px)` : '';
+      // The tubes up behind the machine: rising before the jet, sinking after it, one per nozzle.
+      const tubes = new Map<number, number>();
+      for (const s of sprays) {
+        const from = s.at - TUBE_RISE_MS;
+        const to = jetEnd(s) + TUBE_RISE_MS;
+        if (now < from || now >= to) continue;
+        const up = reduced ? 1 : now < s.at ? (now - from) / TUBE_RISE_MS : now < jetEnd(s) ? 1 : (to - now) / TUBE_RISE_MS;
+        const top = Math.round(TUBE_BASE - (TUBE_BASE - TUBE_TOP) * up);
+        tubes.set(s.nx, Math.min(top, tubes.get(s.nx) ?? Infinity));
+      }
+      scene.tubes = [];
+      for (const [x, top] of tubes) scene.tubes.push({ x, top, color: sprays.find((s) => s.nx === x && now >= s.at - TUBE_RISE_MS && now < jetEnd(s) + TUBE_RISE_MS)!.color });
       // The ink on the far half of its flight goes behind the machine: it is sprayed from behind it.
       scene.inkBehind = [];
       for (const s of sprays) {

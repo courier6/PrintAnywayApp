@@ -18,7 +18,7 @@ export type PalKey = keyof typeof PAL;
  * String sprite maps, one character per pixel, '.' transparent, letters = PAL keys.
  * Verbatim from prntr/design/stage1/art/sprites.txt, except PAGE_PRINTED and the
  * broken things (CLOCK_BROKEN, POSTER_TORN, TANK_BROKEN, PLANT_BARE, POT_BROKEN,
- * EXIT_BROKEN) and SPLAT, the ink on the glass (drawn in c, remapped to m or y):
+ * EXIT_BROKEN), SPLAT, the ink on the glass (drawn in c, remapped to m or y), and TUBE_HEAD:
  * Edgar, 2026-10-19. Scale by whole numbers only.
  */
 export const SPRITES = {
@@ -245,6 +245,14 @@ KccccccccccccccK
 ..KcccK..KccK...
 ...KKK....KK....
 ..........K.....
+`,
+  // 6 × 4: the head of an ink tube up from behind the machine; its mouth (c) takes the ink's
+  // colour (Edgar, 2026-10-20; not in sprites.txt)
+  TUBE_HEAD: `
+.KKKK.
+KggggK
+KgccgK
+.KKKK.
 `,
   // 10 × 13
   PAGE_SMALL: `

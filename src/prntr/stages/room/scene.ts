@@ -23,6 +23,7 @@ export const SPR = {
   POT_BROKEN: parseSprite(SPRITES.POT_BROKEN),
   EXIT_BROKEN: parseSprite(SPRITES.EXIT_BROKEN),
   SPLAT: parseSprite(SPRITES.SPLAT),
+  TUBE_HEAD: parseSprite(SPRITES.TUBE_HEAD),
 };
 /** The cooler below its bottle, the plant's leaves and its pot, so each half can break alone. */
 const COOLER_BODY = sliceRows(SPR.COOLER, 8, 22);
@@ -93,6 +94,13 @@ export function inDoorway(h: Hole, doorGap: number): boolean {
   return h.kind === 'door' && h.x + 1 > 13 && h.x - 1 <= 13 + doorGap;
 }
 
+/** An ink tube up from behind the machine (Edgar, 2026-10-20): its x, its head's top row, the ink in its mouth. */
+export interface Tube {
+  x: number;
+  top: number;
+  color: PalKey;
+}
+
 export interface SceneState {
   /** Left, right fluorescent panel. */
   lights: [boolean, boolean];
@@ -117,6 +125,8 @@ export interface SceneState {
   shake: { x: number; y: number };
   /** The ink in the air behind the machine this frame: the jets come up from behind it. */
   inkBehind: InkDot[];
+  /** The ink tubes up this frame; drawn before the ink behind the machine and the machine. */
+  tubes: Tube[];
   /** The bullet holes, oldest first. */
   holes: Hole[];
   /** The window's blind shot to pieces (Edgar, 2026-10-20): a gaping hole, the red behind it. */
@@ -306,6 +316,14 @@ export function drawRoom(p: Pix, s: SceneState): void {
     p.rect(198, 136, 200, 138, 'V');
     p.rect(230, 133, 232, 135, 'V');
     p.rect(226, 136, 228, 138, 'v');
+  }
+  // the ink tubes up from behind the machine: a ribbed hose, its head, the ink in its mouth;
+  // the machine covers the hose's foot, the ink in the air is drawn over them
+  for (const tb of s.tubes) {
+    p.rect(tb.x - 2, tb.top + 4, tb.x - 1, 90, 'K');
+    p.rect(tb.x + 1, tb.top + 4, tb.x + 2, 90, 'K');
+    for (let y = tb.top + 4; y < 90; y++) p.rect(tb.x - 1, y, tb.x + 1, y + 1, (y - tb.top) % 2 === 0 ? 'G' : 'i');
+    p.blit(tb.x - 3, tb.top, SPR.TUBE_HEAD, 1, { remap: { c: tb.color } });
   }
   // the ink sprayed from behind the machine, where it is still behind it
   for (const d of s.inkBehind) p.rect(d.x, d.y, d.x + d.size, d.y + d.size, d.color);
