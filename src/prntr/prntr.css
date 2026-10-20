@@ -439,6 +439,23 @@
   opacity: 1;
 }
 
+/* A bullet hole through the door or the window's blind (Edgar, 2026-10-20): the 2×2 px hole
+   lit like the light in the door, glowing past its edges. */
+.prntr-room-hole-lights {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.prntr-room-hole-light {
+  position: absolute;
+  width: calc(2px * var(--s));
+  height: calc(2px * var(--s));
+  border-radius: 30%;
+  background: radial-gradient(circle, #B01A12 0%, #8A1410 45%, #5A0A0A 100%);
+  box-shadow: 0 0 calc(2.4px * var(--s)) calc(0.8px * var(--s)) rgba(140, 16, 12, 0.55);
+}
+
 /* The fire's light (Edgar, 2026-10-19): an orange glow the size of the flames, set each frame. */
 .prntr-room-fire-light {
   position: absolute;

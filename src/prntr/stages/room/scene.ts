@@ -80,6 +80,19 @@ export interface InkDot {
   color: PalKey;
 }
 
+/** Where a shot hit nothing to break (Edgar, 2026-10-20): a dark hole in the wall or the ceiling,
+ * a hole through the door or the window's blind (the stage lights those red). */
+export interface Hole {
+  x: number;
+  y: number;
+  kind: 'wall' | 'door' | 'window';
+}
+
+/** A hole in the door that the open door has swung away from: it is in the black doorway now. */
+export function inDoorway(h: Hole, doorGap: number): boolean {
+  return h.kind === 'door' && h.x + 1 > 13 && h.x - 1 <= 13 + doorGap;
+}
+
 export interface SceneState {
   /** Left, right fluorescent panel. */
   lights: [boolean, boolean];
@@ -104,6 +117,8 @@ export interface SceneState {
   shake: { x: number; y: number };
   /** The ink in the air behind the machine this frame: the jets come up from behind it. */
   inkBehind: InkDot[];
+  /** The bullet holes, oldest first. */
+  holes: Hole[];
 }
 
 /** A cheap hash to 0..1, so a flame column flickers on its own without random state. */
@@ -168,6 +183,21 @@ function drawFire(p: Pix, f: Fire, layer: 'back' | 'mid' | 'front'): void {
   }
 }
 
+/** A wall hole is a dark cross; a door or blind hole goes through to the black behind. */
+function drawHoles(p: Pix, s: SceneState): void {
+  for (const h of s.holes) {
+    if (h.kind === 'wall') {
+      p.set(h.x - 1, h.y, 'X');
+      p.set(h.x + 1, h.y, 'X');
+      p.set(h.x, h.y - 1, 'X');
+      p.set(h.x, h.y + 1, 'X');
+      p.set(h.x, h.y, 'K');
+    } else if (!inDoorway(h, s.doorGap)) {
+      p.rect(h.x - 1, h.y - 1, h.x + 1, h.y + 1, 'z');
+    }
+  }
+}
+
 /**
  * The room, a port of room() in prntr/design/stage1/art/liminal.py, the authoritative
  * layout. Every number is a virtual pixel.
@@ -210,6 +240,8 @@ export function drawRoom(p: Pix, s: SceneState): void {
   p.rect(160, 36, 224, 90, 'e');
   p.rect(163, 39, 221, 87, 's');
   for (let y = 41; y < 87; y += 4) p.rect(163, y, 221, y + 1, 'a');
+  // the bullet holes, under the cooler, the plant and the machine, which stand in front of the wall
+  drawHoles(p, s);
   // cooler and plant, their shadows to the left (the window is the light)
   p.rect(42, 128, 56, 131, 'X');
   if (s.fire) drawFire(p, s.fire, 'back');
