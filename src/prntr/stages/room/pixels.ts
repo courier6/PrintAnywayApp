@@ -37,6 +37,8 @@ export interface BlitOptions {
   white?: boolean;
   /** Shift right by one output pixel every `skew` output rows (a landed page's angle). */
   skew?: number;
+  /** Lower the right end by this many output pixels, the left end fixed (the EXIT sign hanging from a corner). */
+  tilt?: number;
 }
 
 /**
@@ -81,10 +83,11 @@ export class Pix {
         const ch = row[dx];
         if (ch === '.') continue;
         const key = opts.white ? 'W' : ((opts.remap?.[ch] ?? ch) as PalKey);
+        const drop = opts.tilt ? Math.round((dx / (sprite.w - 1)) * opts.tilt) : 0;
         for (let sy = 0; sy < scale; sy++) {
           const oy = dy * scale + sy;
           const shift = opts.skew ? Math.floor(oy / opts.skew) : 0;
-          for (let sx = 0; sx < scale; sx++) this.set(x + dx * scale + sx + shift, y + oy, key);
+          for (let sx = 0; sx < scale; sx++) this.set(x + dx * scale + sx + shift, y + oy + drop, key);
         }
       }
     }

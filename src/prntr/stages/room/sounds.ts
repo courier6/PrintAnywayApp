@@ -5,8 +5,8 @@ import type { PrntrAudio } from '../../audio';
  * .wav files beside it are renders for listening). Same recipes and numbers, played
  * live through Prntr's master gain instead of the context's destination. Without an
  * AudioContext every sound is a no-op. pageFeed, staplePunch, panic, death, gameOver,
- * shatter, tear and rustle are not in sounds.js: Edgar asked for them after playing the
- * room (2026-10-19).
+ * shatter, tear, rustle and the sign's three are not in sounds.js: Edgar asked for them
+ * after playing the room (2026-10-19).
  */
 
 export interface Hum {
@@ -53,6 +53,12 @@ export interface RoomSounds {
   tear(): void;
   /** Leaves: the plant. */
   rustle(): void;
+  /** The EXIT sign knocked loose: a clank, then its letters buzzing in each ms window they come back on. */
+  signHit(flicker: [number, number][]): void;
+  /** The sign's last corner giving. */
+  signSnap(): void;
+  /** The sign hitting the floor. */
+  signCrash(): void;
 }
 
 const noop = () => undefined;
@@ -77,6 +83,9 @@ const SILENT: RoomSounds = {
   shatter: noop,
   tear: noop,
   rustle: noop,
+  signHit: noop,
+  signSnap: noop,
+  signCrash: noop,
 };
 
 /** Two seconds of white noise, made once per context. */
@@ -357,6 +366,32 @@ export function createRoomSounds(audio: PrntrAudio): RoomSounds {
     // a soft 0.25 s rustle: low-passed noise, a slow decay
     rustle() {
       noise(now(), 0.25, { lp: 2200, gain: 0.3, decay: 0.07 });
+    },
+    // a metal tick under two rings falling from 1.8 and 2.7 kHz, then a 120 Hz square with hiss
+    // for each window the letters are on
+    signHit(flicker) {
+      const t = now();
+      noise(t, 0.04, { hp: 3000, gain: 0.5, decay: 0.006 });
+      tone(t, 0.25, { f0: 1800, f1: 900, gain: 0.3, decay: 0.05 });
+      tone(t, 0.3, { f0: 2700, f1: 1400, gain: 0.12, decay: 0.04 });
+      for (const [a, b] of flicker) {
+        tone(t + a / 1000, (b - a) / 1000, { type: 'square', f0: 120, gain: 0.05, attack: 0.004, release: 0.01 });
+        noise(t + a / 1000, (b - a) / 1000, { hp: 4000, gain: 0.08 });
+      }
+    },
+    // a snap: a 40 ms crack and a short ring falling 900 → 300 Hz
+    signSnap() {
+      const t = now();
+      noise(t, 0.04, { hp: 2000, gain: 0.5, decay: 0.006 });
+      tone(t, 0.08, { f0: 900, f1: 300, gain: 0.25, decay: 0.015 });
+    },
+    // a 0.12 s crash with a thump falling 140 → 40 Hz, two glass pings, and two clatters after
+    signCrash() {
+      const t = now();
+      noise(t, 0.12, { lp: 2500, gain: 0.7, decay: 0.03 });
+      tone(t, 0.12, { f0: 140, f1: 40, gain: 0.5, decay: 0.04 });
+      [4600, 3700].forEach((f0, i) => tone(t + 0.03 + i * 0.07, 0.12, { f0, f1: f0 * 0.8, gain: 0.12, decay: 0.025 }));
+      for (const d of [0.18, 0.3]) noise(t + d, 0.03, { lp: 3000, gain: 0.25, decay: 0.006 });
     },
   };
 

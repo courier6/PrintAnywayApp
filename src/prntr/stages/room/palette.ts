@@ -17,8 +17,8 @@ export type PalKey = keyof typeof PAL;
 /**
  * String sprite maps, one character per pixel, '.' transparent, letters = PAL keys.
  * Verbatim from prntr/design/stage1/art/sprites.txt, except PAGE_PRINTED and the
- * broken things (CLOCK_BROKEN, POSTER_TORN, TANK_BROKEN, PLANT_BARE, POT_BROKEN:
- * Edgar, 2026-10-19). Scale by whole numbers only.
+ * broken things (CLOCK_BROKEN, POSTER_TORN, TANK_BROKEN, PLANT_BARE, POT_BROKEN,
+ * EXIT_BROKEN: Edgar, 2026-10-19). Scale by whole numbers only.
  */
 export const SPRITES = {
   // 32 × 22
@@ -209,6 +209,16 @@ KnnKKKnKKKnKKKnKK
 KnKKKnKnKKnKKKnKK
 KnnnKnKnKnnnKKnKK
 KKKKKKKKKKKKKKKKK
+`,
+  // 17 × 7: the sign on the floor, its letters out, cracked across (Edgar, 2026-10-19; not in sprites.txt)
+  EXIT_BROKEN: `
+KKKKKKKKKKK.KKKKK
+KGGGKGKGKGG.KGGGK
+KGKKKGKGKK.KKKGKK
+KGGKKKGKK.GKKKGKK
+KGKKKGKG.KGKKKGKK
+KGGGKGK.KGGGKKGKK
+KKKKKKK.KKKKKKKKK
 `,
   // 10 × 13
   PAGE_SMALL: `

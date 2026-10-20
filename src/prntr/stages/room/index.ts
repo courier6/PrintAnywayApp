@@ -1,7 +1,7 @@
 import { reducedMotion, wait } from '../../anim';
 import type { Handoff, Stage } from '../../types';
 import { H, Pix, W } from './pixels';
-import { SPR, drawRoom, type Broken, type SceneState } from './scene';
+import { SPR, drawRoom, type Broken, type ExitSign, type SceneState } from './scene';
 import { createRoomSounds, type Hum } from './sounds';
 
 // ---------------------------------------------------------------------------
@@ -70,6 +70,18 @@ const RAGE_STEP = 0.85;
 const RAGE_MAX = 4;
 /** Shooting one of the room's things breaks it, once, for this many points (Edgar, 2026-10-19). */
 const BREAK_POINTS = 5;
+/** The EXIT sign (Edgar, 2026-10-19), BREAK_POINTS a hit: its hit box (the sprite plus 2 px, and the
+ * room it swings in); the first hit knocks it loose and its letters are on only in these ms windows
+ * after it, then out; the second brings it down over EXIT_FALL_MS from the wall to the floor. */
+const EXIT_HIT = { x0: 15, y0: 29, x1: 36, y1: 45 };
+const EXIT_FLICKER: [number, number][] = [
+  [0, 140],
+  [280, 400],
+  [620, 700],
+];
+const EXIT_FALL_MS = 550;
+const EXIT_WALL = { x: 17, y: 31 };
+const EXIT_FLOOR = { x: 20, y: 108 };
 /** The quiet room after 1337, before Prntr ends: 0.5 s of lights coming back, then a full second of nothing. */
 const HOLD_END_MS = 1500;
 
@@ -269,6 +281,7 @@ export const room: Stage = {
       flashWhite: false,
       buttonBright: false,
       broken: { clock: false, poster: false, tank: false, plant: false, vase: false },
+      exit: { state: 'up', x: EXIT_WALL.x, y: EXIT_WALL.y, tilt: 0, lit: true },
     };
     let phase: Phase = 'look';
     let phaseAt = performance.now();
@@ -305,6 +318,8 @@ export const room: Stage = {
     let rage = 0;
     /** The first shot has been fired: the office has emptied out. */
     let panicked = false;
+    /** When the EXIT sign was last hit (its flicker, swing and fall count from here). */
+    let exitAt = 0;
     const attackGap = () => Math.round((score >= LATE_SCORE ? ATTACK_GAP_LATE_MS : ATTACK_GAP_MS) * Math.pow(RAGE_STEP, rage));
     const scheduleBlink = (from: number, delay: number) => {
       nextBlinkAt = from + delay + Math.random() * (BLINK_MAX_MS - BLINK_MIN_MS);
@@ -552,6 +567,20 @@ export const room: Stage = {
         addScore(HIT_POINTS, now);
         return;
       }
+      // The EXIT sign: the first hit knocks it loose, the second brings it down.
+      const sign = scene.exit;
+      if ((sign.state === 'up' || sign.state === 'loose') && x >= EXIT_HIT.x0 && x < EXIT_HIT.x1 && y >= EXIT_HIT.y0 && y < EXIT_HIT.y1) {
+        exitAt = now;
+        if (sign.state === 'up') {
+          sign.state = 'loose';
+          sounds.signHit(EXIT_FLICKER);
+        } else {
+          sign.state = 'falling';
+          sounds.signSnap();
+        }
+        addScore(BREAK_POINTS, now);
+        return;
+      }
       const thing = BREAKABLES.find((b) => !scene.broken[b.id] && x >= b.x0 && x < b.x1 && y >= b.y0 && y < b.y1);
       if (thing) {
         scene.broken[thing.id] = true;
@@ -676,6 +705,7 @@ export const room: Stage = {
         },
         broken: () => BREAKABLES.filter((b) => scene.broken[b.id]).map((b) => b.id),
         attackGap,
+        exit: (): ExitSign['state'] => scene.exit.state,
       };
     }
 
@@ -754,6 +784,13 @@ export const room: Stage = {
         hintFadeAt = 0;
       }
       if (hintHideAt && now >= hintHideAt) hideHint();
+      // The falling sign lands (not while the room is frozen).
+      if (scene.exit.state === 'falling' && frozenAt === null && now - exitAt >= (reduced ? 0 : EXIT_FALL_MS)) {
+        scene.exit.state = 'down';
+        scene.exit.x = EXIT_FLOOR.x;
+        scene.exit.y = EXIT_FLOOR.y;
+        sounds.signCrash();
+      }
       if (phase === 'look') {
         if (now - lastTickAt >= TICK_MS) {
           lastTickAt = now;
@@ -844,7 +881,23 @@ export const room: Stage = {
         box.style.height = `${r.h * scale}px`;
       });
     };
+    // The sign: loose, it hangs from its left corner and swings a little while its letters
+    // flicker and go out; falling, it tumbles from the wall to the floor in front of the door.
+    const poseSign = (now: number) => {
+      const sign = scene.exit;
+      const t = now - exitAt;
+      if (sign.state === 'loose') {
+        sign.lit = EXIT_FLICKER.some(([a, b]) => t >= a && t < b);
+        sign.tilt = reduced ? 4 : Math.round(4 + 2 * Math.sin((2 * Math.PI * t) / 700) * Math.exp(-t / 1200));
+      } else if (sign.state === 'falling') {
+        const u = reduced ? 1 : Math.min(1, t / EXIT_FALL_MS);
+        sign.x = EXIT_WALL.x + (EXIT_FLOOR.x - EXIT_WALL.x) * u;
+        sign.y = EXIT_WALL.y + (EXIT_FLOOR.y - EXIT_WALL.y) * u * u;
+        sign.tilt = Math.round(4 + 5 * u);
+      }
+    };
     const render = (now: number) => {
+      poseSign(now);
       scene.flashWhite = flashFrames > 0;
       if (flashFrames > 0) flashFrames--;
       scene.buttonBright = phase === 'fight' && buttonBright(now);

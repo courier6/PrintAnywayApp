@@ -20,6 +20,7 @@ export const SPR = {
   TANK_BROKEN: parseSprite(SPRITES.TANK_BROKEN),
   PLANT_BARE: parseSprite(SPRITES.PLANT_BARE),
   POT_BROKEN: parseSprite(SPRITES.POT_BROKEN),
+  EXIT_BROKEN: parseSprite(SPRITES.EXIT_BROKEN),
 };
 /** The cooler below its bottle, the plant's leaves and its pot, so each half can break alone. */
 const COOLER_BODY = sliceRows(SPR.COOLER, 8, 22);
@@ -36,6 +37,18 @@ export interface Broken {
   plant: boolean;
   /** The pot. */
   vase: boolean;
+}
+
+/** The EXIT sign (Edgar, 2026-10-19): shot once it hangs loose from its left corner, shot again it falls. */
+export interface ExitSign {
+  state: 'up' | 'loose' | 'falling' | 'down';
+  /** Its top-left corner (falling: on the way down). */
+  x: number;
+  y: number;
+  /** How far its right end hangs below its left, in px; the stage swings it. */
+  tilt: number;
+  /** The letters' red light; loose, they flicker, then go out for good. */
+  lit: boolean;
 }
 
 /**
@@ -58,6 +71,7 @@ export interface SceneState {
   /** The red button on the open machine's panel, lit bright for a blink (mad only). */
   buttonBright: boolean;
   broken: Broken;
+  exit: ExitSign;
 }
 
 /**
@@ -90,7 +104,10 @@ export function drawRoom(p: Pix, s: SceneState): void {
   p.rect(13, 43, 41, 108, 'D');
   p.rect(13, 43, 19, 108, 'z');
   p.rect(36, 76, 38, 78, 'K');
-  p.blit(17, 31, SPR.EXIT, 1, { remap: { n: 'R' } });
+  // the EXIT sign: on the wall, hanging loose, falling, or on the floor in front of the door
+  const sign = s.exit;
+  if (sign.state === 'down') p.blit(Math.round(sign.x), Math.round(sign.y), SPR.EXIT_BROKEN);
+  else p.blit(Math.round(sign.x), Math.round(sign.y), SPR.EXIT, 1, { remap: { n: sign.lit ? 'R' : 'G' }, tilt: sign.tilt });
   p.blit(66, 40, s.broken.poster ? SPR.POSTER_TORN : SPR.POSTER);
   p.blit(112, 36, s.broken.clock ? SPR.CLOCK_BROKEN : SPR.CLOCK);
   // the window: light, blinds, nothing outside
