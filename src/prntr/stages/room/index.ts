@@ -154,7 +154,9 @@ const TUBE_TOP = 72;
 const TUBE_MOUTH = TUBE_TOP + 2;
 const TUBE_RISE_MS = 250;
 const NOZZLE_HIT_PAD = 4;
-const INK_POINTS = 1;
+/** A tube shot blows up (Edgar, 2026-10-20): the jet stops, its bits fly, the nozzle is dead for
+ * the rest of the stage (its stump stays); with every nozzle dead the ink attack is gone. */
+const TUBE_POINTS = 5;
 const INK_LANDED_MS = 1500;
 const INK_SLIDE_MS = 600;
 const INK_COLORS = ['c', 'm', 'y'] as const;
@@ -511,6 +513,7 @@ export const room: Stage = {
       shake: { x: 0, y: 0 },
       inkBehind: [],
       tubes: [],
+      stubs: [],
       holes: [],
       windowOpen: false,
       pieces: [],
@@ -1053,11 +1056,12 @@ export const room: Stage = {
         addScore(staple.kind === 'staple' ? STAPLE_POINTS : BOLT_POINTS, now);
         return;
       }
-      // A spraying tube, its head or the hose over the edge: the jet stops; what is already in the air still lands.
+      // A spraying tube, its head or the hose over the edge: it blows up. The jet stops (what is
+      // already in the air still lands), the tube's bits fly, and that nozzle never comes back.
       const jet = sprays.find((s) => spraying(s, now) && x >= s.nx - 3 - NOZZLE_HIT_PAD && x < s.nx + 3 + NOZZLE_HIT_PAD && y >= TUBE_TOP - NOZZLE_HIT_PAD && y < TUBE_BASE + NOZZLE_HIT_PAD);
       if (jet) {
-        jet.stoppedAt = now;
-        addScore(INK_POINTS, now);
+        explodeTube(jet, now);
+        addScore(TUBE_POINTS, now);
         return;
       }
       // The button: more damage, and the machine answers faster. Bright or not.
@@ -1188,6 +1192,21 @@ export const room: Stage = {
       flashFrames = HIT_FLASH_FRAMES * 2;
       fireSound = sounds.fire();
     };
+    // A tube shot (Edgar, 2026-10-20): every jet on that nozzle stops, the head and the hose fly
+    // apart in bits of plum, grey and its ink, and the stump stays; the nozzle is dead for good.
+    const explodeTube = (jet: Spray, now: number) => {
+      for (const s of sprays) if (s.nx === jet.nx && s.stoppedAt === null) s.stoppedAt = now;
+      if (!scene.stubs.includes(jet.nx)) scene.stubs.push(jet.nx);
+      sounds.tubeBurst();
+      flashFrames = 1;
+      if (reduced) return;
+      for (let i = 0; i < 16; i++) {
+        const a = -Math.PI * (0.1 + Math.random() * 0.8);
+        const v = 30 + Math.random() * 90;
+        const color: PalKey = i < 5 ? 'K' : i < 9 ? 'g' : i < 12 ? 'i' : jet.color;
+        bits.push({ x: jet.nx - 3 + Math.random() * 6, y: TUBE_TOP + Math.random() * 6, vx: Math.cos(a) * v, vy: Math.sin(a) * v, g: 240, born: now, life: 350 + Math.random() * 450, size: 1 + (i % 3 === 0 ? 1 : 0), color });
+      }
+    };
     // The ink lands in the fire (Edgar, 2026-10-20): a hiss and steam, and the fire is smaller by
     // SNUFF_U of its growth, growing back from there; too little left and it is out for good. The
     // burst machine's fire is past putting out.
@@ -1225,7 +1244,8 @@ export const room: Stage = {
     const launchAttack = (now: number) => {
       const gap = attackGap();
       const kinds: AttackKind[] = ['scan', 'staples', 'pages'];
-      if (mad) kinds.push('ink');
+      const nozzles = NOZZLES_X.filter((x) => !scene.stubs.includes(x));
+      if (mad && nozzles.length) kinds.push('ink');
       if (score >= HI * BOLT_HEALTH) kinds.push('bolts');
       const kind = forcedKind ?? kinds[attackIndex++ % kinds.length];
       forcedKind = null;
@@ -1235,6 +1255,10 @@ export const room: Stage = {
         }
         nextAttackAt = now + 2 * BOLT_STAGGER_MS + BOLT_MS + gap;
       } else if (kind === 'ink') {
+        if (!nozzles.length) {
+          nextAttackAt = now + gap;
+          return;
+        }
         const first = Math.floor(Math.random() * INK_COLORS.length);
         for (let i = 0; i < SPRAY_COUNT; i++) {
           // the last jet goes at the fire while it burns: into the middle of the main flame
@@ -1246,7 +1270,7 @@ export const room: Stage = {
             x = (r.x0 + r.x1) / 2 + (Math.random() - 0.5) * 6;
             y = r.y0 + (r.y1 - r.y0) * 0.6 + (Math.random() - 0.5) * 8;
           }
-          sprays.push({ nx: NOZZLES_X[Math.floor(Math.random() * NOZZLES_X.length)], x, y, at: now + TUBE_RISE_MS + i * SPRAY_STAGGER_MS, color: INK_COLORS[(first + i) % INK_COLORS.length], fire: atFire, stoppedAt: null, done: false, fed: false });
+          sprays.push({ nx: nozzles[Math.floor(Math.random() * nozzles.length)], x, y, at: now + TUBE_RISE_MS + i * SPRAY_STAGGER_MS, color: INK_COLORS[(first + i) % INK_COLORS.length], fire: atFire, stoppedAt: null, done: false, fed: false });
         }
         nextAttackAt = now + TUBE_RISE_MS + (SPRAY_COUNT - 1) * SPRAY_STAGGER_MS + SPRAY_MS + SPRAY_FLIGHT_MS + gap;
       } else if (kind === 'scan') {
@@ -1393,6 +1417,7 @@ export const room: Stage = {
           nextAttackAt = 0;
         },
         bolts: () => staples.filter((s) => s.kind !== 'staple').length,
+        deadTubes: () => [...scene.stubs],
         sprays: () => sprays.length,
         tubes: () => scene.tubes.map((t) => ({ ...t })),
         holes: () => scene.holes.map((h) => h.kind),

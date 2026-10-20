@@ -91,6 +91,8 @@ export interface RoomSounds {
   whoosh(): void;
   /** The engulfed machine bursting apart: a bang, then its pieces coming down. */
   burst(): void;
+  /** A tube shot to pieces: a pop, the hose's hiss, its bits clattering down. */
+  tubeBurst(): void;
   /** Ink landing in the fire: a hiss of steam. */
   sizzle(): void;
   /** The stage won (Edgar, 2026-10-20): a triumphant tune in squares, about 3.2 s. */
@@ -136,6 +138,7 @@ const SILENT: RoomSounds = {
   whoosh: noop,
   burst: noop,
   sizzle: noop,
+  tubeBurst: noop,
   fanfare: noop,
 };
 
@@ -641,6 +644,16 @@ export function createRoomSounds(audio: PrntrAudio): RoomSounds {
       for (const [at, f0, dur] of bass) tone(t + at, dur, { type: 'triangle', f0, gain: 0.22, attack: 0.005, release: 0.04 });
       for (const f0 of [293.7, 370]) tone(t + 2.14, 1.0, { type: 'square', f0, gain: 0.05, attack: 0.02, release: 0.2 });
       for (const at of [0.39, 1.12, 2.14]) noise(t + at, 0.06, { lp: 3000, gain: 0.3, decay: 0.02 });
+    },
+    // a tube blown up: a crack and a 120 ms burst, a short hiss of the hose venting, and two
+    // small clatters of its bits coming down at 0.25 and 0.4 s
+    tubeBurst() {
+      const t = now();
+      noise(t, 0.03, { hp: 2000, gain: 0.7, decay: 0.005 });
+      noise(t, 0.12, { lp: 2500, gain: 0.6, decay: 0.025 });
+      tone(t, 0.1, { f0: 300, f1: 60, gain: 0.4, decay: 0.03 });
+      noise(t + 0.03, 0.3, { hp: 3000, gain: 0.2, decay: 0.08 });
+      for (const d of [0.25, 0.4]) noise(t + d, 0.03, { hp: 1500, lp: 7000, gain: 0.25, decay: 0.006 });
     },
     // water on the fire: a bright hiss over 0.7 s with a low puff under it
     sizzle() {

@@ -165,6 +165,8 @@ export interface SceneState {
   inkBehind: InkDot[];
   /** The ink tubes up this frame; drawn before the ink behind the machine and the machine. */
   tubes: Tube[];
+  /** The x of each tube shot to pieces (Edgar, 2026-10-20): its stump stays over the machine's top edge. */
+  stubs: number[];
   /** The bullet holes, oldest first. */
   holes: Hole[];
   /** The window's blind shot to pieces (Edgar, 2026-10-20): a gaping hole, the red behind it. */
@@ -389,6 +391,14 @@ export function drawRoom(p: Pix, s: SceneState): void {
     p.rect(tb.x + 1, tb.top + 4, tb.x + 2, 90, 'K');
     for (let y = tb.top + 4; y < 90; y++) p.rect(tb.x - 1, y, tb.x + 1, y + 1, (y - tb.top) % 2 === 0 ? 'G' : 'i');
     p.blit(tb.x - 3, tb.top, SPR.TUBE_HEAD, 1, { remap: { c: tb.color } });
+  }
+  // the stumps of the tubes shot to pieces: a ragged end of hose just over the edge
+  for (const x of s.stubs) {
+    p.rect(x - 2, 77, x + 2, 90, 'K');
+    p.rect(x - 1, 78, x + 1, 90, 'i');
+    p.set(x - 2, 77, 'A');
+    p.set(x + 1, 77, 'A');
+    p.set(x, 78, 'G');
   }
   // the ink sprayed from behind the machine, where it is still behind it
   for (const d of s.inkBehind) p.rect(d.x, d.y, d.x + d.size, d.y + d.size, d.color);
