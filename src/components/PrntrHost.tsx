@@ -1,6 +1,23 @@
 import { Component, Suspense, lazy, type ReactNode } from 'react';
 
-const Prntr = lazy(() => import('../prntr/Prntr'));
+const loadPrntr = () => import('../prntr/Prntr');
+const Prntr = lazy(loadPrntr);
+
+/**
+ * Warms the Prntr chunk (JS + CSS + @font-face) and its two fonts, so the opening
+ * starts at once when the trigger is clicked. Called when the "Other" help item
+ * opens. Failures are ignored: the real import retries on entry.
+ */
+export function prefetchPrntr(): void {
+  void loadPrntr()
+    .then(() =>
+      Promise.all([
+        document.fonts.load('700 220px "Comic Neue"'),
+        document.fonts.load('16px "Press Start 2P"'),
+      ]),
+    )
+    .catch(() => undefined);
+}
 
 export interface PrntrHostProps {
   source: HTMLCanvasElement;
