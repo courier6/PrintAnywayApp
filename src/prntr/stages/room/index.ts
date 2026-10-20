@@ -2,6 +2,7 @@ import { reducedMotion, wait } from '../../anim';
 import type { Handoff, Stage } from '../../types';
 import { H, Pix, W } from './pixels';
 import { CLOCK_AT, MACHINE_PIECES, SPR, drawFireFront, drawRoom, drawWindowWreck, fireRect, inDoorway, type Broken, type ExitSign, type Hole, type SceneState } from './scene';
+import type { PalKey } from './palette';
 import { createRoomSounds, type FireSound, type Hum } from './sounds';
 
 // ---------------------------------------------------------------------------
@@ -143,6 +144,12 @@ const INK_POINTS = 1;
 const INK_LANDED_MS = 1500;
 const INK_SLIDE_MS = 600;
 const INK_COLORS = ['c', 'm', 'y'] as const;
+/** While the fire burns, the last jet of a volley goes at it instead of the player (Edgar,
+ * 2026-10-20): where it lands the flames go out. The fire loses SNUFF_U of its growth and grows
+ * back from there; left with less than SNUFF_OUT, it is out for good. A jet that is stopped
+ * does nothing to it. */
+const SNUFF_U = 0.35;
+const SNUFF_OUT = 0.1;
 /** The EXIT sign (Edgar, 2026-10-19), BREAK_POINTS a hit: its hit box (the sprite plus 2 px, and the
  * room it swings in); the first hit knocks it loose and its letters are on only in these ms windows
  * after it, then out; the second brings it down over EXIT_FALL_MS from the wall to the floor. */
@@ -275,6 +282,8 @@ interface Spray {
   y: number;
   at: number;
   color: (typeof INK_COLORS)[number];
+  /** Aimed at the fire, not the player: landing, it puts out what it touches. */
+  fire: boolean;
   /** The nozzle was shot at this moment: the jet stops, what is in the air still lands. */
   stoppedAt: number | null;
   /** The whole jet has landed: the hit has been taken. */
@@ -293,6 +302,19 @@ interface Page {
   shot: boolean;
   /** The feed sound has played. */
   fed: boolean;
+}
+
+/** A particle on the front layer (steam off the snuffed fire): thrown from x,y at born, under gravity g, for life ms. */
+interface Bit {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  g: number;
+  born: number;
+  life: number;
+  size: number;
+  color: PalKey;
 }
 
 function el(tag: string, className: string, text?: string): HTMLElement {
@@ -496,6 +518,7 @@ export const room: Stage = {
     let staples: Staple[] = [];
     let pages: Page[] = [];
     let sprays: Spray[] = [];
+    let bits: Bit[] = [];
     let attackIndex = 0;
     let nextAttackAt = 0;
     let scanAt: number | null = null;
@@ -522,6 +545,8 @@ export const room: Stage = {
     /** When the fire started (the water jug broke), and its crackle. */
     let fireAt: number | null = null;
     let fireSound: FireSound | null = null;
+    /** The fire's growth, 0 (just lit) to 1 (full), from when it was lit (or last snuffed back). */
+    const fireU = (now: number) => (fireAt === null ? 0 : Math.min(1, (now - fireAt) / FIRE_GROW_MS));
     /** When the fire began spreading onto the machine, and when its health began to run out (from this score). */
     let spreadAt: number | null = null;
     let depleteAt: number | null = null;
@@ -1087,7 +1112,7 @@ export const room: Stage = {
     // or, once it spreads, the flames on it (drawFire's front layer in scene.ts).
     const inFlames = (x: number, y: number, now: number) => {
       if (fireAt === null) return false;
-      const r = fireRect(Math.min(1, (now - fireAt) / FIRE_GROW_MS));
+      const r = fireRect(fireU(now));
       if (x >= r.x0 && x < r.x1 && y >= r.y0 && y < r.y1) return true;
       const v = spreadU(now);
       if (v <= 0) return false;
@@ -1113,6 +1138,36 @@ export const room: Stage = {
       sounds.zap();
       fireSound = sounds.fire();
     };
+    // The ink lands in the fire (Edgar, 2026-10-20): a hiss and steam, and the fire is smaller by
+    // SNUFF_U of its growth, growing back from there; too little left and it is out for good. The
+    // burst machine's fire is past putting out.
+    const snuff = (s: Spray, now: number) => {
+      if (fireAt === null || scene.printer === 'wreck') return;
+      sounds.sizzle();
+      steam(s.x, s.y, now);
+      const u = fireU(now) - SNUFF_U;
+      if (u < SNUFF_OUT) {
+        putOutFire();
+        return;
+      }
+      fireAt = now - u * FIRE_GROW_MS;
+    };
+    const putOutFire = () => {
+      fireAt = null;
+      fireSound?.stop();
+      fireSound = null;
+      scene.fire = null;
+      fireLight.hidden = true;
+      spreadAt = null;
+      ctx.announce('The fire is out.');
+    };
+    // Steam off the snuffed fire: pale bits rising from where the ink landed, gone within a second.
+    const steam = (x: number, y: number, now: number) => {
+      if (reduced) return;
+      for (let i = 0; i < 8; i++) {
+        bits.push({ x: x + (Math.random() - 0.5) * 10, y: y + (Math.random() - 0.5) * 6, vx: (Math.random() - 0.5) * 16, vy: -20 - Math.random() * 30, g: 0, born: now, life: 500 + Math.random() * 400, size: 1 + Math.floor(Math.random() * 2), color: Math.random() < 0.5 ? 'l' : 'T' });
+      }
+    };
     // The machine does not move. Scan, staples, pages, in rotation; once it is mad, ink too.
     const launchAttack = (now: number) => {
       const gap = attackGap();
@@ -1120,7 +1175,16 @@ export const room: Stage = {
       if (kind === 3) {
         const first = Math.floor(Math.random() * INK_COLORS.length);
         for (let i = 0; i < SPRAY_COUNT; i++) {
-          sprays.push({ nx: NOZZLES_X[Math.floor(Math.random() * NOZZLES_X.length)], x: 16 + Math.random() * 208, y: 24 + Math.random() * 112, at: now + TUBE_RISE_MS + i * SPRAY_STAGGER_MS, color: INK_COLORS[(first + i) % INK_COLORS.length], stoppedAt: null, done: false, fed: false });
+          // the last jet goes at the fire while it burns: into the middle of the main flame
+          const atFire = fireAt !== null && i === SPRAY_COUNT - 1;
+          let x = 16 + Math.random() * 208;
+          let y = 24 + Math.random() * 112;
+          if (atFire) {
+            const r = fireRect(fireU(now));
+            x = (r.x0 + r.x1) / 2 + (Math.random() - 0.5) * 6;
+            y = r.y0 + (r.y1 - r.y0) * 0.6 + (Math.random() - 0.5) * 8;
+          }
+          sprays.push({ nx: NOZZLES_X[Math.floor(Math.random() * NOZZLES_X.length)], x, y, at: now + TUBE_RISE_MS + i * SPRAY_STAGGER_MS, color: INK_COLORS[(first + i) % INK_COLORS.length], fire: atFire, stoppedAt: null, done: false, fed: false });
         }
         nextAttackAt = now + TUBE_RISE_MS + (SPRAY_COUNT - 1) * SPRAY_STAGGER_MS + SPRAY_MS + SPRAY_FLIGHT_MS + gap;
       } else if (kind === 0) {
@@ -1253,6 +1317,9 @@ export const room: Stage = {
         exit: (): ExitSign['state'] => scene.exit.state,
         doorGap: () => scene.doorGap,
         fire: () => fireAt !== null,
+        fireU: () => fireU(performance.now()),
+        /** The x of a tube spraying at the fire right now, or null. */
+        fireJet: () => sprays.find((s) => s.fire && spraying(s, performance.now()))?.nx ?? null,
         mad: () => mad,
         spread: () => spreadAt !== null,
         stokes: () => stokes,
@@ -1358,7 +1425,7 @@ export const room: Stage = {
       }
       if (hintHideAt && now >= hintHideAt) hideHint();
       poseName(now);
-      if (fireAt !== null) fireSound?.setLevel(Math.min(1, (now - fireAt) / FIRE_GROW_MS) + 0.5 * spreadU(now) + (now - stokeAt < STOKE_FLARE_MS ? 0.3 : 0));
+      if (fireAt !== null) fireSound?.setLevel(fireU(now) + 0.5 * spreadU(now) + (now - stokeAt < STOKE_FLARE_MS ? 0.3 : 0));
       if (fireAt !== null && !mad && now - fireAt >= MAD_AFTER_MS) {
         mad = true;
         frame.classList.add('is-mad');
@@ -1388,7 +1455,7 @@ export const room: Stage = {
           ck.state = 'rest';
         }
         if ((ck.state === 'rolling' || ck.state === 'rest') && fireAt !== null) {
-          const r = fireRect(Math.min(1, (now - fireAt) / FIRE_GROW_MS));
+          const r = fireRect(fireU(now));
           if (r.x0 - CLOCK_IGNITE_PAD <= ck.x + SPR.CLOCK.w && ck.x <= r.x1 + CLOCK_IGNITE_PAD) {
             ck.state = 'burning';
             clockAt = now;
@@ -1497,7 +1564,8 @@ export const room: Stage = {
           if (!s.done && s.stoppedAt === null && now >= splatAt(s)) {
             s.done = true;
             sounds.inkSplat();
-            hurt('ink', now);
+            if (s.fire) snuff(s, now);
+            else hurt('ink', now);
           }
         }
         sprays = sprays.filter((s) => now < splatAt(s) + INK_LANDED_MS + INK_SLIDE_MS);
@@ -1591,7 +1659,7 @@ export const room: Stage = {
     // The fire grows for FIRE_GROW_MS, then holds; its glow box follows the flames.
     const poseFire = (now: number) => {
       if (fireAt === null) return;
-      scene.fire = { u: Math.min(1, (now - fireAt) / FIRE_GROW_MS), t: reduced ? 0 : now, v: spreadU(now) };
+      scene.fire = { u: fireU(now), t: reduced ? 0 : now, v: spreadU(now) };
       const r = fireRect(scene.fire.u);
       fireLight.hidden = false;
       fireLight.style.left = `${r.x0 * scale}px`;
@@ -1684,6 +1752,14 @@ export const room: Stage = {
         const lt = now - splatAt(s);
         const slide = lt > INK_LANDED_MS ? ((lt - INK_LANDED_MS) / INK_SLIDE_MS) * 60 : 0;
         fpix.blit(Math.floor(s.x - 8 * sc), Math.floor(s.y - 7 * sc + slide), SPR.SPLAT, sc, { remap: { c: s.color } });
+      }
+      // The bits in the air (steam), over everything else on the front layer.
+      bits = bits.filter((b) => now - b.born < b.life);
+      for (const b of bits) {
+        const bt = (now - b.born) / 1000;
+        const x = Math.floor(b.x + b.vx * bt);
+        const y = Math.floor(b.y + b.vy * bt + 0.5 * b.g * bt * bt);
+        fpix.rect(x, y, x + b.size, y + b.size, b.color);
       }
       cpix.clear();
       if (pointer) {

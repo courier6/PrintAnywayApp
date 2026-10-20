@@ -85,6 +85,8 @@ export interface RoomSounds {
   whoosh(): void;
   /** The engulfed machine bursting apart: a bang, then its pieces coming down. */
   burst(): void;
+  /** Ink landing in the fire: a hiss of steam. */
+  sizzle(): void;
 }
 
 const noop = () => undefined;
@@ -122,6 +124,7 @@ const SILENT: RoomSounds = {
   clatter: noop,
   whoosh: noop,
   burst: noop,
+  sizzle: noop,
 };
 
 /** Two seconds of white noise, made once per context. */
@@ -559,6 +562,12 @@ export function createRoomSounds(audio: PrntrAudio): RoomSounds {
         noise(t + d, 0.08, { lp: 2500, gain: 0.45, decay: 0.015 });
         tone(t + d, 0.1, { f0: 140, f1: 50, gain: 0.35, decay: 0.03 });
       }
+    },
+    // water on the fire: a bright hiss over 0.7 s with a low puff under it
+    sizzle() {
+      const t = now();
+      noise(t, 0.7, { hp: 2500, lp: 9000, gain: 0.35, decay: 0.18 });
+      noise(t, 0.25, { lp: 500, gain: 0.3, decay: 0.06 });
     },
     // a whoosh: low noise rising and a brighter breath over it, 0.4 s
     whoosh() {
