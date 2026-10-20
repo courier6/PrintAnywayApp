@@ -1,10 +1,12 @@
 /**
- * The storm over the title (Edgar, 2026-10-19; not in the design handoff): a dark pixel
- * cloud as far above the word as the word is tall, raining straight down on it. The rain
- * wets the letters: water sits on their top edges and pools in the corners, and drips off
- * their undersides. Now and then lightning strikes and the screen flashes white or blue.
- * Everything is drawn on one canvas over the viewport in whole "pixels" of P screen px
- * (P from the title's font size). Under reduced motion only the cloud is drawn.
+ * The storm over the title (Edgar, 2026-10-19; not in the design handoff): a pixel cloud as
+ * far above the word as the word is tall. It is a plain white cloud while the title comes in,
+ * turns the red of the door's light while the credit flickers, and from the flip on it is a
+ * dark storm cloud raining straight down on the word (Edgar, 2026-10-20). The rain wets the
+ * letters: water sits on their top edges and pools in the corners, and drips off their
+ * undersides. Now and then lightning strikes and the screen flashes white or blue. Everything
+ * is drawn on one canvas over the viewport in whole "pixels" of P screen px (P from the
+ * title's font size). Under reduced motion only the cloud is drawn, in its weather's colours.
  */
 
 export interface StormSlot {
@@ -15,7 +17,12 @@ export interface StormSlot {
   rot: number;
 }
 
+/** The cloud's weather (Edgar, 2026-10-20): calm while the title comes in, red through the
+ * credit's flicker, the storm from the flip on. */
+export type Weather = 'calm' | 'red' | 'storm';
+
 export interface Storm {
+  setWeather(w: Weather): void;
   stop(): void;
 }
 
@@ -23,16 +30,21 @@ export interface Storm {
 const RAIN_PER_S = 44;
 const RAIN_SPEED = 520;
 const WET_MAX = 12;
-/** Lightning: the first strike this soon, then every STRIKE_MIN–STRIKE_MAX ms. */
+/** Lightning: the first strike this soon after the storm starts, then every STRIKE_MIN–STRIKE_MAX ms. */
 const STRIKE_FIRST_MS = 2500;
 const STRIKE_MIN_MS = 4000;
 const STRIKE_MAX_MS = 9000;
 const FLASH_MS = 220;
 
-const CLOUD = '#3C3C50';
-const CLOUD_DARK = '#2C2C3C';
-const CLOUD_LIGHT = '#575770';
+/** A cloud's shades: its top edge, its body, its underside. */
+type Shades = readonly [string, string, string];
+const STORM: Shades = ['#575770', '#3C3C50', '#2C2C3C'];
+/** A storm cloud lit all over by a strike. */
 const CLOUD_LIT = '#8C8CB4';
+const CALM: Shades = ['#F4F4F8', '#DCDCE4', '#B4B4C0'];
+/** The door's light (`.prntr-room-light`): its gradient's stops, and its glow. */
+const RED: Shades = ['#8A1410', '#5A0A0A', '#2A0404'];
+const RED_GLOW = 'rgba(138, 20, 16, 0.6)';
 const WATER = '#7FC8FF';
 const WATER_LIGHT = '#BFE7FF';
 const BOLT = '#FFFFFF';
@@ -56,7 +68,7 @@ export function startStorm(root: HTMLElement, h1: HTMLElement, slots: StormSlot[
   flash.setAttribute('aria-hidden', 'true');
   root.append(canvas, flash);
   const g = canvas.getContext('2d');
-  if (!g) return { stop: () => undefined };
+  if (!g) return { setWeather: () => undefined, stop: () => undefined };
 
   // ---- geometry: the word's mask, the cloud ------------------------------
   let W = 0;
@@ -180,7 +192,8 @@ export function startStorm(root: HTMLElement, h1: HTMLElement, slots: StormSlot[
   const drips: Drip[] = [];
   let wet = new Uint8Array(0);
   let rainDue = 0;
-  let nextStrike = performance.now() + STRIKE_FIRST_MS;
+  let weather: Weather = 'calm';
+  let nextStrike = Infinity;
   let bolt: { pts: [number, number][]; until: number; again: number } | null = null;
   let flashAt = 0;
   let flashBlue = false;
@@ -194,6 +207,31 @@ export function startStorm(root: HTMLElement, h1: HTMLElement, slots: StormSlot[
   };
   /** Snap to the pixel grid. */
   const snap = (v: number) => Math.floor(v / P) * P;
+  /** A cloud's cells drawn into a buffer in its shades, then put on the canvas: in the red
+   * weather with the door's glow around it. */
+  const buf = document.createElement('canvas');
+  const bg = buf.getContext('2d');
+  const drawCloud = (cells: boolean[][], x: number, y: number, shades: Shades, lit: boolean) => {
+    if (!bg) return;
+    const rows = cells.length;
+    const cols = cells[0].length;
+    buf.width = cols * U;
+    buf.height = rows * U;
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        if (!cells[r][c]) continue;
+        const topmost = r === 0 || !cells[r - 1][c];
+        bg.fillStyle = lit ? CLOUD_LIT : shades[r >= rows - 2 ? 2 : topmost ? 0 : 1];
+        bg.fillRect(c * U, r * U, U, U);
+      }
+    }
+    if (weather === 'red') {
+      g.shadowColor = RED_GLOW;
+      g.shadowBlur = 6 * P;
+    }
+    g.drawImage(buf, x, y);
+    g.shadowBlur = 0;
+  };
 
   const strike = (now: number) => {
     // from a random point on the cloud's underside down to the word (or past it)
@@ -218,8 +256,8 @@ export function startStorm(root: HTMLElement, h1: HTMLElement, slots: StormSlot[
     const dt = Math.min(0.05, (now - last) / 1000);
     last = now;
     if (reduced) return;
-    // rain: so many a second, each a column of the grid over the word
-    rainDue += RAIN_PER_S * dt;
+    // rain, once it storms: so many a second, each a column of the grid over the word
+    if (weather === 'storm') rainDue += RAIN_PER_S * dt;
     while (rainDue >= 1) {
       rainDue--;
       drops.push({ x: snap(wordLeft + Math.random() * (wordRight - wordLeft)), y: cloudY + cloud.length * U });
@@ -251,25 +289,17 @@ export function startStorm(root: HTMLElement, h1: HTMLElement, slots: StormSlot[
       if (age > 600) d.y += 300 * dt;
       if (age > 600 && d.y > bottom[Math.min(W - 1, Math.max(0, d.x))] + 8 * P) drips.splice(i, 1);
     }
-    // lightning
-    if (now >= nextStrike) strike(now);
+    // lightning, once it storms
+    if (weather === 'storm' && now >= nextStrike) strike(now);
   };
 
   const draw = (now: number) => {
     g.clearRect(0, 0, W, H);
     if (!ready) return;
     const lit = bolt !== null && (now < bolt.until || (now >= bolt.again && now < bolt.again + 60));
-    // the cloud
-    const rows = cloud.length;
-    const cols = cloud[0].length;
-    for (let r = 0; r < rows; r++) {
-      for (let c = 0; c < cols; c++) {
-        if (!cloud[r][c]) continue;
-        const topmost = r === 0 || !cloud[r - 1][c];
-        const color = lit ? CLOUD_LIT : r >= rows - 2 ? CLOUD_DARK : topmost ? CLOUD_LIGHT : CLOUD;
-        px(cloudX + c * U, cloudY + r * U, color, U, U);
-      }
-    }
+    // the cloud, in its weather's shades
+    const shades = weather === 'calm' ? CALM : weather === 'red' ? RED : STORM;
+    drawCloud(cloud, cloudX, cloudY, shades, lit);
     if (reduced) return;
     // the rain
     for (const d of drops) px(d.x, snap(d.y), WATER, P, 3 * P);
@@ -327,6 +357,11 @@ export function startStorm(root: HTMLElement, h1: HTMLElement, slots: StormSlot[
   raf = requestAnimationFrame(loop);
 
   return {
+    setWeather(w) {
+      if (w === weather) return;
+      weather = w;
+      if (w === 'storm') nextStrike = performance.now() + STRIKE_FIRST_MS;
+    },
     stop() {
       if (stopped) return;
       stopped = true;

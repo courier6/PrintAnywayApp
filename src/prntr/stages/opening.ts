@@ -121,7 +121,8 @@ export const opening: Stage = {
     });
     wrap.append(h1);
     root.append(wrap);
-    // The storm over the word (Edgar, 2026-10-19): stopped with the stage.
+    // The cloud over the word (Edgar, 2026-10-19): white now, red through the flicker, the storm
+    // from the flip on (2026-10-20). Stopped with the stage.
     const storm = startStorm(root, h1, stormSlots, (i) => performance.now() >= t1 + inAt[i], reduced);
     signal.addEventListener('abort', () => storm.stop(), { once: true });
     ctx.announce('Simple Products presents prntr');
@@ -158,6 +159,7 @@ export const opening: Stage = {
     for (const [on, off] of reduced ? [[250, 90]] : FLICKER) {
       await at(d + CREDIT_AFTER_TITLE_MS - on);
       corrupt(true);
+      storm.setWeather('red');
       await at(d + CREDIT_AFTER_TITLE_MS - off);
       corrupt(false);
     }
@@ -166,6 +168,7 @@ export const opening: Stage = {
     credit.textContent = 'CREDIT 01';
     credit.classList.remove('is-glowing');
     credit.classList.add('is-after');
+    storm.setWeather('storm');
     prompt.textContent = 'PRESS START BUTTON';
     if (!reduced) {
       // Restart the blink so the new prompt is visible on the flip, not mid-"off".
