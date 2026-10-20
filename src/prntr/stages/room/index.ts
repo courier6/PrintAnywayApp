@@ -16,7 +16,12 @@ const HIT_POINTS = 10;
 const PAGE_POINTS = 1;
 const STAPLE_POINTS = 1;
 const SHOTS = 6;
-const HEALTH = 4;
+/** Heart slots, hearts at the start, and the one heart a continue buys (Edgar, 2026-10-19). */
+const HEARTS_MAX = 3;
+const HEARTS_START = 2;
+const HEARTS_CONTINUE = 1;
+/** After a hit nothing else hurts for this long: one volley costs at most one heart. */
+const HURT_GRACE_MS = 1500;
 /** The printer's standby tick while the room is idle. */
 const TICK_MS = 4000;
 const AUTO_RELOAD_MS = 800;
@@ -149,7 +154,7 @@ export const room: Stage = {
     healthEl.append(healthFill);
     const pipsEl = el('div', 'prntr-room-pips prntr-room-fight-ui');
     pipsEl.setAttribute('role', 'img');
-    for (let i = 0; i < HEALTH; i++) pipsEl.append(el('span', ''));
+    for (let i = 0; i < HEARTS_MAX; i++) pipsEl.append(el('span', ''));
     const shotsBtn = document.createElement('button');
     shotsBtn.type = 'button';
     shotsBtn.className = 'prntr-room-shots prntr-room-fight-ui';
@@ -195,7 +200,9 @@ export const room: Stage = {
     /** While CONTINUE? shows, the pixel layer is drawn at this moment. */
     let frozenAt: number | null = null;
     let score = 0;
-    let health = HEALTH;
+    let health = HEARTS_START;
+    /** Until this moment nothing hurts (the grace after a hit). */
+    let hurtUntil = 0;
     let shots = SHOTS;
     /** Virtual px; null on touch or when the mouse is outside the frame. */
     let pointer: { x: number; y: number } | null = null;
@@ -230,7 +237,7 @@ export const room: Stage = {
     };
     const drawPips = () => {
       Array.from(pipsEl.children).forEach((p, i) => p.classList.toggle('is-off', i >= health));
-      pipsEl.setAttribute('aria-label', `Health ${health} of ${HEALTH}`);
+      pipsEl.setAttribute('aria-label', `Hearts ${health} of ${HEARTS_MAX}`);
     };
     const drawShots = () => {
       Array.from(shotsBtn.children).forEach((p, i) => p.classList.toggle('is-off', i >= shots));
@@ -284,7 +291,8 @@ export const room: Stage = {
       audio.play(audio.cues.creditA);
       continueEl.hidden = true;
       frozenAt = null;
-      health = HEALTH;
+      health = HEARTS_CONTINUE;
+      hurtUntil = 0;
       shots = SHOTS;
       autoReloadAt = null;
       reloadSecondAt = null;
@@ -315,8 +323,12 @@ export const room: Stage = {
       ctx.announce('1337.');
     };
     const damage = (now: number) => {
-      if (phase !== 'fight' || frozenAt !== null) return;
-      health = Math.max(0, health - 1);
+      if (phase !== 'fight' || frozenAt !== null || now < hurtUntil) return;
+      health--;
+      hurtUntil = now + HURT_GRACE_MS;
+      pipsEl.classList.remove('is-hurt');
+      void pipsEl.offsetWidth; // flush, so the blink restarts
+      pipsEl.classList.add('is-hurt');
       drawPips();
       if (health === 0) startContinue(now);
     };
@@ -487,7 +499,7 @@ export const room: Stage = {
           drawScore();
         },
         setHealth: (n: number) => {
-          health = Math.max(0, Math.min(HEALTH, n));
+          health = Math.max(0, Math.min(HEARTS_MAX, n));
           drawPips();
           if (health === 0 && phase === 'fight') startContinue(performance.now());
         },
@@ -581,6 +593,7 @@ export const room: Stage = {
           shots = SHOTS;
           drawShots();
         }
+        if (now >= hurtUntil) pipsEl.classList.remove('is-hurt');
         if (now >= nextAttackAt) launchAttack(now);
         if (scanAt !== null) {
           // The bar sweeps the lid in 4 steps, then one inverted frame and the white wash.
