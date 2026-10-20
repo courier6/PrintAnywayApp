@@ -139,8 +139,10 @@ const STOKE_FLARE_MS = 400;
  * flight behind the machine too. SPRAY_COUNT jets a volley, SPRAY_STAGGER_MS apart; a jet runs
  * SPRAY_MS, a particle every SPRAY_EVERY_MS, each flying SPRAY_FLIGHT_MS along an arc SPRAY_ARC
  * px high from the tube's mouth to the jet's target, where the splat builds up as they land.
- * Shooting the tube over the edge (± NOZZLE_HIT_PAD) stops the jet for INK_POINTS; a splat that
- * completes is a hit. The splat stays INK_LANDED_MS, then runs down over INK_SLIDE_MS. */
+ * Shooting the tube over the edge (± NOZZLE_HIT_PAD) blows it up; a splat that completes is a hit.
+ * The splat blinds (Edgar, 2026-10-20): it builds to 4× (64×56 of the 240×160), stays
+ * INK_LANDED_MS, then runs down the glass and out of the bottom of the view over INK_SLIDE_MS,
+ * leaving INK_DRIPS streaks of ink above it as it goes. */
 const SPRAY_COUNT = 3;
 const SPRAY_STAGGER_MS = 600;
 const SPRAY_MS = 1400;
@@ -158,7 +160,8 @@ const NOZZLE_HIT_PAD = 4;
  * the rest of the stage (its stump stays); with every nozzle dead the ink attack is gone. */
 const TUBE_POINTS = 5;
 const INK_LANDED_MS = 1500;
-const INK_SLIDE_MS = 600;
+const INK_SLIDE_MS = 1800;
+const INK_DRIPS = 4;
 const INK_COLORS = ['c', 'm', 'y'] as const;
 /** While the fire burns, the last jet of a volley goes at it instead of the player (Edgar,
  * 2026-10-20): where it lands the flames go out. The fire loses SNUFF_U of its growth and grows
@@ -990,11 +993,18 @@ export const room: Stage = {
       const y = TUBE_MOUTH + (s.y - TUBE_MOUTH) * v - SPRAY_ARC * Math.sin(Math.PI * v);
       return { x: Math.floor(x - size / 2), y: Math.floor(y - size / 2), size };
     };
-    /** The splat's scale from how much of the jet has landed: 0 (nothing yet) to 3. */
+    /** The splat's scale from how much of the jet has landed: 0 (nothing yet) to 4. */
     const splatScale = (s: Spray, now: number) => {
       const landed = Math.max(0, Math.min(jetEnd(s), now - SPRAY_FLIGHT_MS) - s.at);
       const f = landed / SPRAY_MS;
-      return f <= 0 ? 0 : f < 0.3 ? 1 : f < 0.7 ? 2 : 3;
+      return f <= 0 ? 0 : f < 0.3 ? 2 : f < 0.7 ? 3 : 4;
+    };
+    /** How far a splat has run down the glass: from where it landed to past the bottom of the view. */
+    const splatSlide = (s: Spray, sc: number, now: number) => {
+      const lt = now - splatAt(s);
+      if (lt <= INK_LANDED_MS) return 0;
+      const u = Math.min(1, (lt - INK_LANDED_MS) / INK_SLIDE_MS);
+      return (H + 7 * sc - s.y) * u * u;
     };
     const reload = (now: number) => {
       if (phase !== 'fight' || frozenAt !== null) return;
@@ -1816,9 +1826,18 @@ export const room: Stage = {
         }
         const sc = splatScale(s, now);
         if (sc === 0) continue;
-        const lt = now - splatAt(s);
-        const slide = lt > INK_LANDED_MS ? ((lt - INK_LANDED_MS) / INK_SLIDE_MS) * 60 : 0;
-        fpix.blit(Math.floor(s.x - 8 * sc), Math.floor(s.y - 7 * sc + slide), SPR.SPLAT, sc, { remap: { c: s.color } });
+        const slide = splatSlide(s, sc, now);
+        const top = Math.floor(s.y - 7 * sc + slide);
+        // the drips it leaves running down the glass above it, each its own length
+        if (slide > 0) {
+          for (let i = 0; i < INK_DRIPS; i++) {
+            const k = ((i + 1) / (INK_DRIPS + 1)) * 16 * sc - 8 * sc + (((s.at * 31 + i * 17) % 7) - 3) * (sc / 2);
+            const x = Math.floor(s.x + k);
+            const from = Math.floor(s.y - 7 * sc + 3 * sc + (((s.at * 13 + i * 29) % 5) * sc) / 2);
+            fpix.rect(x, from, x + 1 + (i % 2), top + 4 * sc, s.color);
+          }
+        }
+        fpix.blit(Math.floor(s.x - 8 * sc), top, SPR.SPLAT, sc, { remap: { c: s.color } });
       }
       // The bits in the air (steam), over everything else on the front layer.
       bits = bits.filter((b) => now - b.born < b.life);
