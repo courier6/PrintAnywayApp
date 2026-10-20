@@ -69,6 +69,10 @@ export interface RoomSounds {
   doorCreak(): void;
   /** The machine shorting out when the water reaches it. */
   zap(): void;
+  /** A jet of ink from a nozzle: a hiss for the jet's 1.4 s. */
+  inkSpray(): void;
+  /** A splat completing on the glass. */
+  inkSplat(): void;
   /** The fire's roar and crackle; loops until stop(), at the level set. */
   fire(): FireSound;
 }
@@ -100,6 +104,8 @@ const SILENT: RoomSounds = {
   signCrash: noop,
   doorCreak: noop,
   zap: noop,
+  inkSpray: noop,
+  inkSplat: noop,
   fire: () => ({ setLevel: noop, stop: noop }),
 };
 
@@ -446,6 +452,19 @@ export function createRoomSounds(audio: PrntrAudio): RoomSounds {
         tone(t + i * 0.09, 0.06, { type: 'square', f0: 60 + i * 15, gain: 0.25, attack: 0.003, release: 0.01 });
         noise(t + i * 0.09, 0.05, { hp: 3000, gain: 0.5, decay: 0.008 });
       }
+    },
+    // a spit at the front, then a 1.4 s hiss
+    inkSpray() {
+      const t = now();
+      tone(t, 0.03, { f0: 900, f1: 300, gain: 0.15, decay: 0.006 });
+      noise(t, 1.4, { hp: 3000, gain: 0.16 });
+    },
+    // a wet slap: low noise, a 140 → 50 Hz thump, and a short blip falling 600 → 200 Hz
+    inkSplat() {
+      const t = now();
+      noise(t, 0.08, { lp: 900, gain: 0.6, decay: 0.015 });
+      tone(t, 0.1, { f0: 140, f1: 50, gain: 0.45, decay: 0.03 });
+      tone(t + 0.02, 0.06, { f0: 600, f1: 200, gain: 0.2, decay: 0.012 });
     },
     // a roar (looping noise through a 220 Hz lowpass) under crackles every 40–160 ms,
     // both scaled by the level; scheduled a quarter second ahead from a 100 ms timer

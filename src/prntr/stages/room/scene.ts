@@ -21,6 +21,7 @@ export const SPR = {
   PLANT_BARE: parseSprite(SPRITES.PLANT_BARE),
   POT_BROKEN: parseSprite(SPRITES.POT_BROKEN),
   EXIT_BROKEN: parseSprite(SPRITES.EXIT_BROKEN),
+  SPLAT: parseSprite(SPRITES.SPLAT),
 };
 /** The cooler below its bottle, the plant's leaves and its pot, so each half can break alone. */
 const COOLER_BODY = sliceRows(SPR.COOLER, 8, 22);

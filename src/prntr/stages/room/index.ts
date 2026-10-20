@@ -77,6 +77,26 @@ const FIRE_GROW_MS = 12_000;
  * the door, its button stays bright, and it trembles (a new offset every SHAKE_FRAMES frames). */
 const MAD_AFTER_MS = 1500;
 const SHAKE_FRAMES = 3;
+/** The mad machine's fourth attack (Edgar, 2026-10-19): ink sprayed from the cartridge bay under
+ * the open lid (a nozzle at one of NOZZLES_X on the lid line, NOZZLE_Y), cyan, magenta and yellow
+ * in turn, never black (it cannot do that). SPRAY_COUNT jets a volley, SPRAY_STAGGER_MS apart; a
+ * jet runs SPRAY_MS, a particle every SPRAY_EVERY_MS, each flying SPRAY_FLIGHT_MS along an arc
+ * SPRAY_ARC px high to the jet's target, where the splat builds up as they land. Shooting the
+ * nozzle (± NOZZLE_HIT_PAD) stops the jet for INK_POINTS; a splat that completes is a hit. The
+ * splat stays INK_LANDED_MS, then runs down over INK_SLIDE_MS. */
+const SPRAY_COUNT = 3;
+const SPRAY_STAGGER_MS = 600;
+const SPRAY_MS = 1400;
+const SPRAY_EVERY_MS = 40;
+const SPRAY_FLIGHT_MS = 700;
+const SPRAY_ARC = 24;
+const NOZZLES_X = [96, 108, 120, 132, 144];
+const NOZZLE_Y = 93.5;
+const NOZZLE_HIT_PAD = 4;
+const INK_POINTS = 1;
+const INK_LANDED_MS = 1500;
+const INK_SLIDE_MS = 600;
+const INK_COLORS = ['c', 'm', 'y'] as const;
 /** The EXIT sign (Edgar, 2026-10-19), BREAK_POINTS a hit: its hit box (the sprite plus 2 px, and the
  * room it swings in); the first hit knocks it loose and its letters are on only in these ms windows
  * after it, then out; the second brings it down over EXIT_FALL_MS from the wall to the floor. */
@@ -161,6 +181,21 @@ interface Staple {
   hit: boolean;
   shot: boolean;
   /** The clack has played. */
+  fed: boolean;
+}
+
+interface Spray {
+  /** The nozzle's x on the lid line, and where the jet lands. */
+  nx: number;
+  x: number;
+  y: number;
+  at: number;
+  color: (typeof INK_COLORS)[number];
+  /** The nozzle was shot at this moment: the jet stops, what is in the air still lands. */
+  stoppedAt: number | null;
+  /** The whole jet has landed: the hit has been taken. */
+  done: boolean;
+  /** The hiss has played. */
   fed: boolean;
 }
 
@@ -325,6 +360,7 @@ export const room: Stage = {
     let endStep = 0;
     let staples: Staple[] = [];
     let pages: Page[] = [];
+    let sprays: Spray[] = [];
     let attackIndex = 0;
     let nextAttackAt = 0;
     let scanAt: number | null = null;
@@ -448,6 +484,7 @@ export const room: Stage = {
       reloadSecondAt = null;
       staples = [];
       pages = [];
+      sprays = [];
       scanAt = null;
       scene.scanRow = 0;
       wash.classList.remove('is-on');
@@ -488,6 +525,7 @@ export const room: Stage = {
       hideHint();
       staples = [];
       pages = [];
+      sprays = [];
       scanAt = null;
       scene.scanRow = 0;
       scene.shake = { x: 0, y: 0 };
@@ -545,6 +583,26 @@ export const room: Stage = {
       const y = y0 + (s.y - y0) * v;
       return { x: Math.floor(x - 3 * sc), y: Math.floor(y - 2.5 * sc), w: 6 * sc, h: 5 * sc };
     };
+    // A jet: its end (the nozzle shot, or SPRAY_MS), when its last particle lands, and whether
+    // the nozzle is still spraying (and so can be shot).
+    const jetEnd = (s: Spray) => s.stoppedAt ?? s.at + SPRAY_MS;
+    const splatAt = (s: Spray) => jetEnd(s) + SPRAY_FLIGHT_MS;
+    const spraying = (s: Spray, now: number) => now >= s.at && s.stoppedAt === null && now < s.at + SPRAY_MS;
+    /** Where the particle launched at τ is at `now`: along an arc from the nozzle to the target, spreading a little. */
+    const particlePose = (s: Spray, tau: number, now: number) => {
+      const v = (now - tau) / SPRAY_FLIGHT_MS;
+      const spread = (((tau * 7919) % 97) / 97 - 0.5) * 6 * v;
+      const size = v < 0.4 ? 1 : v < 0.75 ? 2 : 3;
+      const x = s.nx + (s.x - s.nx) * v + spread;
+      const y = NOZZLE_Y + (s.y - NOZZLE_Y) * v - SPRAY_ARC * Math.sin(Math.PI * v);
+      return { x: Math.floor(x - size / 2), y: Math.floor(y - size / 2), size };
+    };
+    /** The splat's scale from how much of the jet has landed: 0 (nothing yet) to 3. */
+    const splatScale = (s: Spray, now: number) => {
+      const landed = Math.max(0, Math.min(jetEnd(s), now - SPRAY_FLIGHT_MS) - s.at);
+      const f = landed / SPRAY_MS;
+      return f <= 0 ? 0 : f < 0.3 ? 1 : f < 0.7 ? 2 : 3;
+    };
     const reload = (now: number) => {
       if (phase !== 'fight' || frozenAt !== null) return;
       if (shots === SHOTS || reloadSecondAt !== null) return;
@@ -590,6 +648,13 @@ export const room: Stage = {
         addScore(STAPLE_POINTS, now);
         return;
       }
+      // A spraying nozzle: the jet stops; what is already in the air still lands.
+      const jet = sprays.find((s) => spraying(s, now) && Math.abs(x - s.nx) <= 3 + NOZZLE_HIT_PAD && Math.abs(y - NOZZLE_Y) <= 2.5 + NOZZLE_HIT_PAD);
+      if (jet) {
+        jet.stoppedAt = now;
+        addScore(INK_POINTS, now);
+        return;
+      }
       // The button: more damage, and the machine answers faster. Bright or not.
       if (x >= BUTTON.x - BUTTON_HIT_PAD && x < BUTTON.x + BUTTON.w + BUTTON_HIT_PAD && y >= BUTTON.y - BUTTON_HIT_PAD && y < BUTTON.y + BUTTON.h + BUTTON_HIT_PAD) {
         flashFrames = HIT_FLASH_FRAMES;
@@ -633,11 +698,17 @@ export const room: Stage = {
       sounds.zap();
       fireSound = sounds.fire();
     };
-    // The machine does not move. Scan, staples, pages, in rotation.
+    // The machine does not move. Scan, staples, pages, in rotation; once it is mad, ink too.
     const launchAttack = (now: number) => {
       const gap = attackGap();
-      const kind = attackIndex++ % 3;
-      if (kind === 0) {
+      const kind = attackIndex++ % (mad ? 4 : 3);
+      if (kind === 3) {
+        const first = Math.floor(Math.random() * INK_COLORS.length);
+        for (let i = 0; i < SPRAY_COUNT; i++) {
+          sprays.push({ nx: NOZZLES_X[Math.floor(Math.random() * NOZZLES_X.length)], x: 16 + Math.random() * 208, y: 24 + Math.random() * 112, at: now + i * SPRAY_STAGGER_MS, color: INK_COLORS[(first + i) % INK_COLORS.length], stoppedAt: null, done: false, fed: false });
+        }
+        nextAttackAt = now + (SPRAY_COUNT - 1) * SPRAY_STAGGER_MS + SPRAY_MS + SPRAY_FLIGHT_MS + gap;
+      } else if (kind === 0) {
         scanAt = now;
         sounds.scanFlash();
         nextAttackAt = now + SCAN_MS + WASH_MS + gap;
@@ -754,6 +825,14 @@ export const room: Stage = {
         doorGap: () => scene.doorGap,
         fire: () => fireAt !== null,
         mad: () => mad,
+        /** The next attack, now: scan, staples, pages or (mad only) ink. */
+        attack: (kind: 'scan' | 'staples' | 'pages' | 'ink') => {
+          attackIndex = ['scan', 'staples', 'pages', 'ink'].indexOf(kind);
+          nextAttackAt = 0;
+        },
+        sprays: () => sprays.length,
+        /** The x of a nozzle spraying right now, or null. */
+        nozzle: () => sprays.find((s) => spraying(s, performance.now()))?.nx ?? null,
       };
     }
 
@@ -910,6 +989,18 @@ export const room: Stage = {
           }
         }
         pages = pages.filter((p) => !p.shot && (p.landedAt === null || now - p.landedAt < PAGE_LANDED_MS + PAGE_SLIDE_MS));
+        for (const s of sprays) {
+          if (!s.fed && now >= s.at) {
+            s.fed = true;
+            sounds.inkSpray();
+          }
+          if (!s.done && s.stoppedAt === null && now >= splatAt(s)) {
+            s.done = true;
+            sounds.inkSplat();
+            damage(now);
+          }
+        }
+        sprays = sprays.filter((s) => now < splatAt(s) + INK_LANDED_MS + INK_SLIDE_MS);
       } else if (phase === 'continue') {
         // 9 → 0, a second each; 0 gets its full second, then it is over.
         countEl.textContent = String(Math.max(0, 9 - Math.floor(t / 1000)));
@@ -928,6 +1019,7 @@ export const room: Stage = {
       const rects: { x: number; y: number; w: number; h: number }[] = [];
       for (const s of staples) if (now >= s.at && !s.hit && !s.shot) rects.push(staplePose(s, now));
       for (const p of pages) if (now >= p.at && !p.shot && p.landedAt === null) rects.push(pagePose(p, now));
+      for (const s of sprays) if (spraying(s, now)) rects.push({ x: s.nx - 3, y: 91, w: 6, h: 5 });
       if (scene.buttonBright) rects.push(BUTTON);
       while (glows.children.length < rects.length) glows.append(el('div', 'prntr-room-glow'));
       Array.from(glows.children).forEach((n, i) => {
@@ -1014,6 +1106,21 @@ export const room: Stage = {
         const lt = now - p.landedAt;
         const slide = lt > PAGE_LANDED_MS ? ((lt - PAGE_LANDED_MS) / PAGE_SLIDE_MS) * 80 : 0;
         pix.blit(Math.floor(p.x1 - 20), Math.floor(p.y1 - 26 + slide), SPR.PAGE_PRINTED, 4, { skew: 10 });
+      }
+      // Ink: the particles in the air, and the splat building up on the glass, then running down.
+      for (const s of sprays) {
+        if (now < s.at) continue;
+        const end = Math.min(now, jetEnd(s));
+        for (let tau = s.at; tau < end; tau += SPRAY_EVERY_MS) {
+          if (now - tau >= SPRAY_FLIGHT_MS) continue;
+          const q = particlePose(s, tau, now);
+          pix.rect(q.x, q.y, q.x + q.size, q.y + q.size, s.color);
+        }
+        const sc = splatScale(s, now);
+        if (sc === 0) continue;
+        const lt = now - splatAt(s);
+        const slide = lt > INK_LANDED_MS ? ((lt - INK_LANDED_MS) / INK_SLIDE_MS) * 60 : 0;
+        pix.blit(Math.floor(s.x - 8 * sc), Math.floor(s.y - 7 * sc + slide), SPR.SPLAT, sc, { remap: { c: s.color } });
       }
       cpix.clear();
       if (pointer) {
