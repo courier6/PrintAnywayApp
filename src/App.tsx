@@ -58,6 +58,8 @@ export default function App() {
   const prntrPage = useRef<{ source: HTMLCanvasElement; recolored: HTMLCanvasElement } | null>(null);
   const prntrAudio = useRef<AudioContext | null>(null);
   const prntrReturn = useRef<AppState>('preview');
+  // True while the app's UI falls back into place over Prntr's last frame.
+  const [prntrDropping, setPrntrDropping] = useState(false);
 
   const storeRef = useRef(new PageStore());
   const store = storeRef.current;
@@ -261,6 +263,25 @@ export default function App() {
     setAppState(prntrReturn.current);
   }
 
+  // The sky drop (PRNTR-STAGE-1.md §4.10): after the room is cleared, the app's UI
+  // falls into place over the frozen last frame of Prntr, which stays mounted until
+  // the drop has landed. Reduced motion is a plain cut, as is any exit (Esc, ✕).
+  function finishPrntr() {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      exitPrntr();
+      return;
+    }
+    setPrntrDropping(true);
+    setAppState(prntrReturn.current);
+  }
+
+  // Safety net: Prntr never stays mounted if the drop's animationend does not arrive.
+  useEffect(() => {
+    if (!prntrDropping) return;
+    const id = window.setTimeout(() => setPrntrDropping(false), 1200);
+    return () => window.clearTimeout(id);
+  }, [prntrDropping]);
+
   async function collectAllRecolored(): Promise<HTMLCanvasElement[]> {
     const out: HTMLCanvasElement[] = [];
     for (let i = 0; i < store.pageCount; i++) {
@@ -312,7 +333,12 @@ export default function App() {
       className={'app' + (printImages.length > 0 ? ' has-print-pages' : '')}
       style={{ '--ink': INKS[0].hex } as CSSProperties}
     >
-      <div className="no-print">
+      <div
+        className={'no-print' + (prntrDropping ? ' is-sky-drop' : '')}
+        onAnimationEnd={(e) => {
+          if (e.target === e.currentTarget) setPrntrDropping(false);
+        }}
+      >
         <Header />
         {appState === 'empty' && (
           <EmptyState onFile={(f) => void handleFile(f)} onChoose={openPicker} />
@@ -343,17 +369,6 @@ export default function App() {
             onPrefetchPrntr={prefetchPrntr}
           />
         )}
-        {appState === 'prntr' && prntrPage.current && (
-          <PrntrHost
-            source={prntrPage.current.source}
-            recolored={prntrPage.current.recolored}
-            inkHex={inkHex}
-            stage={prntrStage}
-            audioContext={prntrAudio.current}
-            onExit={exitPrntr}
-            onDone={exitPrntr}
-          />
-        )}
         {appState === 'error' && (
           <ErrorState
             kind={errorInfo.kind}
@@ -373,6 +388,19 @@ export default function App() {
           </div>
         )}
       </div>
+      {/* Outside .no-print: the sky drop transforms .no-print, which would carry the fixed
+          Prntr layer along with it. */}
+      {(appState === 'prntr' || prntrDropping) && prntrPage.current && (
+        <PrntrHost
+          source={prntrPage.current.source}
+          recolored={prntrPage.current.recolored}
+          inkHex={inkHex}
+          stage={prntrStage}
+          audioContext={prntrAudio.current}
+          onExit={exitPrntr}
+          onDone={finishPrntr}
+        />
+      )}
       <input
         ref={fileInput}
         type="file"
