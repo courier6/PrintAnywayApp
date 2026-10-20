@@ -3,7 +3,7 @@ import { Header } from './components/Header';
 import { EmptyState } from './components/EmptyState';
 import { ProcessingState } from './components/ProcessingState';
 import { PreviewState } from './components/PreviewState';
-import { PrntrHost } from './components/PrntrHost';
+import { PrntrHost, prefetchPrntr } from './components/PrntrHost';
 import { prntrAudioContext } from './components/prntrAudio';
 import { ErrorState, type ErrorKind } from './components/ErrorState';
 import { t, useLocale } from './i18n';
@@ -339,6 +339,8 @@ export default function App() {
             busy={busy}
             showReminder={showPrintReminder}
             onDismissReminder={() => setShowPrintReminder(false)}
+            onOpenPrntr={() => enterPrntr(0)}
+            onPrefetchPrntr={prefetchPrntr}
           />
         )}
         {appState === 'prntr' && prntrPage.current && (
