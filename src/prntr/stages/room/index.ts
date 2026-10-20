@@ -54,6 +54,12 @@ const OVER_HOLD_MS = 500;
 /** PROTECT YOURSELF. and the binding under it stay this long, then fade (HINT_FADE_MS, as in prntr.css). */
 const HINT_MS = 2000;
 const HINT_FADE_MS = 500;
+/** The open machine's button blinks bright red twice, rarely, so it looks like a target (Edgar, 2026-10-19). */
+const BLINK_MIN_MS = 4000;
+const BLINK_MAX_MS = 9000;
+const BLINK_FIRST_MS = 1500;
+/** Virtual px of the button on the 3× pose (MFC_MAD row 7, columns 24–26). */
+const BUTTON = { x: 144, y: 101, w: 9, h: 3 };
 /** The quiet room after 1337, before Prntr ends: 0.5 s of lights coming back, then a full second of nothing. */
 const HOLD_END_MS = 1500;
 
@@ -216,6 +222,7 @@ export const room: Stage = {
       trayPage: true,
       scanRow: 0,
       flashWhite: false,
+      buttonBright: false,
     };
     let phase: Phase = 'look';
     let phaseAt = performance.now();
@@ -246,6 +253,16 @@ export const room: Stage = {
     let outcome: 'cleared' | 'over' = 'cleared';
     let hintFadeAt = 0;
     let hintHideAt = 0;
+    let blinkAt = -Infinity;
+    let nextBlinkAt = Infinity;
+    const scheduleBlink = (from: number, delay: number) => {
+      nextBlinkAt = from + delay + Math.random() * (BLINK_MAX_MS - BLINK_MIN_MS);
+    };
+    /** Two short flashes: on 0–120 ms, off, on 220–340 ms. */
+    const buttonBright = (now: number) => {
+      const bt = now - blinkAt;
+      return bt < 120 || (bt >= 220 && bt < 340);
+    };
     const clicks = new Map<string, number>();
     const hum: Hum = sounds.hum();
     /** Set inside the promise at the bottom: stops the loop and resolves `outcome`. */
@@ -299,6 +316,7 @@ export const room: Stage = {
       hintFadeAt = now + HINT_MS;
       hintHideAt = now + HINT_MS + HINT_FADE_MS;
       nextAttackAt = now + FIRST_ATTACK_MS;
+      scheduleBlink(now, BLINK_FIRST_MS);
       ctx.announce(`The printer is open. Protect yourself. ${touch ? 'Tap' : 'Click'} to shoot.`);
     };
     const startContinue = (now: number) => {
@@ -337,6 +355,7 @@ export const room: Stage = {
       phase = 'fight';
       phaseAt = now;
       nextAttackAt = now + ATTACK_GAP_MS;
+      scheduleBlink(now, BLINK_MIN_MS);
       ctx.announce('Credit 1. Last life.');
     };
     const hideHint = () => {
@@ -657,6 +676,10 @@ export const room: Stage = {
         }
         if (now >= hurtUntil) pipsEl.classList.remove('is-hurt');
         if (now >= nextAttackAt) launchAttack(now);
+        if (now >= nextBlinkAt) {
+          blinkAt = now;
+          scheduleBlink(now, BLINK_MIN_MS);
+        }
         if (scanAt !== null) {
           // The bar sweeps the lid in 4 steps, then one inverted frame and the white wash.
           const st = now - scanAt;
@@ -706,6 +729,7 @@ export const room: Stage = {
       const rects: { x: number; y: number; w: number; h: number }[] = [];
       for (const s of staples) if (now >= s.at && !s.hit && !s.shot) rects.push(staplePose(s, now));
       for (const p of pages) if (now >= p.at && !p.shot && p.landedAt === null) rects.push(pagePose(p, now));
+      if (scene.buttonBright) rects.push(BUTTON);
       while (glows.children.length < rects.length) glows.append(el('div', 'prntr-room-glow'));
       Array.from(glows.children).forEach((n, i) => {
         const r = rects[i];
@@ -721,6 +745,7 @@ export const room: Stage = {
     const render = (now: number) => {
       scene.flashWhite = flashFrames > 0;
       if (flashFrames > 0) flashFrames--;
+      scene.buttonBright = phase === 'fight' && buttonBright(now);
       drawRoom(pix, scene);
       for (const s of staples) {
         if (now < s.at || s.hit || s.shot) continue;

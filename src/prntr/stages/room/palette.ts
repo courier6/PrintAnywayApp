@@ -9,6 +9,8 @@ export const PAL = {
   F: '#FFFBE0', f: '#BDB8A6', A: '#D8D2B0', a: '#C4BE9C', B: '#6A6558', C: '#8A877A',
   x: '#7F7C70', X: '#6E6B60', D: '#8A7A62', E: '#5A4A3A', L: '#9ADCFF', l: '#DDE7E8',
   v: '#3E8E4E', V: '#2E6E3E', p: '#B86B3A', s: '#FFF6CC', e: '#A8A08A', R: '#B8140A',
+  /** Not in palette.json: the bright red the open machine's button blinks (Edgar, 2026-10-19). */
+  Q: '#FF2A1A',
 } as const;
 export type PalKey = keyof typeof PAL;
 

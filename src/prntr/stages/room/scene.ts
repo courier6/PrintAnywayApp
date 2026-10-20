@@ -33,6 +33,8 @@ export interface SceneState {
   scanRow: 0 | 5 | 6 | 7;
   /** The machine drawn all white (the hit flash). */
   flashWhite: boolean;
+  /** The red button on the open machine's panel, lit bright for a blink (mad only). */
+  buttonBright: boolean;
 }
 
 /**
@@ -82,7 +84,7 @@ export function drawRoom(p: Pix, s: SceneState): void {
   switch (s.printer) {
     case 'mad':
       p.rect(84, 146, 176, 152, 'X');
-      p.blit(72, 80, SPR.MFC_MAD, 3, { white });
+      p.blit(72, 80, SPR.MFC_MAD, 3, { white, remap: s.buttonBright ? { R: 'Q' } : undefined });
       if (s.scanRow && !white) p.rect(72 + 3 * 2, 80 + 3 * s.scanRow, 72 + 3 * 23, 80 + 3 * (s.scanRow + 1), 'c');
       break;
     case 'between':
