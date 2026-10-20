@@ -77,6 +77,8 @@ const MACHINE = { x0: 72, y0: 80, x1: 168, y1: 146 };
 const SLOT = { x0: 84, x1: 153, y: 113 };
 /** The first part of a page's flight is spent rising out of the slot, row by row. */
 const PAGE_EJECT = 0.2;
+/** The first part of a staple's flight is spent punching up out of the slot, with a clack. */
+const STAPLE_EJECT = 0.15;
 const PAGE_TARGETS_X = [30, 75, 120, 165, 210];
 /** Where each of the five pages comes out, left to right along the slot. */
 const PAGE_ORIGINS_X = [94, 107, 120, 133, 146];
@@ -130,6 +132,8 @@ interface Staple {
   at: number;
   hit: boolean;
   shot: boolean;
+  /** The clack has played. */
+  fed: boolean;
 }
 
 interface Page {
@@ -470,14 +474,19 @@ export const room: Stage = {
       const y = y0 + (p.y1 - y0) * v;
       return { x: Math.floor(x - 5 * sc), y: Math.floor(y - 6.5 * sc), w: 10 * sc, h: 13 * sc };
     };
-    // Staples fly out of the slot at the camera: 1× → 2× → 4×.
+    // A staple punches up out of the slot at 1× for the first part of STAPLE_MS (the rect is
+    // the rows showing), then flies out of it at the camera: 1× → 2× → 4×.
     const staplePose = (s: Staple, now: number) => {
-      const st = now - s.at;
-      const u = Math.min(1, st / STAPLE_MS);
-      const sc = st < STAPLE_MS / 3 ? 1 : st < (2 * STAPLE_MS) / 3 ? 2 : 4;
+      const u = Math.min(1, (now - s.at) / STAPLE_MS);
+      if (u < STAPLE_EJECT) {
+        const rows = Math.round((u / STAPLE_EJECT) * SPR.STAPLE.h);
+        return { x: Math.floor(s.x0 - 3), y: SLOT.y - rows, w: 6, h: rows };
+      }
+      const v = (u - STAPLE_EJECT) / (1 - STAPLE_EJECT);
+      const sc = v < 1 / 3 ? 1 : v < 2 / 3 ? 2 : 4;
       const y0 = SLOT.y - 2.5;
-      const x = s.x0 + (s.x - s.x0) * u;
-      const y = y0 + (s.y - y0) * u;
+      const x = s.x0 + (s.x - s.x0) * v;
+      const y = y0 + (s.y - y0) * v;
       return { x: Math.floor(x - 3 * sc), y: Math.floor(y - 2.5 * sc), w: 6 * sc, h: 5 * sc };
     };
     const reload = (now: number) => {
@@ -550,7 +559,7 @@ export const room: Stage = {
         nextAttackAt = now + SCAN_MS + WASH_MS + gap;
       } else if (kind === 1) {
         for (let i = 0; i < 3; i++) {
-          staples.push({ x0: SLOT.x0 + 3 + Math.random() * (SLOT.x1 - SLOT.x0 - 6), x: 20 + Math.random() * 180, y: 40 + Math.random() * 70, at: now + i * STAPLE_STAGGER_MS, hit: false, shot: false });
+          staples.push({ x0: SLOT.x0 + 3 + Math.random() * (SLOT.x1 - SLOT.x0 - 6), x: 20 + Math.random() * 180, y: 40 + Math.random() * 70, at: now + i * STAPLE_STAGGER_MS, hit: false, shot: false, fed: false });
         }
         nextAttackAt = now + 2 * STAPLE_STAGGER_MS + STAPLE_MS + gap;
       } else {
@@ -771,6 +780,10 @@ export const room: Stage = {
           washUntil = 0;
         }
         for (const s of staples) {
+          if (!s.fed && now >= s.at) {
+            s.fed = true;
+            sounds.staplePunch();
+          }
           if (!s.hit && !s.shot && now - s.at >= STAPLE_MS) {
             s.hit = true;
             sounds.stapleHit();
@@ -826,12 +839,14 @@ export const room: Stage = {
       if (flashFrames > 0) flashFrames--;
       scene.buttonBright = phase === 'fight' && buttonBright(now);
       drawRoom(pix, scene);
+      // Out of the slot: only the top rows of the sprite so far, then the whole thing.
       for (const s of staples) {
         if (now < s.at || s.hit || s.shot) continue;
         const r = staplePose(s, now);
-        pix.blit(r.x, r.y, SPR.STAPLE, r.w / 6);
+        const spr = SPR.STAPLE;
+        if (r.h < spr.h) pix.blit(r.x, r.y, { w: spr.w, h: r.h, rows: spr.rows.slice(0, r.h) });
+        else pix.blit(r.x, r.y, spr, r.w / spr.w);
       }
-      // Rising out of the slot: only the top rows of the sprite so far.
       for (const p of pages) {
         if (p.shot || now < p.at || p.landedAt !== null) continue;
         const r = pagePose(p, now);

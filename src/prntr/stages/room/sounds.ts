@@ -4,8 +4,9 @@ import type { PrntrAudio } from '../../audio';
  * The room's sounds: a port of prntr/design/stage1/audio/sounds.js (the spec; the
  * .wav files beside it are renders for listening). Same recipes and numbers, played
  * live through Prntr's master gain instead of the context's destination. Without an
- * AudioContext every sound is a no-op. pageFeed, death, gameOver, shatter, tear and
- * rustle are not in sounds.js: Edgar asked for them after playing the room (2026-10-19).
+ * AudioContext every sound is a no-op. pageFeed, staplePunch, death, gameOver, shatter,
+ * tear and rustle are not in sounds.js: Edgar asked for them after playing the room
+ * (2026-10-19).
  */
 
 export interface Hum {
@@ -37,6 +38,8 @@ export interface RoomSounds {
   paperSlap(): void;
   /** The rollers feeding a page out of the machine's slot. */
   pageFeed(): void;
+  /** A staple punched out of the slot: a stapler's clack. */
+  staplePunch(): void;
   /** The last heart gone with a continue still to come: three falling notes. */
   death(): void;
   /** Game over: the three notes, then the long fall. About 1.4 s; it plays on through the host's drop. */
@@ -64,6 +67,7 @@ const SILENT: RoomSounds = {
   reload: noop,
   paperSlap: noop,
   pageFeed: noop,
+  staplePunch: noop,
   death: noop,
   gameOver: noop,
   shatter: noop,
@@ -293,6 +297,13 @@ export function createRoomSounds(audio: PrntrAudio): RoomSounds {
       const t = now();
       tone(t, 0.3, { type: 'sawtooth', f0: 55, gain: 0.06, attack: 0.02, release: 0.08 });
       for (let i = 0; i < 4; i++) noise(t + i * 0.07, 0.02, { hp: 1500, lp: 6000, gain: 0.3, decay: 0.003 });
+    },
+    // a stapler's clack: a metal tick over a 60 ms thud that drops 220 → 90 Hz
+    staplePunch() {
+      const t = now();
+      tone(t, 0.03, { f0: 2600, f1: 1800, gain: 0.3, decay: 0.006 });
+      noise(t, 0.06, { lp: 1500, gain: 0.5, decay: 0.012 });
+      tone(t, 0.06, { f0: 220, f1: 90, gain: 0.4, decay: 0.015 });
     },
     // A4, G4, F4: square notes of 120 ms, 150 ms apart
     death() {
