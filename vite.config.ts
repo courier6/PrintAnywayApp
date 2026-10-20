@@ -240,7 +240,7 @@ function i18nPlugin(): Plugin {
   };
 }
 
-/** Prntr ships as its own lazy chunk; its dev-only entrance must not ship at all. */
+/** Prntr ships as its own lazy chunk; its dev-only code (entrance, harness hooks) must not ship at all. */
 function prntrGuard(): Plugin {
   let outDir = '';
   let isBuild = false;
@@ -255,8 +255,9 @@ function prntrGuard(): Plugin {
       const assets = resolve(outDir, 'assets');
       const files = readdirSync(assets).filter((f) => f.endsWith('.js'));
       for (const f of files) {
-        if (readFileSync(resolve(assets, f), 'utf8').includes('prntr-dev-skip')) {
-          throw new Error(`prntr: dev skip leaked into the build: assets/${f}`);
+        // Every dev-only block logs a `prntr-dev-…` marker; none may survive the build.
+        if (/prntr-dev-/.test(readFileSync(resolve(assets, f), 'utf8'))) {
+          throw new Error(`prntr: dev-only code leaked into the build: assets/${f}`);
         }
       }
       const chunks = files.filter((f) => /^Prntr-.*\.js$/.test(f));
