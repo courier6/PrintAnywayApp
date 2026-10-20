@@ -60,6 +60,12 @@ const BLINK_MAX_MS = 9000;
 const BLINK_FIRST_MS = 1500;
 /** Virtual px of the button on the 3× pose (MFC_MAD row 7, columns 24–26). */
 const BUTTON = { x: 144, y: 101, w: 9, h: 3 };
+/** A hit on the button (± BUTTON_HIT_PAD): more damage than the machine, and the attacks come
+ * sooner, the gap × RAGE_STEP per hit, at most RAGE_MAX times (Edgar, 2026-10-19). */
+const BUTTON_POINTS = 15;
+const BUTTON_HIT_PAD = 1;
+const RAGE_STEP = 0.85;
+const RAGE_MAX = 4;
 /** Shooting one of the room's things breaks it, once, for this many points (Edgar, 2026-10-19). */
 const BREAK_POINTS = 5;
 /** The quiet room after 1337, before Prntr ends: 0.5 s of lights coming back, then a full second of nothing. */
@@ -289,6 +295,9 @@ export const room: Stage = {
     let hintHideAt = 0;
     let blinkAt = -Infinity;
     let nextBlinkAt = Infinity;
+    /** Hits on the button so far (capped): each one brings the attacks closer together. */
+    let rage = 0;
+    const attackGap = () => Math.round((score >= LATE_SCORE ? ATTACK_GAP_LATE_MS : ATTACK_GAP_MS) * Math.pow(RAGE_STEP, rage));
     const scheduleBlink = (from: number, delay: number) => {
       nextBlinkAt = from + delay + Math.random() * (BLINK_MAX_MS - BLINK_MIN_MS);
     };
@@ -510,6 +519,15 @@ export const room: Stage = {
         addScore(STAPLE_POINTS, now);
         return;
       }
+      // The button: more damage, and the machine answers faster. Bright or not.
+      if (x >= BUTTON.x - BUTTON_HIT_PAD && x < BUTTON.x + BUTTON.w + BUTTON_HIT_PAD && y >= BUTTON.y - BUTTON_HIT_PAD && y < BUTTON.y + BUTTON.h + BUTTON_HIT_PAD) {
+        flashFrames = HIT_FLASH_FRAMES;
+        rage = Math.min(RAGE_MAX, rage + 1);
+        blinkAt = -Infinity;
+        scheduleBlink(now, BLINK_MIN_MS);
+        addScore(BUTTON_POINTS, now);
+        return;
+      }
       if (x >= MACHINE.x0 && x < MACHINE.x1 && y >= MACHINE.y0 && y < MACHINE.y1) {
         flashFrames = HIT_FLASH_FRAMES;
         addScore(HIT_POINTS, now);
@@ -524,7 +542,7 @@ export const room: Stage = {
     };
     // The machine does not move. Scan, staples, pages, in rotation.
     const launchAttack = (now: number) => {
-      const gap = score >= LATE_SCORE ? ATTACK_GAP_LATE_MS : ATTACK_GAP_MS;
+      const gap = attackGap();
       const kind = attackIndex++ % 3;
       if (kind === 0) {
         scanAt = now;
@@ -638,6 +656,7 @@ export const room: Stage = {
           if (phase === 'look') startSticker(performance.now());
         },
         broken: () => BREAKABLES.filter((b) => scene.broken[b.id]).map((b) => b.id),
+        attackGap,
       };
     }
 
