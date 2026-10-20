@@ -93,6 +93,14 @@ const SHAKE_FRAMES = 3;
 const SPREAD_HEALTH = 0.75;
 const FIRE_SPREAD_MS = 20_000;
 const DEPLETE_MS = 1500;
+/** Shooting the machine where it burns stokes the fire (Edgar, 2026-10-20): every FIRE_STOKE_SHOTS
+ * hits in the flames, the spread onto the machine takes STOKE_STEP of the time it had left, at
+ * most STOKE_MAX times (about twice as fast); stoked before it spreads, it spreads faster when it
+ * does. The shot does its damage as usual; the crackle flares for STOKE_FLARE_MS. */
+const FIRE_STOKE_SHOTS = 3;
+const STOKE_STEP = 0.8;
+const STOKE_MAX = 3;
+const STOKE_FLARE_MS = 400;
 /** The mad machine's fourth attack (Edgar, 2026-10-19): ink sprayed from behind the machine (a
  * nozzle at one of NOZZLES_X, NOZZLE_Y just inside its top edge, so each jet comes up from behind
  * the lid and the far half of a particle's flight is drawn behind the machine: Edgar, 2026-10-20),
@@ -466,6 +474,11 @@ export const room: Stage = {
     let spreadAt: number | null = null;
     let depleteAt: number | null = null;
     let depleteFrom = 0;
+    /** How long the spread onto the machine takes, shortened by each stoke. */
+    let spreadMs = FIRE_SPREAD_MS;
+    let fireShots = 0;
+    let stokes = 0;
+    let stokeAt = -Infinity;
     /** The machine is mad (MAD_AFTER_MS into the fire): the cues above, and the ink to come. */
     let mad = false;
     let frameCount = 0;
@@ -797,6 +810,7 @@ export const room: Stage = {
       // The button: more damage, and the machine answers faster. Bright or not.
       if (x >= BUTTON.x - BUTTON_HIT_PAD && x < BUTTON.x + BUTTON.w + BUTTON_HIT_PAD && y >= BUTTON.y - BUTTON_HIT_PAD && y < BUTTON.y + BUTTON.h + BUTTON_HIT_PAD) {
         flashFrames = HIT_FLASH_FRAMES;
+        stoke(x, y, now);
         rage = Math.min(RAGE_MAX, rage + 1);
         blinkAt = -Infinity;
         scheduleBlink(now, BLINK_MIN_MS);
@@ -805,6 +819,7 @@ export const room: Stage = {
       }
       if (x >= MACHINE.x0 && x < MACHINE.x1 && y >= MACHINE.y0 && y < MACHINE.y1) {
         flashFrames = HIT_FLASH_FRAMES;
+        stoke(x, y, now);
         addScore(HIT_POINTS, now);
         return;
       }
@@ -869,6 +884,29 @@ export const room: Stage = {
         if (!signal.aborted) sounds.signCrash();
       }, 120);
       addScore(BREAK_POINTS, now);
+    };
+    // A hit on the machine inside its flames: the flame at its foot (the main flame's footprint)
+    // or, once it spreads, the flames on it (drawFire's front layer in scene.ts).
+    const inFlames = (x: number, y: number, now: number) => {
+      if (fireAt === null) return false;
+      const r = fireRect(Math.min(1, (now - fireAt) / FIRE_GROW_MS));
+      if (x >= r.x0 && x < r.x1 && y >= r.y0 && y < r.y1) return true;
+      const v = spreadU(now);
+      if (v <= 0) return false;
+      const cx = 80 + 40 * v;
+      const w = 8 + 42 * v;
+      return x >= cx - w && x < cx + w && y >= 146 - (20 + 48 * v) && y < 146;
+    };
+    // Every few shots into the flames, the spread goes faster from where it is (no jump in the flames).
+    const stoke = (x: number, y: number, now: number) => {
+      if (!inFlames(x, y, now)) return;
+      fireShots++;
+      stokeAt = now;
+      if (fireShots % FIRE_STOKE_SHOTS !== 0 || stokes >= STOKE_MAX) return;
+      const v = spreadU(now);
+      stokes++;
+      spreadMs = Math.round(FIRE_SPREAD_MS * Math.pow(STOKE_STEP, stokes));
+      if (spreadAt !== null) spreadAt = now - v * spreadMs;
     };
     // The water reaches the machine: a short, a flash, and a fire on that side that grows.
     const startFire = (now: number) => {
@@ -1019,6 +1057,8 @@ export const room: Stage = {
         fire: () => fireAt !== null,
         mad: () => mad,
         spread: () => spreadAt !== null,
+        stokes: () => stokes,
+        spreadMs: () => spreadMs,
         /** The next attack, now: scan, staples, pages or (mad only) ink. */
         attack: (kind: 'scan' | 'staples' | 'pages' | 'ink') => {
           attackIndex = ['scan', 'staples', 'pages', 'ink'].indexOf(kind);
@@ -1107,7 +1147,7 @@ export const room: Stage = {
         hintFadeAt = 0;
       }
       if (hintHideAt && now >= hintHideAt) hideHint();
-      if (fireAt !== null) fireSound?.setLevel(Math.min(1, (now - fireAt) / FIRE_GROW_MS) + 0.5 * spreadU(now));
+      if (fireAt !== null) fireSound?.setLevel(Math.min(1, (now - fireAt) / FIRE_GROW_MS) + 0.5 * spreadU(now) + (now - stokeAt < STOKE_FLARE_MS ? 0.3 : 0));
       if (fireAt !== null && !mad && now - fireAt >= MAD_AFTER_MS) {
         mad = true;
         frame.classList.add('is-mad');
@@ -1151,7 +1191,7 @@ export const room: Stage = {
         }
         // The fire takes the weak machine; engulfed, its health runs out and the fight is won.
         if (fireAt !== null && spreadAt === null && score >= HI * (1 - SPREAD_HEALTH)) spreadAt = now;
-        if (spreadAt !== null && depleteAt === null && now - spreadAt >= FIRE_SPREAD_MS) {
+        if (spreadAt !== null && depleteAt === null && now - spreadAt >= spreadMs) {
           depleteAt = now;
           depleteFrom = score;
         }
@@ -1287,7 +1327,7 @@ export const room: Stage = {
     /** The spread onto the machine, 0..1; it dies down over the end's first second as the machine shuts. */
     const spreadU = (now: number) => {
       if (spreadAt === null) return 0;
-      const v = Math.min(1, (now - spreadAt) / FIRE_SPREAD_MS);
+      const v = Math.min(1, (now - spreadAt) / spreadMs);
       return phase === 'end' ? v * Math.max(0, 1 - (now - phaseAt) / 1000) : v;
     };
     // The fire grows for FIRE_GROW_MS, then holds; its glow box follows the flames.
