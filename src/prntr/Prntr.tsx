@@ -20,7 +20,7 @@ interface Props {
   /**
    * The chain finished: `prntr:done` with reason complete. `cleared` is the room won
    * (the sky drop, with the certificate of completion as the page the app comes back
-   * to; Edgar, 2026-10-20), `over` a game over (the Tetris drop). Either way the host
+   * to), `over` a game over (the Tetris drop). Either way the host
    * drops its UI over the last frame, then unmounts Prntr.
    */
   onDone: (outcome: 'cleared' | 'over', certificate?: Certificate) => void;

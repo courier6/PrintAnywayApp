@@ -273,7 +273,7 @@ export default function App() {
   // one like Tetris pieces. Either way over the frozen last frame of Prntr, which stays
   // mounted until the drop has landed. Reduced motion is a plain cut, as is any exit.
   // The room cleared, the page the app comes back to is the certificate of completion,
-  // in place of whatever document it had (Edgar, 2026-10-20).
+  // in place of whatever document it had.
   function finishPrntr(outcome: 'cleared' | 'over', certificate?: Certificate) {
     if (certificate) loadCertificate(certificate);
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {

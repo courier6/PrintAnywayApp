@@ -121,7 +121,7 @@
   animation: prntr-card 1250ms linear forwards;
 }
 
-/* The cut after the card (Edgar, 2026-10-20): the card inverted, white, the logo alone in black. */
+/* The cut after the card: the card inverted, white, the logo alone in black. */
 .prntr-card.is-beep {
   background: #FFFFFF;
   opacity: 1;
@@ -210,8 +210,8 @@
 
 /* The room's frame (240×160 virtual px at --s, set by the stage), centred: the prompt and the
    footer are placed in it as the room's caption and CREDIT are, so CREDIT stays put at the cut
-   (Edgar, 2026-10-19; the handoff had the footer 48 px in and 40 px up from the viewport). */
-/* The storm over the title (Edgar, 2026-10-19): one canvas over the viewport for the cloud, the
+   (the handoff had the footer 48 px in and 40 px up from the viewport). */
+/* The storm over the title: one canvas over the viewport for the cloud, the
    rain and the water on the letters, and the lightning's flash over everything. */
 .prntr-storm {
   position: absolute;
@@ -220,7 +220,7 @@
   image-rendering: pixelated;
 }
 
-/* The lightning's flash: a canvas with the place it lights drawn in it (Edgar, 2026-10-20),
+/* The lightning's flash: a canvas with the place it lights drawn in it,
    white or blue, shown at the flash's opacity. */
 .prntr-flash {
   position: absolute;
@@ -378,7 +378,7 @@
   filter: invert(1);
 }
 
-/* The print on the wall (Edgar, 2026-10-20): a canvas at four cells to the room's pixel over the
+/* The print on the wall: a canvas at four cells to the room's pixel over the
    frame's inside (ART_AT in art.ts), under the light and the washes like the wall it hangs on. */
 .prntr-room-art {
   position: absolute;
@@ -391,7 +391,7 @@
 }
 
 /* What the machine throws (pages, staples, ink): a transparent canvas over the slot's red
-   light and the door's, so the glow is behind the paper (Edgar, 2026-10-20). */
+   light and the door's, so the glow is behind the paper. */
 .prntr-room-front {
   position: absolute;
   inset: 0;
@@ -402,7 +402,7 @@
 }
 
 /* The pointer and crosshair: a transparent canvas of their own above the door's light,
-   the spill and the glows, so the cursor never sits behind a glow (Edgar, 2026-10-19). */
+   the spill and the glows, so the cursor never sits behind a glow. */
 .prntr-room-cursor {
   position: absolute;
   inset: 0;
@@ -443,7 +443,7 @@
   pointer-events: none;
 }
 
-/* Once the door has creaked open (the EXIT sign shot down; Edgar, 2026-10-19): the light in it
+/* Once the door has creaked open (the EXIT sign shot down): the light in it
    is wider (the stage sets its width as the door swings), its glow reaches further, the spill
    on the carpet is larger, and the red from inside reaches the wall around the door, the
    cooler, the poster and the near side of the machine, the whole room a shade darker and
@@ -461,7 +461,7 @@
 }
 
 /* The mad machine's output slot (MFC_MAD row 11 at 3×: 84,113 69×3), lit like the door's light
-   and glowing the same way, fading in over 1.5 s once the frame has .is-mad (Edgar, 2026-10-19). */
+   and glowing the same way, fading in over 1.5 s once the frame has .is-mad. */
 .prntr-room-slot-light {
   position: absolute;
   left: calc(84px * var(--s));
@@ -479,7 +479,7 @@
   opacity: 1;
 }
 
-/* A bullet hole through the door or the window's blind (Edgar, 2026-10-20): the 2×2 px hole
+/* A bullet hole through the door or the window's blind: the 2×2 px hole
    lit like the light in the door, glowing past its edges. */
 .prntr-room-hole-lights {
   position: absolute;
@@ -496,7 +496,7 @@
   box-shadow: 0 0 calc(2.4px * var(--s)) calc(0.8px * var(--s)) rgba(140, 16, 12, 0.55);
 }
 
-/* The window shot open (Edgar, 2026-10-20): the red from behind the door pours through the
+/* The window shot open: the red from behind the door pours through the
    gap where the blind was (163,39 58×48), glowing past the frame, and fades in over 1.5 s. The
    fill is clipped off the machine's corner (x < 165 below y 79), which stands in front of the
    window; the blind's remnants are drawn over it on the front canvas. */
@@ -539,7 +539,7 @@
   opacity: 1;
 }
 
-/* The fire's light (Edgar, 2026-10-19): an orange glow the size of the flames, set each frame. */
+/* The fire's light: an orange glow the size of the flames, set each frame. */
 .prntr-room-fire-light {
   position: absolute;
   border-radius: 50%;
@@ -659,7 +659,7 @@
 }
 
 /* At the INSERT COIN line (top 660 on the 800 frame), set like the closed captions on an old
-   TV (Edgar, 2026-10-20): white capitals on an opaque black box that hugs each row with a
+   TV: white capitals on an opaque black box that hugs each row with a
    character's width of black either side, rows stacked with no gap, no outline or shadow. */
 .prntr-room-caption {
   position: absolute;
@@ -706,7 +706,7 @@
   background: #1E1433;
 }
 
-/* The machine's name, above the left end of its bar (Edgar, 2026-10-19). */
+/* The machine's name, above the left end of its bar. */
 .prntr-room-health-name {
   position: absolute;
   left: calc(60px * var(--s));
@@ -720,7 +720,7 @@
   background: #F0288C;
 }
 
-/* The player's health (Edgar, 2026-10-20): the machine's bar in green, along the bottom
+/* The player's health: the machine's bar in green, along the bottom
    between CREDIT and the shots; it blinks twice when it takes a hit. */
 .prntr-room-life {
   position: absolute;
@@ -742,7 +742,7 @@
   animation: prntr-hurt 250ms steps(1, end) 2;
 }
 
-/* The player's name under the left end of their bar (Edgar, 2026-10-20), NEW PLAYER until there
+/* The player's name under the left end of their bar, NEW PLAYER until there
    is a login. Worn (half the health or less) it shivers now and then; rough (a quarter or less,
    the end of this life near) it jitters, flickers and splits into red and cyan, while the stage
    breaks its letters up. */
@@ -801,7 +801,7 @@
   pointer-events: none;
 }
 
-/* The lives (Edgar, 2026-10-20): red hearts at the lower right, above the shot pips, so a lost
+/* The lives: red hearts at the lower right, above the shot pips, so a lost
    heart's ghost has the whole room to float up through. */
 .prntr-room-pips {
   position: absolute;
@@ -860,7 +860,7 @@
   animation: prntr-heart-ghost-still 1800ms linear forwards;
 }
 
-/* A ghost shot pops like a balloon (Edgar, 2026-10-20): the heart swells for two frames and is
+/* A ghost shot pops like a balloon: the heart swells for two frames and is
    gone, and six pale bits fly out from its middle and fade over 0.4 s. */
 @keyframes prntr-heart-pop {
   0% { opacity: 1; transform: scale(1.35); }
@@ -897,7 +897,7 @@
   animation: prntr-heart-shard 400ms ease-out forwards;
 }
 
-/* The shots (Edgar, 2026-10-20): rounds standing in a magazine lying on its side at the lower
+/* The shots: rounds standing in a magazine lying on its side at the lower
    right, tips up over its feed lips. Each pip is a round, a copper tip on a brass case with a
    rim at its base; a spent slot shows the magazine's spring where the round was. The button is
    also the RELOAD button, at least 44 px tall for phones; the magazine is drawn along its bottom. */
@@ -987,7 +987,7 @@
 }
 
 /* Game over: the same dim, nothing on it, half a second before the host drops in. */
-/* The death beat (Edgar, 2026-10-19: the hearts are lives): a red dim while the room is frozen. */
+/* The death beat (the hearts are lives): a red dim while the room is frozen. */
 .prntr-room-death {
   position: absolute;
   inset: 0;
@@ -1002,7 +1002,7 @@
   pointer-events: none;
 }
 
-/* GAME OVER (Edgar, 2026-10-20): two giant words in the title's Comic Sans, red with a plum
+/* GAME OVER: two giant words in the title's Comic Sans, red with a plum
    shadow, popping in like the title's letters, over the dim for two seconds. */
 .prntr-room-over-text {
   position: absolute;

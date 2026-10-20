@@ -44,7 +44,7 @@ const lutCache = new Map<string, Uint8Array>();
 /**
  * Gold (src/lib/inks.ts GOLD_INK) is not one colour: its ramp runs paper → pale gold → gold →
  * deep gold, and a sheen sweeps across the page, so the ink shifts between the two ramps below
- * along diagonal bands SHEEN_PERIOD px wide. Unrealistic on purpose (Edgar, 2026-10-20).
+ * along diagonal bands SHEEN_PERIOD px wide. Unrealistic on purpose.
  */
 const GOLD_HEX = '#c9a227';
 const GOLD_RAMPS: [string, string, string][] = [

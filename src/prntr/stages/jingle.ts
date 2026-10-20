@@ -1,5 +1,5 @@
 /**
- * The jingle under the Simple Products card (Edgar, 2026-10-20): as long as the card is on
+ * The jingle under the Simple Products card: as long as the card is on
  * (1.25 s), jolly and far too much, and pitched an octave up from its first draft. A square
  * arpeggio bouncing up and down the C major chord at fourteen notes a second, a sawtooth an octave under it, a slide whistle swooping up and
  * back down, a bell ringing twice, a party horn at each end, a kick every quarter second and
@@ -7,13 +7,13 @@
  * filtered noise through Prntr's master). Stopped early on abort.
  */
 
-/** Everything an octave up from the first draft: Edgar wanted it pitched up twice at least (2026-10-20). */
+/** Everything an octave up from the first draft: at least twice its pitch. */
 const UP = 2;
 /** Twenty-two steps up and down C6–C8, in Hz. */
 const ARP = [523.3, 659.3, 784, 1046.5, 1318.5, 1568, 2093, 1568, 1318.5, 1046.5, 784, 659.3, 523.3, 659.3, 784, 1046.5, 1318.5, 1568, 2093, 2637, 3136, 4186].map((f) => f * UP);
 const STEP_S = 0.07;
 
-/** The beep between the card and the title (Edgar, 2026-10-20): the bleep of a cut between
+/** The beep between the card and the title: the bleep of a cut between
  * scenes, a 1 kHz sine for the whole of `durationS`, hard on and hard off. */
 export function playBeep(ctx: AudioContext, out: AudioNode, durationS: number): { stop(): void } {
   const t0 = ctx.currentTime;

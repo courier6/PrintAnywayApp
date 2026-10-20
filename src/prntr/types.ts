@@ -36,7 +36,7 @@ export interface StageContext {
 export type Handoff = { kind: 'start' } | { kind: 'cleared'; score: number; player: string } | { kind: 'over'; score: number };
 
 /**
- * The certificate of completion (Edgar, 2026-10-20): the page the app loads in place of
+ * The certificate of completion: the page the app loads in place of
  * its document when the chain ends cleared, with the id printed on it, unique to that win.
  */
 export interface Certificate {

@@ -5,8 +5,7 @@ import type { PrntrAudio } from '../../audio';
  * .wav files beside it are renders for listening). Same recipes and numbers, played
  * live through Prntr's master gain instead of the context's destination. Without an
  * AudioContext every sound is a no-op. pageFeed, staplePunch, panic, death, gameOver,
- * shatter, tear, rustle, the sign's three and doorCreak are not in sounds.js: Edgar asked
- * for them after playing the room (2026-10-19).
+ * shatter, tear, rustle, the sign's three and doorCreak are not in sounds.js.
  */
 
 export interface Hum {
@@ -35,11 +34,11 @@ export interface RoomSounds {
   /** The scan's whine; the flash burst is scheduled 0.6 s later by the same call. */
   scanFlash(): void;
   stapleHit(): void;
-  /** A nut or a bolt hitting the glass: a clang (Edgar, 2026-10-20). */
+  /** A nut or a bolt hitting the glass: a clang. */
   boltHit(): void;
   /** A nut or a bolt thrown out of the slot: a heavier clack than a staple's. */
   boltPunch(): void;
-  /** Gun shot: a pistol (Edgar, 2026-10-19; the designer's candidates A and B are in sounds.js). */
+  /** Gun shot: a pistol (the designer's candidates A and B are in sounds.js). */
   shot(): void;
   /** Firing an empty gun. */
   dryClick(): void;
@@ -73,7 +72,7 @@ export interface RoomSounds {
   doorCreak(): void;
   /** The machine shorting out when the water reaches it: one burst of zaps. */
   zap(): void;
-  /** The short before the fire (Edgar, 2026-10-20): a zap at each of these ms, each its own, with a sizzle between. */
+  /** The short before the fire: a zap at each of these ms, each its own, with a sizzle between. */
   short(zapsMs: number[]): void;
   /** A jet of ink from a nozzle: a hiss for the jet's 1.4 s. */
   inkSpray(): void;
@@ -91,13 +90,13 @@ export interface RoomSounds {
   whoosh(): void;
   /** The engulfed machine bursting apart: a bang, then its pieces coming down. */
   burst(): void;
-  /** The first aid kit shot: a clasp's snap and a rising three-note chime (Edgar, 2026-10-20). */
+  /** The first aid kit shot: a clasp's snap and a rising three-note chime. */
   heal(): void;
   /** A tube shot to pieces: a pop, the hose's hiss, its bits clattering down. */
   tubeBurst(): void;
   /** Ink landing in the fire: a hiss of steam. */
   sizzle(): void;
-  /** The stage won (Edgar, 2026-10-20): a triumphant tune in squares, about 3.2 s. */
+  /** The stage won: a triumphant tune in squares, about 3.2 s. */
   fanfare(): void;
 }
 
@@ -368,7 +367,7 @@ export function createRoomSounds(audio: PrntrAudio): RoomSounds {
     dryClick() {
       noise(now(), 0.03, { hp: 2500, gain: 0.3, decay: 0.003 });
     },
-    // a weapon's reload (Edgar, 2026-10-19; the designer's was two clicks): the magazine out
+    // a weapon's reload (the designer's was two clicks): the magazine out
     // (a click), in (a clunk at 80 ms), then the slide racked at 200 and 290 ms, a scrape and a
     // snap each; it is done at 330 ms, right before the pips fill
     reload() {

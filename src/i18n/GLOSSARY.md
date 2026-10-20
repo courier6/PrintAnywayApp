@@ -49,4 +49,4 @@ Plain, short and friendly. People arrive frustrated by a printer that won't prin
 1. Translate `en.properties` into `<code>.properties` using this glossary.
 2. A fresh agent that has not seen `en.properties` back-translates the file to English; compare with `en.properties` and fix any change in meaning.
 3. Flag strings more than 40% longer than the English and check the layout at 360 px.
-4. Edgar spot-checks the landing copy and meta description, then the error messages.
+4. The Author spot-checks the landing copy and meta description, then the error messages.

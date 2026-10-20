@@ -15,7 +15,7 @@ export const INKS: readonly Ink[] = [
 ];
 
 /**
- * The secret ink (Edgar, 2026-10-20): gold, unlocked when Prntr's room is won and shown after
+ * The secret ink: gold, unlocked when Prntr's room is won and shown after
  * the other four until the page is reloaded. The certificate of completion comes up in it. Not
  * a printable thing: the recolouring gives it a shine (src/lib/recolor.ts).
  */

@@ -29,14 +29,14 @@ export const SPR = {
   KIT: parseSprite(SPRITES.KIT),
   KIT_OPEN: parseSprite(SPRITES.KIT_OPEN),
 };
-/** The clock at each quarter turn, for rolling (Edgar, 2026-10-20). */
+/** The clock at each quarter turn, for rolling. */
 const CLOCK_ROT = [0, 1, 2, 3].map((q) => rotateSprite(SPR.CLOCK, q));
 /** The cooler below its bottle, the plant's leaves and its pot, so each half can break alone. */
 const COOLER_BODY = sliceRows(SPR.COOLER, 8, 22);
 const PLANT_TOP = sliceRows(SPR.PLANT, 0, 10);
 const PLANT_POT = sliceRows(SPR.PLANT, 10, 16);
 
-/** What the gun has broken (Edgar, 2026-10-19): each stays broken for the rest of the stage. */
+/** What the gun has broken: each stays broken for the rest of the stage. */
 export interface Broken {
   /** Shot off the wall (it falls and rolls: `Clock`). */
   clock: boolean;
@@ -47,12 +47,12 @@ export interface Broken {
   plant: boolean;
   /** The pot. */
   vase: boolean;
-  /** The first aid kit, shot open (Edgar, 2026-10-20): it gave the player full health, once. */
+  /** The first aid kit, shot open: it gave the player full health, once. */
   kit: boolean;
 }
 
 /**
- * The fire once the water jug has broken (Edgar, 2026-10-19): it starts in the gap between
+ * The fire once the water jug has broken: it starts in the gap between
  * the cooler and the machine and grows over the cooler, then burns on. `u` is its growth,
  * `t` the frame's time for the flicker (0 = still).
  */
@@ -63,7 +63,7 @@ export interface Fire {
   v: number;
 }
 
-/** The clock (Edgar, 2026-10-20): shot, it falls off the wall to the floor in front of the cooler and
+/** The clock: shot, it falls off the wall to the floor in front of the cooler and
  * rolls to the left; near the burning cooler it catches fire and rolls on out of the frame. */
 export interface Clock {
   state: 'up' | 'falling' | 'rolling' | 'rest' | 'burning' | 'gone';
@@ -74,7 +74,7 @@ export interface Clock {
   rot: number;
 }
 
-/** The EXIT sign (Edgar, 2026-10-19): shot once it hangs loose from its left corner, shot again it falls. */
+/** The EXIT sign: shot once it hangs loose from its left corner, shot again it falls. */
 export interface ExitSign {
   state: 'up' | 'loose' | 'falling' | 'down';
   /** Its top-left corner (falling: on the way down). */
@@ -89,11 +89,11 @@ export interface ExitSign {
 /**
  * idle: closed, 2× at 88,100. lid: lid up, still 2× at 88,100 (1.1 s into the sticker
  * beat). between: lid up, 2× at 80,90 (the first of the two steps forward).
- * mad: 3× at 72,80. wreck: burst into `pieces`, engulfed (Edgar, 2026-10-20).
+ * mad: 3× at 72,80. wreck: burst into `pieces`, engulfed.
  */
 export type PrinterPose = 'idle' | 'lid' | 'between' | 'mad' | 'wreck';
 
-/** A piece of the burst machine (Edgar, 2026-10-20): its part of MFC_MAD and where it is now, drawn at 3×. */
+/** A piece of the burst machine: its part of MFC_MAD and where it is now, drawn at 3×. */
 export interface Piece {
   spr: Sprite;
   x: number;
@@ -115,7 +115,7 @@ export const MACHINE_PIECES: { spr: Sprite; hx: number; hy: number }[] = (
   ] as const
 ).map(([x0, y0, x1, y1]) => ({ spr: sliceRect(SPR.MFC_MAD, x0, y0, x1, y1), hx: x0, hy: y0 }));
 
-/** An ink particle on the far half of its flight, drawn behind the machine (Edgar, 2026-10-20). */
+/** An ink particle on the far half of its flight, drawn behind the machine. */
 export interface InkDot {
   x: number;
   y: number;
@@ -123,7 +123,7 @@ export interface InkDot {
   color: PalKey;
 }
 
-/** Where a shot hit nothing to break (Edgar, 2026-10-20): a dark hole in the wall or the ceiling,
+/** Where a shot hit nothing to break: a dark hole in the wall or the ceiling,
  * a hole through the door or the window's blind (the stage lights those red). */
 export interface Hole {
   x: number;
@@ -136,7 +136,7 @@ export function inDoorway(h: Hole, doorGap: number): boolean {
   return h.kind === 'door' && h.x + 1 > 13 && h.x - 1 <= 13 + doorGap;
 }
 
-/** An ink tube up from behind the machine (Edgar, 2026-10-20): its x, its head's top row, the ink in its mouth. */
+/** An ink tube up from behind the machine: its x, its head's top row, the ink in its mouth. */
 export interface Tube {
   x: number;
   top: number;
@@ -150,7 +150,7 @@ export interface SceneState {
   /** The machine's power light red (the beat after the USB goes in; the handoff reddened its sticker). */
   ledRed: boolean;
   trayPage: boolean;
-  /** The USB stick still on the carpet (Edgar, 2026-10-19: it starts the fight). */
+  /** The USB stick still on the carpet (it starts the fight). */
   usb: boolean;
   /** 0 = at rest; 5, 6, 7 = the scan bar's sprite row during the sweep (mad only). */
   scanRow: 0 | 5 | 6 | 7;
@@ -161,33 +161,33 @@ export interface SceneState {
   broken: Broken;
   clock: Clock;
   exit: ExitSign;
-  /** How wide the door stands open on black, in px: ajar at 6; once the sign is down it swings in (Edgar, 2026-10-19). */
+  /** How wide the door stands open on black, in px: ajar at 6; once the sign is down it swings in. */
   doorGap: number;
   fire: Fire | null;
-  /** The mad machine's tremble: the 3× pose drawn this far off its place (Edgar, 2026-10-19). */
+  /** The mad machine's tremble: the 3× pose drawn this far off its place. */
   shake: { x: number; y: number };
   /** The ink in the air behind the machine this frame: the jets come up from behind it. */
   inkBehind: InkDot[];
   /** The ink tubes up this frame; drawn before the ink behind the machine and the machine. */
   tubes: Tube[];
-  /** The x of each tube shot to pieces (Edgar, 2026-10-20): its stump stays over the machine's top edge. */
+  /** The x of each tube shot to pieces: its stump stays over the machine's top edge. */
   stubs: number[];
   /** The bullet holes, oldest first. */
   holes: Hole[];
-  /** The window's blind shot to pieces (Edgar, 2026-10-20): a gaping hole, the red behind it. */
+  /** The window's blind shot to pieces: a gaping hole, the red behind it. */
   windowOpen: boolean;
   /** The burst machine's pieces, where they are this frame (printer `wreck`). */
   pieces: Piece[];
-  /** How much of the machine's health is gone, 0..1 (Edgar, 2026-10-20): it wears with it. */
+  /** How much of the machine's health is gone, 0..1: it wears with it. */
   damage: number;
 }
 
-/** Where the clock hangs (16×15) and where the post-it board does (20×18): swapped on Edgar's
- * review (2026-10-20), the board lower than the clock and next to the window. liminal.py had the
+/** Where the clock hangs (16×15) and where the post-it board does (20×18): swapped, the
+ * board lower than the clock and next to the window. liminal.py had the
  * board at 66,40 and the clock at 112,36. */
 export const CLOCK_AT = { x: 68, y: 41 };
 export const BOARD_AT = { x: 136, y: 46 };
-/** The first aid kit (13×10), on the wall at the lower right of the window (Edgar, 2026-10-20). */
+/** The first aid kit (13×10), on the wall at the lower right of the window. */
 export const KIT_AT = { x: 226, y: 79 };
 
 /** A cheap hash to 0..1, so a flame column flickers on its own without random state. */
@@ -234,7 +234,7 @@ const later = (u: number, from: number) => Math.max(0, Math.min(1, (u - from) / 
 
 /**
  * The fire in three layers, so it sits among the things it burns rather than in front of
- * them (Edgar): `back`, two smaller flames behind the cooler on the floor further in (they
+ * them: `back`, two smaller flames behind the cooler on the floor further in (they
  * come as the fire grows and round it out); `mid`, the main flame, in front of the cooler
  * and behind the machine. The third, `drawFireFront`, goes on the stage's front canvas.
  */
@@ -250,7 +250,7 @@ function drawFire(p: Pix, f: Fire, layer: 'back' | 'mid'): void {
 
 /**
  * The fire's front layer: a low lick at the machine's foot and the cooler's base, and the
- * flames on the machine once it spreads. Drawn on the front canvas (Edgar, 2026-10-20), so
+ * flames on the machine once it spreads. Drawn on the front canvas, so
  * they are in front of the slot's red light like the pages, under the things the machine throws.
  */
 export function drawFireFront(p: Pix, f: Fire): void {
@@ -298,7 +298,7 @@ function line(p: Pix, x0: number, y0: number, x1: number, y1: number, key: PalKe
   for (let i = 0; i <= n; i++) p.set(Math.round(x0 + ((x1 - x0) * i) / n), Math.round(y0 + ((y1 - y0) * i) / n), key);
 }
 
-/** The machine's wear (Edgar, 2026-10-20), in px off the 3× pose's corner, by the damage that brings each on. */
+/** The machine's wear, in px off the 3× pose's corner, by the damage that brings each on. */
 const CRACKS: { at: number; pts: [number, number][] }[] = [
   { at: 0.25, pts: [[10, 4], [14, 9], [12, 15], [17, 20], [15, 26]] },
   { at: 0.5, pts: [[80, 30], [76, 36], [79, 42], [74, 48], [77, 55], [73, 61]] },
@@ -310,7 +310,7 @@ const CRACKS: { at: number; pts: [number, number][] }[] = [
 const SCORCH: [number, number][] = [[14, 50], [15, 51], [17, 53], [16, 55], [19, 56], [13, 57], [21, 58], [18, 60], [84, 46], [86, 48], [83, 50]];
 
 /**
- * The machine wearing as its health goes (Edgar, 2026-10-20): at a quarter of the damage a crack
+ * The machine wearing as its health goes: at a quarter of the damage a crack
  * down the lid's left; at half a crack down the right of the body with a scorched patch on the
  * lower left and a nick in the band; at three quarters a crack through the lid into the body, a
  * long one across the body, and the lid's right corner knocked out to the wall behind.
@@ -383,12 +383,12 @@ export function drawRoom(p: Pix, s: SceneState): void {
   const sign = s.exit;
   if (sign.state === 'down') p.blit(Math.round(sign.x), Math.round(sign.y), SPR.EXIT_BROKEN);
   else p.blit(Math.round(sign.x), Math.round(sign.y), SPR.EXIT, 1, { remap: { n: sign.lit ? 'R' : 'G' }, tilt: sign.tilt });
-  // the wall art between the clock and the board (Edgar, 2026-10-20): a wooden frame with a pale
+  // the wall art between the clock and the board: a wooden frame with a pale
   // mat; the print itself is the stage's art canvas over the rect inside (a plum fallback under it)
   p.rect(ART_AT.x - 2, ART_AT.y - 2, ART_AT.x + ART_AT.w + 2, ART_AT.y + ART_AT.h + 2, 'K');
   p.rect(ART_AT.x - 1, ART_AT.y - 1, ART_AT.x + ART_AT.w + 1, ART_AT.y + ART_AT.h + 1, 'D');
   p.rect(ART_AT.x, ART_AT.y, ART_AT.x + ART_AT.w, ART_AT.y + ART_AT.h, 'K');
-  // the clock where the board was, the post-it board lower and by the window (Edgar, 2026-10-20)
+  // the clock where the board was, the post-it board lower and by the window
   if (s.clock.state === 'up') p.blit(CLOCK_AT.x, CLOCK_AT.y, SPR.CLOCK);
   p.blit(BOARD_AT.x, BOARD_AT.y, s.broken.poster ? SPR.POSTER_TORN : SPR.POSTER);
   // the window: light, blinds, nothing outside; shot open, the black the red light fills

@@ -1,7 +1,7 @@
 import type { Certificate } from './types';
 
 /**
- * The certificate of completion (Edgar, 2026-10-20): the page the app comes back to once the
+ * The certificate of completion: the page the app comes back to once the
  * room is won, in place of the document it had. A US Letter page at 2×, black on white, set
  * like a corporate certificate that has been through something: a black header band, the title
  * glitched in slices, a data glyph and a seal made of pixels, a hex dump, a barcode, all of

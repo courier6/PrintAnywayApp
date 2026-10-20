@@ -9,14 +9,14 @@ const WOBBLE = 1;
 const POP_MS = 200;
 /** The Simple Products card, fades included. */
 const CARD_MS = 1250;
-/** Then the cut (Edgar, 2026-10-20): the card inverted, the logo alone on white, under a beep. */
+/** Then the cut: the card inverted, the logo alone on white, under a beep. */
 const BEEP_MS = 250;
 /** From the last letter landing to the credit flip and its coin cue. */
 const CREDIT_AFTER_TITLE_MS = 2000;
 /** Length of the credit glow (must match prntr-glow in prntr.css). */
 const GLOW_MS = 1500;
 /**
- * The flicker before the flip (Edgar, 2026-10-19; not in the design handoff):
+ * The flicker before the flip (not in the design handoff):
  * the same view, corrupted, shown twice for a few frames. Pairs of
  * [on, off] in ms before the flip.
  */
@@ -84,7 +84,7 @@ export const opening: Stage = {
       `<div class="prntr-card-brand">${LOGO}<div class="prntr-card-name">SIMPLE PRODUCTS</div></div>` +
       '<div class="prntr-card-presents">presents…</div>';
     root.append(card);
-    // Under the card, as long as it is on: the jingle (Edgar, 2026-10-20). Cut with the stage.
+    // Under the card, as long as it is on: the jingle. Cut with the stage.
     const jingle = audio.context && audio.master ? playCardJingle(audio.context, audio.master, CARD_MS / 1000) : null;
     if (jingle) signal.addEventListener('abort', () => jingle.stop(), { once: true });
     const t0 = performance.now();
@@ -135,7 +135,7 @@ export const opening: Stage = {
     });
     wrap.append(h1);
     root.append(wrap);
-    // The cloud over the word (Edgar, 2026-10-19): white now, red through the flicker, the storm
+    // The cloud over the word: white now, red through the flicker, the storm
     // from the flip on (2026-10-20). Stopped with the stage.
     const storm = startStorm(root, h1, stormSlots, (i) => performance.now() >= t1 + inAt[i], reduced, audio);
     signal.addEventListener('abort', () => storm.stop(), { once: true });
@@ -145,7 +145,7 @@ export const opening: Stage = {
     await at(d + 500);
     // The arcade layer is the room's frame (240×160 at the largest whole-number scale,
     // centred), so INSERT COIN and the footer sit where the room's HUD will put its caption
-    // and CREDIT, and nothing jumps at the cut (Edgar, 2026-10-19).
+    // and CREDIT, and nothing jumps at the cut.
     const arcade = el('div', 'prntr-arcade');
     const fit = () => arcade.style.setProperty('--s', String(Math.max(1, Math.floor(Math.min(root.clientWidth / W, root.clientHeight / H)))));
     fit();
@@ -169,7 +169,7 @@ export const opening: Stage = {
     credit.classList.add('is-glowing');
     // The flicker: something shows through. Under reduced motion one steady
     // corrupted frame instead of two flashes.
-    // While the frame is corrupted a low tone pulses very fast (Edgar, 2026-10-20), and stops with it.
+    // While the frame is corrupted a low tone pulses very fast, and stops with it.
     let pulse: { stop(): void } | null = null;
     const corrupt = (on: boolean) => {
       root.classList.toggle('is-corrupt', on);

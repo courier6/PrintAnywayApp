@@ -1,21 +1,21 @@
 /**
- * The storm over the title (Edgar, 2026-10-19; not in the design handoff): a pixel cloud as
+ * The storm over the title (not in the design handoff): a pixel cloud as
  * far above the word as the word is tall. It is a plain white cloud while the title comes in,
  * turns the red of the door's light while the credit flickers, and from the flip on it is a
- * dark storm cloud raining straight down on the word (Edgar, 2026-10-20). The rain wets the
+ * dark storm cloud raining straight down on the word. The rain wets the
  * letters: water sits on their top edges and pools in the corners, and drips off their
  * undersides. Now and then lightning strikes and the screen flashes white or blue. Everything
  * is drawn on one canvas over the viewport in whole "pixels" of P screen px (P from the
  * title's font size). Under reduced motion only the cloud is drawn, in its weather's colours.
  * While the title comes in (and, glitched, through the flicker) the cloud is one small cute
- * one; the dark bank of three is the storm's alone (Edgar, 2026-10-20). The clouds are drawn in
+ * one; the dark bank of three is the storm's alone. The clouds are drawn in
  * cells half the size of the rain's pixel, so their puffs are round and thin where they meet. While the credit
  * flickers the cute cloud is red and torn: cut into bands and blocks that jump along random
  * angles, some tilted, re-rolled every few frames.
  * The storm sounds like one, in the room's style: rain, a gusting wind, thunder after each
- * strike (Edgar, 2026-10-20). Between the near strikes, lightning flickers far off behind the
+ * strike. Between the near strikes, lightning flickers far off behind the
  * clouds, seen only below them and its thunder comes half a second to a second later, a distant roll.
- * Each near strike's flash lights a place (Edgar, 2026-10-20): a corporate building off a lonely
+ * Each near strike's flash lights a place: a corporate building off a lonely
  * road with a vast parking lot, old forest around it, all of it dark silhouettes under the flash,
  * bright around the building and gone into the dark towards the edges of the screen, seen only
  * while the flash lasts.
@@ -32,13 +32,13 @@ export interface StormSlot {
   rot: number;
 }
 
-/** The cloud's weather (Edgar, 2026-10-20): calm while the title comes in, red through the
+/** The cloud's weather: calm while the title comes in, red through the
  * credit's flicker, the storm from the flip on. */
 export type Weather = 'calm' | 'red' | 'storm';
 
 export interface Storm {
   setWeather(w: Weather): void;
-  /** One last strike as the title is left (Edgar, 2026-10-20): the bolt, the flash and a loud
+  /** One last strike as the title is left: the bolt, the flash and a loud
    * thunder that rolls on into the room. Returns how many ms to hold the frame (0 if still). */
   finale(): number;
   stop(): void;
@@ -54,7 +54,7 @@ export interface StormSound {
   stop(fadeS?: number): void;
 }
 
-/** The glitch's pulse (Edgar, 2026-10-20): a low tone, PULSE_HZ, gated on and off PULSE_RATE
+/** The glitch's pulse: a low tone, PULSE_HZ, gated on and off PULSE_RATE
  * times a second like a synthesizer's fastest pulse, lowpassed at PULSE_LP, while the screen
  * and the cloud are glitched; it stops the moment the glitch does. */
 const PULSE_HZ = 55;
@@ -311,7 +311,7 @@ function makePuffs(cols: number, rows: number, baseH: number, puffs: { cx: numbe
   return cells;
 }
 
-/** A storm cloud (Edgar, 2026-10-20): fat peaks, big then small, with thin saddles between
+/** A storm cloud: fat peaks, big then small, with thin saddles between
  * them; `seed` varies the radii and which end starts big. */
 function makeBank(cols: number, rows: number, seed: number): boolean[][] {
   const baseH = Math.max(3, Math.round(rows * 0.28));
@@ -325,7 +325,7 @@ function makeBank(cols: number, rows: number, seed: number): boolean[][] {
   return makePuffs(cols, rows, baseH, puffs);
 }
 
-/** The cute cloud (Edgar, 2026-10-20): `cols` wide, three round puffs, the middle one the
+/** The cute cloud: `cols` wide, three round puffs, the middle one the
  * biggest, on a flat base with rounded ends. */
 function makeCute(cols: number): boolean[][] {
   const R = Math.max(2.5, cols * 0.2);
@@ -379,7 +379,7 @@ export function startStorm(root: HTMLElement, h1: HTMLElement, slots: StormSlot[
   let U = 8;
   let cloudX = 0;
   let cloudY = 0;
-  /** Two more clouds for the storm, behind the first and a row lower (Edgar, 2026-10-20). */
+  /** Two more clouds for the storm, behind the first and a row lower. */
   let extras: { cells: boolean[][]; x: number; y: number }[] = [];
   /** The cute cloud of the calm and the red weather, its bottom on the bank's bottom line. */
   let cute: boolean[][] = [];
@@ -390,7 +390,7 @@ export function startStorm(root: HTMLElement, h1: HTMLElement, slots: StormSlot[
   const place: Record<'white' | 'blue', HTMLCanvasElement> = { white: document.createElement('canvas'), blue: document.createElement('canvas') };
 
   /**
-   * The place the lightning lights (Edgar, 2026-10-20), in cells of P: the flash colour for the
+   * The place the lightning lights, in cells of P: the flash colour for the
    * sky and the ground, and on it the silhouettes: a flat-roofed office block with floors of
    * windows, rooftop units and a sign on a pole, standing under the word on a horizon low on
    * the screen, past the far edge of a parking lot that widens to the bottom of the screen, its

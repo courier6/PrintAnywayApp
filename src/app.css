@@ -810,8 +810,8 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
   margin-bottom: 0;
 }
 
-/* The way into Prntr: words in the sentence, in the chosen ink, no underline
-   (Edgar, 2026-10-19). The colour is set inline from the ink swatch. */
+/* The way into Prntr: words in the sentence, in the chosen ink, no underline.
+   The colour is set inline from the ink swatch. */
 .help-link {
   border: none;
   background: none;

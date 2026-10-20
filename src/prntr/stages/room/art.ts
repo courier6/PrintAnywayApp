@@ -1,5 +1,5 @@
 /**
- * The wall art (Edgar, 2026-10-20): a print of the Winged Victory of Samothrace, the headless,
+ * The wall art: a print of the Winged Victory of Samothrace, the headless,
  * armless Nike of the Louvre striding into the wind on the prow of a ship, between the clock
  * and the post-it board. Pixel art, but oddly finer than the room around it: it is drawn on a
  * canvas of its own at ART_SUB cells to the room's pixel, from vector shapes with gradients,

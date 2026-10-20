@@ -8,7 +8,7 @@ import { createRoomSounds, type FireSound, type Hum } from './sounds';
 
 // ---------------------------------------------------------------------------
 // Tunables. The attack cycle is "tune freely" (handoff §2.7), slowed down and made
-// shootable on Edgar's review (2026-10-19) so the player has time to fight back; the
+// shootable so the player has time to fight back; the
 // rest is designed.
 // ---------------------------------------------------------------------------
 
@@ -20,7 +20,7 @@ const HIT_POINTS = 10;
 const PAGE_POINTS = 1;
 const STAPLE_POINTS = 1;
 const SHOTS = 6;
-/** The hearts are lives, as in the arcade (Edgar, 2026-10-19): slots, lives at the start, and the
+/** The hearts are lives, as in the arcade: slots, lives at the start, and the
  * one life a continue buys. A hit costs a life: the room freezes under a red dim for DEATH_MS
  * with the three notes and everything in the air gone, then the fight goes on, the next attack
  * RESPAWN_MS later. */
@@ -29,17 +29,17 @@ const LIVES_START = 2;
 const LIVES_CONTINUE = 1;
 const DEATH_MS = 1200;
 const RESPAWN_MS = 2000;
-/** The player's health, a green bar like the machine's (Edgar, 2026-10-20): each attack that
+/** The player's health, a green bar like the machine's: each attack that
  * lands takes HIT_DAMAGE of it and the room flashes red for HURT_MS; the hit that empties it
  * costs a life (the death beat above), and the bar is full again when the beat is over. */
 const PLAYER_HEALTH = 100;
 const HIT_DAMAGE = { staple: 25, page: 34, firePage: 43, ink: 50, nut: 68, bolt: 68 } as const;
 const HURT_MS = 150;
 /** A lost heart's ghost floating up can be shot (± GHOST_HIT_PAD virtual px around it): it pops
- * like a balloon, its bits gone after POP_MS (Edgar, 2026-10-20). No points: it was the player's. */
+ * like a balloon, its bits gone after POP_MS. No points: it was the player's. */
 const GHOST_HIT_PAD = 3;
 const POP_MS = 450;
-/** The player's name under their bar (Edgar, 2026-10-20): NEW PLAYER until there is a login. At
+/** The player's name under their bar: NEW PLAYER until there is a login. At
  * WORN_HEALTH or less it shivers now and then (a letter flipping for a tick every NAME_FLIP_MS or
  * so); at ROUGH_HEALTH or less it is rough: jittering, split into red and cyan, its letters
  * breaking up every NAME_GLITCH_MS or so. */
@@ -53,9 +53,9 @@ const NAME_GLITCH_CHARS = '#%&/?!0X';
 const TICK_MS = 4000;
 const AUTO_RELOAD_MS = 800;
 /** A reload refills the shot pips in two steps this far apart: half at once, the rest right
- * after the slide is racked (the sound in sounds.ts ends at 330 ms; Edgar, 2026-10-19). */
+ * after the slide is racked (the sound in sounds.ts ends at 330 ms). */
 const RELOAD_STEP_MS = 360;
-/** Slowed to 2.5 / 3 / 2 s on Edgar's review of 2026-10-19, then a quarter faster on 2026-10-20. */
+/** Slowed to 2.5 / 3 / 2 s, then made a quarter faster. */
 const FIRST_ATTACK_MS = 2000;
 const ATTACK_GAP_MS = 2250;
 const ATTACK_GAP_LATE_MS = 1500;
@@ -67,7 +67,7 @@ const STAPLE_MS = 1500;
 const STAPLE_STAGGER_MS = 500;
 /** The staple's hit box: its sprite at the current scale, plus this many virtual px around. */
 const STAPLE_HIT_PAD = 3;
-/** At half health or less the machine throws nuts and bolts too (Edgar, 2026-10-20): out of the
+/** At half health or less the machine throws nuts and bolts too: out of the
  * slot and at the camera like the staples, spinning, a little quicker, twice a page's damage
  * (HIT_DAMAGE), BOLT_POINTS when shot. */
 const BOLT_HEALTH = 0.5;
@@ -75,61 +75,60 @@ const BOLT_MS = 1300;
 const BOLT_STAGGER_MS = 400;
 const BOLT_POINTS = 2;
 const BOLT_SPIN_MS = 100;
-/** 1.8 s, then a quarter longer on Edgar's review (2026-10-19): they were landing too fast. */
+/** 1.8 s, then a quarter longer: they were landing too fast. */
 const PAGE_MS = 2250;
-/** While the machine burns, the pages it throws are on fire (Edgar, 2026-10-20): a quarter more
+/** While the machine burns, the pages it throws are on fire: a quarter more
  * damage (HIT_DAMAGE.firePage, 34 × 1.25) and twice the points when shot. */
 const FIRE_PAGE_POINTS = PAGE_POINTS * 2;
 const PAGE_STAGGER_MS = 450;
 const PAGE_LANDED_MS = 1500;
 const PAGE_SLIDE_MS = 400;
 const HIT_FLASH_FRAMES = 2;
-/** CONTINUE? counts 9 → 0, a second each; unanswered, it is a game over (Edgar, 2026-10-19). */
+/** CONTINUE? counts 9 → 0, a second each; unanswered, it is a game over. */
 const CONTINUE_MS = 10_000;
 /** Clicks this soon after death do not count as yes: the shot that died must not answer. */
 const CONTINUE_ARM_MS = 300;
-/** A game over (Edgar, 2026-10-20): GAME OVER giant in Comic Sans across the frozen, dimmed room
+/** A game over: GAME OVER giant in Comic Sans across the frozen, dimmed room
  * for GAME_OVER_MS, then the dim alone for OVER_HOLD_MS as before, then Prntr ends. */
 const GAME_OVER_MS = 2000;
 const OVER_HOLD_MS = 500;
 /** PROTECT YOURSELF. and the binding under it stay this long, then fade (HINT_FADE_MS, as in prntr.css). */
 const HINT_MS = 2000;
 const HINT_FADE_MS = 500;
-/** The open machine's button blinks bright red twice, rarely, so it looks like a target (Edgar, 2026-10-19). */
+/** The open machine's button blinks bright red twice, rarely, so it looks like a target. */
 const BLINK_MIN_MS = 4000;
 const BLINK_MAX_MS = 9000;
 const BLINK_FIRST_MS = 1500;
 /** Virtual px of the button on the 3× pose (MFC_MAD row 7, columns 24–26). */
 const BUTTON = { x: 144, y: 101, w: 9, h: 3 };
-/** A hit on the button (± BUTTON_HIT_PAD): more damage than the machine (15, then a quarter more:
- * Edgar, 2026-10-20), and the attacks come sooner, the gap × RAGE_STEP per hit, at most RAGE_MAX
- * times (Edgar, 2026-10-19). */
+/** A hit on the button (± BUTTON_HIT_PAD): more damage than the machine (15, then a quarter more: 19),
+ * and the attacks come sooner, the gap × RAGE_STEP per hit, at most RAGE_MAX times. */
 const BUTTON_POINTS = 19;
 const BUTTON_HIT_PAD = 1;
 const RAGE_STEP = 0.85;
 const RAGE_MAX = 4;
-/** Shooting one of the room's things breaks it, once, for this many points (Edgar, 2026-10-19). */
+/** Shooting one of the room's things breaks it, once, for this many points. */
 const BREAK_POINTS = 5;
-/** The water jug breaking shorts the machine (Edgar, 2026-10-20): for SHORT_MS it zaps and sparks,
+/** The water jug breaking shorts the machine: for SHORT_MS it zaps and sparks,
  * a burst of sparks off its wet side at each of SHORT_ZAPS_MS with a crackle and a flash of the
  * machine, before the fire takes. Then a fire on its wet side grows over the cooler for
- * FIRE_GROW_MS, and burns on at that size (Edgar, 2026-10-19). */
+ * FIRE_GROW_MS, and burns on at that size. */
 const SHORT_MS = 1800;
 const SHORT_ZAPS_MS = [0, 380, 700, 1050, 1400];
 /** Where the sparks come from: the machine's wet left foot on the 3× pose. */
 const SHORT_AT = { x: 74, y: 140 };
 const FIRE_GROW_MS = 12_000;
-/** This long after the fire starts the machine is mad (Edgar, 2026-10-19): its slot glows red like
+/** This long after the fire starts the machine is mad: its slot glows red like
  * the door, its button stays bright, and it trembles (a new offset every SHAKE_FRAMES frames). */
 const MAD_AFTER_MS = 1500;
 const SHAKE_FRAMES = 3;
 /** Once the machine's health is down to SPREAD_HEALTH and the fire is burning, it spreads onto the
  * machine over FIRE_SPREAD_MS; engulfed, the machine's health runs out over DEPLETE_MS and the
- * player wins, unless the machine gets them first (Edgar, 2026-10-19; three quarters, 2026-10-20). */
+ * player wins, unless the machine gets them first (three quarters). */
 const SPREAD_HEALTH = 0.75;
 const FIRE_SPREAD_MS = 20_000;
 const DEPLETE_MS = 1500;
-/** Shooting the machine where it burns stokes the fire (Edgar, 2026-10-20): every FIRE_STOKE_SHOTS
+/** Shooting the machine where it burns stokes the fire: every FIRE_STOKE_SHOTS
  * hits in the flames, the spread onto the machine takes STOKE_STEP of the time it had left, at
  * most STOKE_MAX times (about twice as fast); stoked before it spreads, it spreads faster when it
  * does. The shot does its damage as usual; the crackle flares for STOKE_FLARE_MS. */
@@ -137,16 +136,16 @@ const FIRE_STOKE_SHOTS = 3;
 const STOKE_STEP = 0.8;
 const STOKE_MAX = 3;
 const STOKE_FLARE_MS = 400;
-/** The mad machine's fourth attack (Edgar, 2026-10-19): ink sprayed from behind the machine,
+/** The mad machine's fourth attack: ink sprayed from behind the machine,
  * cyan, magenta and yellow in turn, never black (it cannot do that). Each jet comes out of a tube
- * that rises from behind the machine's top edge at one of NOZZLES_X (Edgar, 2026-10-20): its head
+ * that rises from behind the machine's top edge at one of NOZZLES_X: its head
  * comes up to TUBE_TOP over TUBE_RISE_MS before the jet starts and sinks back as long after it
  * ends; the tube is drawn behind the machine and the ink, and the first half of a particle's
  * flight behind the machine too. SPRAY_COUNT jets a volley, SPRAY_STAGGER_MS apart; a jet runs
  * SPRAY_MS, a particle every SPRAY_EVERY_MS, each flying SPRAY_FLIGHT_MS along an arc SPRAY_ARC
  * px high from the tube's mouth to the jet's target, where the splat builds up as they land.
  * Shooting the tube over the edge (± NOZZLE_HIT_PAD) blows it up; a splat that completes is a hit.
- * The splat blinds (Edgar, 2026-10-20): it builds to 4× (64×56 of the 240×160), stays
+ * The splat blinds: it builds to 4× (64×56 of the 240×160), stays
  * INK_LANDED_MS, then runs down the glass and out of the bottom of the view over INK_SLIDE_MS,
  * leaving INK_DRIPS streaks of ink above it as it goes. */
 const SPRAY_COUNT = 3;
@@ -162,20 +161,19 @@ const TUBE_TOP = 72;
 const TUBE_MOUTH = TUBE_TOP + 2;
 const TUBE_RISE_MS = 250;
 const NOZZLE_HIT_PAD = 4;
-/** A tube shot blows up (Edgar, 2026-10-20): the jet stops, its bits fly, the nozzle is dead for
+/** A tube shot blows up: the jet stops, its bits fly, the nozzle is dead for
  * the rest of the stage (its stump stays); with every nozzle dead the ink attack is gone. */
 const TUBE_POINTS = 5;
 const INK_LANDED_MS = 1500;
 const INK_SLIDE_MS = 1800;
 const INK_DRIPS = 4;
 const INK_COLORS = ['c', 'm', 'y'] as const;
-/** While the fire burns, the last jet of a volley goes at it instead of the player (Edgar,
- * 2026-10-20): where it lands the flames go out. The fire loses SNUFF_U of its growth and grows
- * back from there; left with less than SNUFF_OUT, it is out for good. A jet that is stopped
- * does nothing to it. */
+/** While the fire burns, the last jet of a volley goes at it instead of the player: where it
+ * lands the flames go out. The fire loses SNUFF_U of its growth and grows back from there; left
+ * with less than SNUFF_OUT, it is out for good. A jet that is stopped does nothing to it. */
 const SNUFF_U = 0.35;
 const SNUFF_OUT = 0.1;
-/** The EXIT sign (Edgar, 2026-10-19), BREAK_POINTS a hit: its hit box (the sprite plus 2 px, and the
+/** The EXIT sign, BREAK_POINTS a hit: its hit box (the sprite plus 2 px, and the
  * room it swings in); the first hit knocks it loose and its letters are on only in these ms windows
  * after it, then out; the second brings it down over EXIT_FALL_MS from the wall to the floor. */
 const EXIT_HIT = { x0: 15, y0: 29, x1: 36, y1: 45 };
@@ -187,14 +185,14 @@ const EXIT_FLICKER: [number, number][] = [
 const EXIT_FALL_MS = 550;
 const EXIT_WALL = { x: 17, y: 31 };
 const EXIT_FLOOR = { x: 20, y: 108 };
-/** The door (Edgar, 2026-10-19): ajar DOOR_AJAR px on black; DOOR_DELAY_MS after the sign hits the
+/** The door: ajar DOOR_AJAR px on black; DOOR_DELAY_MS after the sign hits the
  * floor it creaks open to DOOR_OPEN px over DOOR_OPEN_MS, and the red from inside reaches into
  * the room (.prntr-room-frame.is-open, prntr.css). It never closes again. */
 const DOOR_AJAR = 6;
 const DOOR_OPEN = 22;
 const DOOR_DELAY_MS = 400;
 const DOOR_OPEN_MS = 1400;
-/** A shot that hits nothing to break leaves a hole (Edgar, 2026-10-20): dark in the wall and the
+/** A shot that hits nothing to break leaves a hole: dark in the wall and the
  * ceiling, lit red through the door and the window's blind, as if the red behind the door were
  * behind everything. The oldest go past HOLES_MAX. The carpet takes no mark. */
 const HOLES_MAX = 150;
@@ -202,9 +200,9 @@ const DOOR = { x0: 10, y0: 40, x1: 44, y1: 108 };
 const WINDOW = { x0: 160, y0: 36, x1: 224, y1: 90 };
 /** The carpet starts here. */
 const FLOOR_Y = 109;
-/** This many holes in the blind and it comes apart, for BREAK_POINTS (Edgar, 2026-10-20; six, then half again as many). */
+/** This many holes in the blind and it comes apart, for BREAK_POINTS (six, then half again as many). */
 const WINDOW_BREAK_SHOTS = 9;
-/** Beaten, the machine bursts apart (Edgar, 2026-10-20): engulfed by the fire, or at 1337 by the
+/** Beaten, the machine bursts apart: engulfed by the fire, or at 1337 by the
  * gun. Its eight pieces fly out and up and fall under PIECE_GRAVITY px/s² to the floor, each a
  * little nearer than the last; if there is a fire it rages on, its flames on the machine growing
  * by RAGE_MORE over the second after the score runs out instead of dying down; without one the
@@ -218,7 +216,7 @@ const WIN_END_MS = 4300;
 
 /** The machine at 3×: the gun's target. */
 const MACHINE = { x0: 72, y0: 80, x1: 168, y1: 146 };
-/** The machine's output slot on the 3× pose (MFC_MAD row 11): pages and staples come out of it (Edgar, 2026-10-19). */
+/** The machine's output slot on the 3× pose (MFC_MAD row 11): pages and staples come out of it. */
 const SLOT = { x0: 84, x1: 153, y: 113 };
 /** The first part of a page's flight is spent rising out of the slot, row by row. */
 const PAGE_EJECT = 0.2;
@@ -228,12 +226,12 @@ const PAGE_TARGETS_X = [30, 75, 120, 165, 210];
 /** Where each of the five pages comes out, left to right along the slot. */
 const PAGE_ORIGINS_X = [94, 107, 120, 133, 146];
 /** The USB stick on the carpet (USB at 2× at 166,136): its centre, and what finding it says before
- * the beat starts USB_PLUG_MS later (Edgar, 2026-10-19; the handoff started the fight from the sticker). */
+ * the beat starts USB_PLUG_MS later (the handoff started the fight from the sticker). */
 const USB = { x: 176, y: 141 };
 const USB_CAPTION = 'YOU FOUND A USB. YOU PLUG IT INTO THE PRINTER.';
 const USB_PLUG_MS = 2200;
 /** The first aid kit's hotspot and hit box: its sprite (KIT_AT in scene.ts) plus 3 px. Shot, it gives
- * the player full health, once, and hangs open and empty after (Edgar, 2026-10-20). No points. */
+ * the player full health, once, and hangs open and empty after. No points. */
 const KIT_HIT = { x0: KIT_AT.x - 3, y0: KIT_AT.y - 3, x1: KIT_AT.x + 16, y1: KIT_AT.y + 13 };
 /** The clock's and the post-it board's hotspots: their sprites (CLOCK_AT, BOARD_AT in scene.ts) plus 4 px. */
 const CLOCK_HIT = { x0: 64, y0: 37, x1: 88, y1: 60 };
@@ -248,7 +246,7 @@ const BREAKABLES: { id: keyof Broken; x0: number; y0: number; x1: number; y1: nu
   { id: 'plant', x0: 198, y0: 101, x1: 230, y1: 123, sound: 'rustle' },
   { id: 'vase', x0: 204, y0: 123, x1: 224, y1: 137, sound: 'shatter' },
 ];
-/** The clock shot (Edgar, 2026-10-20): it falls off the wall over CLOCK_FALL_MS, drifting to
+/** The clock shot: it falls off the wall over CLOCK_FALL_MS, drifting to
  * CLOCK_LAND_X, to the floor in front of the cooler (its top at CLOCK_FLOOR_Y, its bottom at 140,
  * nearer than the cooler's base), bounces, and rolls to the left over CLOCK_ROLL_MS, slowing,
  * to rest at CLOCK_REST_X, a quarter turn every CLOCK_ROLL_PX. Rolling or at rest within
@@ -279,13 +277,13 @@ interface Hotspot {
 const HOTSPOTS: Hotspot[] = [
   { id: 'page', x0: 94, y0: 114, x1: 112, y1: 135, captions: ['A PAGE. BLANK.', 'A PAGE. BLANK.'] },
   { id: 'printer', x0: 84, y0: 96, x1: 156, y1: 148, captions: ["A PRINTER. IT'S ON.", "IT'S WARM."] },
-  // Too frightening to go through (Edgar, 2026-10-19; the handoff had LOCKED. / STILL LOCKED.).
+  // Too frightening to go through (the handoff had LOCKED. / STILL LOCKED.).
   { id: 'door', x0: 6, y0: 27, x1: 48, y1: 112, captions: ['NOT IN THERE.', "IT KNOWS YOU'RE HERE."] },
   { id: 'poster', ...BOARD_HIT, captions: ['SIMPLE PRODUCTS. WE PRINT.', 'SIMPLE PRODUCTS. WE PRINT.'] },
   { id: 'clock', ...CLOCK_HIT, captions: ['1:37.', '1:37.'] },
-  // The blind is down over it (Edgar, 2026-10-20; the handoff had IT'S BRIGHT OUT.).
+  // The blind is down over it (the handoff had IT'S BRIGHT OUT.).
   { id: 'kit', ...KIT_HIT, captions: ['A FIRST AID KIT. GREEN.', 'A FIRST AID KIT. GREEN.'] },
-  // The print between the clock and the board (Edgar, 2026-10-20).
+  // The print between the clock and the board.
   { id: 'art', x0: ART_AT.x - 4, y0: ART_AT.y - 4, x1: ART_AT.x + ART_AT.w + 4, y1: ART_AT.y + ART_AT.h + 4, captions: ['THE WINGED VICTORY. A PRINT.', 'SHE HAS NO HEAD.'] },
   { id: 'window', x0: 156, y0: 32, x1: 228, y1: 94, captions: ['UNABLE TO OPEN.', 'STILL UNABLE TO OPEN.'] },
   { id: 'cooler', x0: 46, y0: 88, x1: 78, y1: 140, captions: ['WATER COOLER. FULL.', 'STILL FULL.'] },
@@ -396,7 +394,7 @@ export const room: Stage = {
     const g = canvas.getContext('2d', { willReadFrequently: true });
     if (!g) throw new Error('prntr: no 2d context');
     // The pointer and crosshair on a transparent canvas of their own, above the door's
-    // light, the spill and the glows, so the cursor is never behind them (Edgar, 2026-10-19).
+    // light, the spill and the glows, so the cursor is never behind them.
     const cursor = document.createElement('canvas');
     cursor.className = 'prntr-room-cursor';
     cursor.width = W;
@@ -405,7 +403,7 @@ export const room: Stage = {
     const cg = cursor.getContext('2d');
     if (!cg) throw new Error('prntr: no 2d context');
     // The things the machine throws (pages, staples, ink) on a transparent canvas of their own,
-    // above the slot's red light, so the glow is behind the paper (Edgar, 2026-10-20).
+    // above the slot's red light, so the glow is behind the paper.
     const front = document.createElement('canvas');
     front.className = 'prntr-room-front';
     front.width = W;
@@ -413,7 +411,7 @@ export const room: Stage = {
     front.setAttribute('aria-hidden', 'true');
     const fg = front.getContext('2d', { willReadFrequently: true });
     if (!fg) throw new Error('prntr: no 2d context');
-    // The print on the wall (Edgar, 2026-10-20): its own canvas over the frame's inside, at
+    // The print on the wall: its own canvas over the frame's inside, at
     // ART_SUB cells to the room's pixel, so it is finer than anything around it.
     const art = document.createElement('canvas');
     art.className = 'prntr-room-art';
@@ -441,7 +439,7 @@ export const room: Stage = {
     const dread = el('div', 'prntr-room-dread');
     const wash = el('div', 'prntr-room-wash');
     // The red glow on everything that can be shot: DOM boxes over the pixel layer,
-    // unpixelated like the door's light (Edgar, 2026-10-19). One per projectile, pooled.
+    // unpixelated like the door's light. One per projectile, pooled.
     const glows = el('div', 'prntr-room-glows');
     for (const n of [light, spill, fireLight, slotLight, holeLights, windowLight, dread, dreadWindow, wash, glows]) n.setAttribute('aria-hidden', 'true');
     const hud = el('div', 'prntr-room-hud');
@@ -451,7 +449,7 @@ export const room: Stage = {
     // Read out through ctx.announce instead, so it is not read twice.
     const captionEl = el('div', 'prntr-room-caption');
     captionEl.setAttribute('aria-hidden', 'true');
-    // Set like an old TV's closed captions: white letters on a black box (Edgar, 2026-10-20).
+    // Set like an old TV's closed captions: white letters on a black box.
     const captionText = el('span', 'prntr-room-caption-text');
     captionEl.append(captionText);
     const healthEl = el('div', 'prntr-room-health prntr-room-fight-ui');
@@ -476,7 +474,7 @@ export const room: Stage = {
     shotsBtn.className = 'prntr-room-shots prntr-room-fight-ui';
     for (let i = 0; i < SHOTS; i++) shotsBtn.append(el('span', ''));
     for (const n of [healthEl, healthName, lifeEl, lifeName, pipsEl, shotsBtn]) n.hidden = true;
-    // When the fight starts: what to do, and the one binding that matters (Edgar, 2026-10-19).
+    // When the fight starts: what to do, and the one binding that matters.
     const hintEl = el('div', 'prntr-room-hint');
     hintEl.setAttribute('aria-hidden', 'true');
     const touch = window.matchMedia('(hover: none)').matches;
@@ -491,7 +489,7 @@ export const room: Stage = {
     const overEl = el('div', 'prntr-room-over');
     overEl.setAttribute('aria-hidden', 'true');
     overEl.hidden = true;
-    // GAME OVER across the room, giant, in the title's face (Edgar, 2026-10-20).
+    // GAME OVER across the room, giant, in the title's face.
     const overText = el('div', 'prntr-room-over-text');
     overText.append(el('span', '', 'GAME'), el('span', '', 'OVER'));
     overEl.append(overText);
@@ -711,7 +709,7 @@ export const room: Stage = {
       pipsEl.setAttribute('aria-label', `Lives ${lives} of ${LIVES_MAX}`);
     };
     // The heart just lost turns into its ghost and floats up from the hearts to the top of the
-    // frame (Edgar, 2026-10-20); --rise is how far that is.
+    // frame; --rise is how far that is.
     const heartGhost = (i: number) => {
       const heart = pipsEl.children[i] as HTMLElement | undefined;
       if (!heart) return;
@@ -1054,13 +1052,13 @@ export const room: Stage = {
       drawShots();
       sounds.shot();
       // The first shot: a woman screams somewhere off and people run out. Nobody is seen,
-      // and nothing else changes (Edgar, 2026-10-19).
+      // and nothing else changes.
       if (!panicked) {
         panicked = true;
         sounds.panic();
       }
       if (shots === 0) autoReloadAt = now + AUTO_RELOAD_MS;
-      // A heart's ghost floating up, above everything: it pops (Edgar, 2026-10-20).
+      // A heart's ghost floating up, above everything: it pops.
       if (ghosts.length) {
         const fr = frame.getBoundingClientRect();
         const sx = fr.left + x * scale;
@@ -1085,7 +1083,7 @@ export const room: Stage = {
         addScore(page.burning ? FIRE_PAGE_POINTS : PAGE_POINTS, now);
         return;
       }
-      // Shootable since Edgar's review (the handoff had them unshootable).
+      // Shootable (the handoff had them unshootable).
       const staple = staples.find((s) => {
         if (s.shot || s.hit || now < s.at) return false;
         const r = staplePose(s, now);
@@ -1253,7 +1251,7 @@ export const room: Stage = {
       flashFrames = HIT_FLASH_FRAMES * 2;
       fireSound = sounds.fire();
     };
-    // A tube shot (Edgar, 2026-10-20): every jet on that nozzle stops, the head and the hose fly
+    // A tube shot: every jet on that nozzle stops, the head and the hose fly
     // apart in bits of plum, grey and its ink, and the stump stays; the nozzle is dead for good.
     const explodeTube = (jet: Spray, now: number) => {
       for (const s of sprays) if (s.nx === jet.nx && s.stoppedAt === null) s.stoppedAt = now;
@@ -1268,7 +1266,7 @@ export const room: Stage = {
         bits.push({ x: jet.nx - 3 + Math.random() * 6, y: TUBE_TOP + Math.random() * 6, vx: Math.cos(a) * v, vy: Math.sin(a) * v, g: 240, born: now, life: 350 + Math.random() * 450, size: 1 + (i % 3 === 0 ? 1 : 0), color });
       }
     };
-    // The ink lands in the fire (Edgar, 2026-10-20): a hiss and steam, and the fire is smaller by
+    // The ink lands in the fire: a hiss and steam, and the fire is smaller by
     // SNUFF_U of its growth, growing back from there; too little left and it is out for good. The
     // burst machine's fire is past putting out.
     const snuff = (s: Spray, now: number) => {
@@ -1527,7 +1525,7 @@ export const room: Stage = {
       [1600, () => (scene.printer = 'mad')],
       [1900, () => startFight(performance.now())],
     ];
-    // The end (Edgar, 2026-10-20): the machine in pieces, the fire (if there is one) raging on in
+    // The end: the machine in pieces, the fire (if there is one) raging on in
     // the dark room, the HUD gone, the tune; then out, WIN_END_MS after the burst. The lights stay
     // off and nothing comes back. (Until then it ended on the quiet room, lit again, the lid shut.)
     const END_STEPS: [number, () => void][] = [[0, () => showFightUi(false)]];
@@ -1816,7 +1814,7 @@ export const room: Stage = {
       } else {
         scene.shake = { x: 0, y: 0 };
       }
-      // The slot's red light is a DOM box over the canvas: it trembles with the machine (Edgar, 2026-10-20).
+      // The slot's red light is a DOM box over the canvas: it trembles with the machine.
       slotLight.style.transform = scene.shake.x || scene.shake.y ? `translate(${scene.shake.x * scale}px, ${scene.shake.y * scale}px)` : '';
       // The tubes up behind the machine: rising before the jet, sinking after it, one per nozzle.
       const tubes = new Map<number, number>();

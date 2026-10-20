@@ -9,7 +9,7 @@ export const PAL = {
   F: '#FFFBE0', f: '#BDB8A6', A: '#D8D2B0', a: '#C4BE9C', B: '#6A6558', C: '#8A877A',
   x: '#7F7C70', X: '#6E6B60', D: '#8A7A62', E: '#5A4A3A', L: '#9ADCFF', l: '#DDE7E8',
   v: '#3E8E4E', V: '#2E6E3E', p: '#B86B3A', s: '#FFF6CC', e: '#A8A08A', R: '#B8140A',
-  /** Not in palette.json: the bright red the open machine's button blinks (Edgar, 2026-10-19). */
+  /** Not in palette.json: the bright red the open machine's button blinks. */
   Q: '#FF2A1A',
 } as const;
 export type PalKey = keyof typeof PAL;
@@ -18,8 +18,8 @@ export type PalKey = keyof typeof PAL;
  * String sprite maps, one character per pixel, '.' transparent, letters = PAL keys.
  * Verbatim from prntr/design/stage1/art/sprites.txt, except PAGE_PRINTED and the
  * broken things (CLOCK_BROKEN, POSTER_TORN, TANK_BROKEN, PLANT_BARE, POT_BROKEN,
- * EXIT_BROKEN), SPLAT, the ink on the glass (drawn in c, remapped to m or y), and TUBE_HEAD:
- * Edgar, 2026-10-19. Scale by whole numbers only.
+ * EXIT_BROKEN), SPLAT, the ink on the glass (drawn in c, remapped to m or y), and TUBE_HEAD.
+ * Scale by whole numbers only.
  */
 export const SPRITES = {
   // 32 × 22
@@ -72,7 +72,7 @@ export const SPRITES = {
 .KKKKKKKKKKKKKKKKKKKKKKKKKKKKKK.
 ..KKK......................KKK..
 `,
-  // 5 × 5 (the handoff's sticker; no longer drawn: the fight starts from the USB stick, Edgar 2026-10-19)
+  // 5 × 5 (the handoff's sticker; no longer drawn: the fight starts from the USB stick)
   INFO: `
 .ccc.
 cWWWc
@@ -80,7 +80,7 @@ ccWcc
 ccWcc
 .ccc.
 `,
-  // 10 × 5: a USB stick on the carpet, its cap to the right (Edgar, 2026-10-19; not in sprites.txt)
+  // 10 × 5: a USB stick on the carpet, its cap to the right (not in sprites.txt)
   USB: `
 .KKKKKKK..
 KdddddddK.
@@ -119,7 +119,7 @@ KWK.....KWK
 ....KWK....
 `,
   // 7 × 7: a nut, and 9 × 5: a bolt, thrown from the slot once the machine is at half health
-  // (Edgar, 2026-10-20; not in sprites.txt)
+  // (not in sprites.txt)
   NUT: `
 ..KKK..
 .KgggK.
@@ -237,7 +237,7 @@ KnKKKnKnKKnKKKnKK
 KnnnKnKnKnnnKKnKK
 KKKKKKKKKKKKKKKKK
 `,
-  // 17 × 7: the sign on the floor, its letters out, cracked across (Edgar, 2026-10-19; not in sprites.txt)
+  // 17 × 7: the sign on the floor, its letters out, cracked across (not in sprites.txt)
   EXIT_BROKEN: `
 KKKKKKKKKKK.KKKKK
 KGGGKGKGKGG.KGGGK
@@ -264,7 +264,7 @@ KccccccccccccccK
 ...KKK....KK....
 ..........K.....
 `,
-  // 13 × 10: a first aid kit on the wall by the window (Edgar, 2026-10-20; not in sprites.txt):
+  // 13 × 10: a first aid kit on the wall by the window (not in sprites.txt):
   // a white box with a plum outline, its cross and its clasp green instead of red, so it reads as
   // good; KIT_OPEN is the same box shot open and empty, its lid hanging
   KIT: `
@@ -292,7 +292,7 @@ KwwnwwwK.....
 ..KKKKKKKKKKK
 `,
   // 6 × 4: the head of an ink tube up from behind the machine; its mouth (c) takes the ink's
-  // colour (Edgar, 2026-10-20; not in sprites.txt)
+  // colour (not in sprites.txt)
   TUBE_HEAD: `
 .KKKK.
 KggggK
@@ -316,7 +316,7 @@ KwwwwwwwwK
 KKKKKKKKKK
 `,
   // 10 × 13: PAGE_SMALL with five lines of print, for the pages the machine throws
-  // (Edgar, 2026-10-19; not in sprites.txt). The page in the tray stays blank.
+  // (not in sprites.txt). The page in the tray stays blank.
   PAGE_PRINTED: `
 KKKKKKKKKK
 KwwwwwwwwK
@@ -333,7 +333,7 @@ KwwwwwwwwK
 KKKKKKKKKK
 `,
   // 16 × 15: the clock shot: a crack from the top down the right, both hands hanging. No longer
-  // drawn: the clock falls off the wall instead (Edgar, 2026-10-20).
+  // drawn: the clock falls off the wall instead.
   CLOCK_BROKEN: `
 .....KKKKKK.....
 ...KKrrrrrrKK...
