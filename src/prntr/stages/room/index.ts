@@ -5,13 +5,16 @@ import { SPR, drawRoom, type SceneState } from './scene';
 import { createRoomSounds, type Hum } from './sounds';
 
 // ---------------------------------------------------------------------------
-// Tunables. The attack cycle is "tune freely" (handoff §2.7); the rest is designed.
+// Tunables. The attack cycle is "tune freely" (handoff §2.7), slowed down and made
+// shootable on Edgar's review (2026-10-19) so the player has time to fight back; the
+// rest is designed.
 // ---------------------------------------------------------------------------
 
 /** The high score that already exists, and the machine's life. */
 const HI = 1337;
 const HIT_POINTS = 10;
 const PAGE_POINTS = 1;
+const STAPLE_POINTS = 1;
 const SHOTS = 6;
 const HEALTH = 4;
 /** The printer's standby tick while the room is idle. */
@@ -19,17 +22,19 @@ const TICK_MS = 4000;
 const AUTO_RELOAD_MS = 800;
 /** A reload refills the shot pips in two steps this far apart. */
 const RELOAD_STEP_MS = 160;
-const FIRST_ATTACK_MS = 1000;
-const ATTACK_GAP_MS = 1500;
-const ATTACK_GAP_LATE_MS = 800;
+const FIRST_ATTACK_MS = 2500;
+const ATTACK_GAP_MS = 3000;
+const ATTACK_GAP_LATE_MS = 2000;
 /** From this score on, the attacks come faster. */
 const LATE_SCORE = 900;
 const SCAN_MS = 600;
 const WASH_MS = 300;
-const STAPLE_MS = 500;
-const STAPLE_STAGGER_MS = 150;
-const PAGE_MS = 700;
-const PAGE_STAGGER_MS = 120;
+const STAPLE_MS = 1500;
+const STAPLE_STAGGER_MS = 500;
+/** The staple's hit box: its sprite at the current scale, plus this many virtual px around. */
+const STAPLE_HIT_PAD = 3;
+const PAGE_MS = 1800;
+const PAGE_STAGGER_MS = 450;
 const PAGE_LANDED_MS = 1500;
 const PAGE_SLIDE_MS = 400;
 const HIT_FLASH_FRAMES = 2;
@@ -81,6 +86,7 @@ interface Staple {
   y: number;
   at: number;
   hit: boolean;
+  shot: boolean;
 }
 
 interface Page {
@@ -329,6 +335,12 @@ export const room: Stage = {
       const y = LID.y + (p.y1 - LID.y) * u;
       return { x: Math.floor(x - 5 * sc), y: Math.floor(y - 6.5 * sc), w: 10 * sc, h: 13 * sc };
     };
+    // Staples fly at the camera: 1× → 2× → 4×.
+    const staplePose = (s: Staple, now: number) => {
+      const st = now - s.at;
+      const sc = st < STAPLE_MS / 3 ? 1 : st < (2 * STAPLE_MS) / 3 ? 2 : 4;
+      return { x: Math.floor(s.x - 3 * sc), y: Math.floor(s.y - 2.5 * sc), w: 6 * sc, h: 5 * sc };
+    };
     const reload = (now: number) => {
       if (phase !== 'fight' || frozenAt !== null) return;
       if (shots === SHOTS || reloadSecondAt !== null) return;
@@ -357,6 +369,17 @@ export const room: Stage = {
         addScore(PAGE_POINTS, now);
         return;
       }
+      // Shootable since Edgar's review (the handoff had them unshootable).
+      const staple = staples.find((s) => {
+        if (s.shot || s.hit || now < s.at) return false;
+        const r = staplePose(s, now);
+        return x >= r.x - STAPLE_HIT_PAD && x < r.x + r.w + STAPLE_HIT_PAD && y >= r.y - STAPLE_HIT_PAD && y < r.y + r.h + STAPLE_HIT_PAD;
+      });
+      if (staple) {
+        staple.shot = true;
+        addScore(STAPLE_POINTS, now);
+        return;
+      }
       if (x >= MACHINE.x0 && x < MACHINE.x1 && y >= MACHINE.y0 && y < MACHINE.y1) {
         flashFrames = HIT_FLASH_FRAMES;
         addScore(HIT_POINTS, now);
@@ -372,7 +395,7 @@ export const room: Stage = {
         nextAttackAt = now + SCAN_MS + WASH_MS + gap;
       } else if (kind === 1) {
         for (let i = 0; i < 3; i++) {
-          staples.push({ x: 20 + Math.random() * 180, y: 40 + Math.random() * 70, at: now + i * STAPLE_STAGGER_MS, hit: false });
+          staples.push({ x: 20 + Math.random() * 180, y: 40 + Math.random() * 70, at: now + i * STAPLE_STAGGER_MS, hit: false, shot: false });
         }
         nextAttackAt = now + 2 * STAPLE_STAGGER_MS + STAPLE_MS + gap;
       } else {
@@ -575,13 +598,13 @@ export const room: Stage = {
           washUntil = 0;
         }
         for (const s of staples) {
-          if (!s.hit && now - s.at >= STAPLE_MS) {
+          if (!s.hit && !s.shot && now - s.at >= STAPLE_MS) {
             s.hit = true;
             sounds.stapleHit();
             damage(now);
           }
         }
-        staples = staples.filter((s) => !s.hit);
+        staples = staples.filter((s) => !s.hit && !s.shot);
         for (const p of pages) {
           if (!p.shot && p.landedAt === null && now - p.at >= PAGE_MS) {
             p.landedAt = now;
@@ -609,12 +632,10 @@ export const room: Stage = {
       scene.flashWhite = flashFrames > 0;
       if (flashFrames > 0) flashFrames--;
       drawRoom(pix, scene);
-      // Staples fly at the camera: 1× → 2× → 4×.
       for (const s of staples) {
-        const st = now - s.at;
-        if (st < 0 || s.hit) continue;
-        const sc = st < STAPLE_MS / 3 ? 1 : st < (2 * STAPLE_MS) / 3 ? 2 : 4;
-        pix.blit(Math.floor(s.x - 3 * sc), Math.floor(s.y - 2.5 * sc), SPR.STAPLE, sc);
+        if (now < s.at || s.hit || s.shot) continue;
+        const r = staplePose(s, now);
+        pix.blit(r.x, r.y, SPR.STAPLE, r.w / 6);
       }
       for (const p of pages) {
         if (p.shot || now < p.at || p.landedAt !== null) continue;
