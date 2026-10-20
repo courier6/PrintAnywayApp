@@ -4,9 +4,9 @@ import type { PrntrAudio } from '../../audio';
  * The room's sounds: a port of prntr/design/stage1/audio/sounds.js (the spec; the
  * .wav files beside it are renders for listening). Same recipes and numbers, played
  * live through Prntr's master gain instead of the context's destination. Without an
- * AudioContext every sound is a no-op. pageFeed, staplePunch, death, gameOver, shatter,
- * tear and rustle are not in sounds.js: Edgar asked for them after playing the room
- * (2026-10-19).
+ * AudioContext every sound is a no-op. pageFeed, staplePunch, panic, death, gameOver,
+ * shatter, tear and rustle are not in sounds.js: Edgar asked for them after playing the
+ * room (2026-10-19).
  */
 
 export interface Hum {
@@ -37,6 +37,8 @@ export interface RoomSounds {
   reload(): void;
   /** A page landing on the glass. */
   paperSlap(): void;
+  /** After the first shot: a scream somewhere off, faint, and people running out, about 2.5 s. */
+  panic(): void;
   /** The rollers feeding a page out of the machine's slot. */
   pageFeed(): void;
   /** A staple punched out of the slot: a stapler's clack. */
@@ -67,6 +69,7 @@ const SILENT: RoomSounds = {
   dryClick: noop,
   reload: noop,
   paperSlap: noop,
+  panic: noop,
   pageFeed: noop,
   staplePunch: noop,
   death: noop,
@@ -304,6 +307,17 @@ export function createRoomSounds(audio: PrntrAudio): RoomSounds {
       noise(t + 0.05, 0.08, { lp: 2200, gain: 0.7, decay: 0.012 });
       tone(t + 0.05, 0.025, { f0: 180, gain: 0.6, decay: 0.008 });
     },
+    // a woman's scream at 0.25 s, far off, then running feet from 0.5 s: quick uneven steps that
+    // fade out by 2.6 s, a low shuffle under them. Nobody is seen.
+    panic() {
+      const t = now();
+      scream(t + 0.25);
+      for (let at = t + 0.5; at < t + 2.6; at += 0.1 + Math.random() * 0.09) {
+        const k = 1 - (at - t - 0.5) / 2.1;
+        noise(at, 0.03, { lp: 500 + Math.random() * 400, gain: 0.45 * k, decay: 0.008 });
+      }
+      noise(t + 0.4, 2.0, { lp: 300, gain: 0.1, decay: 0.6 });
+    },
     // a 55 Hz motor for 0.3 s under four roller ticks 70 ms apart
     pageFeed() {
       const t = now();
@@ -345,6 +359,39 @@ export function createRoomSounds(audio: PrntrAudio): RoomSounds {
       noise(now(), 0.25, { lp: 2200, gain: 0.3, decay: 0.07 });
     },
   };
+
+  // A scream, faint and far: a sawtooth with a 6.5 Hz wobble, 700 Hz up to 1100 and down to
+  // 500 over 0.9 s, lowpassed at 2.2 kHz, breath noise under it.
+  function scream(when: number) {
+    const o = ctx!.createOscillator();
+    o.type = 'sawtooth';
+    o.frequency.setValueAtTime(700, when);
+    o.frequency.exponentialRampToValueAtTime(1100, when + 0.25);
+    o.frequency.exponentialRampToValueAtTime(900, when + 0.6);
+    o.frequency.exponentialRampToValueAtTime(500, when + 0.9);
+    const lfo = ctx!.createOscillator();
+    lfo.frequency.value = 6.5;
+    const lfoG = ctx!.createGain();
+    lfoG.gain.value = 40;
+    lfo.connect(lfoG);
+    lfoG.connect(o.frequency);
+    const lp = ctx!.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = 2200;
+    const g = ctx!.createGain();
+    g.gain.setValueAtTime(0, when);
+    g.gain.linearRampToValueAtTime(0.07, when + 0.08);
+    g.gain.setValueAtTime(0.07, when + 0.6);
+    g.gain.linearRampToValueAtTime(0, when + 0.9);
+    o.connect(lp);
+    lp.connect(g);
+    g.connect(out!);
+    o.start(when);
+    lfo.start(when);
+    o.stop(when + 0.92);
+    lfo.stop(when + 0.92);
+    noise(when, 0.9, { hp: 1500, lp: 5000, gain: 0.03, decay: 0.4 });
+  }
 
   function deathNotes(t: number) {
     [440, 392, 349.2].forEach((f0, i) => tone(t + i * 0.15, 0.12, { type: 'square', f0, gain: 0.2, attack: 0.005, release: 0.03 }));

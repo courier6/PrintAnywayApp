@@ -303,6 +303,8 @@ export const room: Stage = {
     let nextBlinkAt = Infinity;
     /** Hits on the button so far (capped): each one brings the attacks closer together. */
     let rage = 0;
+    /** The first shot has been fired: the office has emptied out. */
+    let panicked = false;
     const attackGap = () => Math.round((score >= LATE_SCORE ? ATTACK_GAP_LATE_MS : ATTACK_GAP_MS) * Math.pow(RAGE_STEP, rage));
     const scheduleBlink = (from: number, delay: number) => {
       nextBlinkAt = from + delay + Math.random() * (BLINK_MAX_MS - BLINK_MIN_MS);
@@ -508,6 +510,12 @@ export const room: Stage = {
       shots--;
       drawShots();
       sounds.shot();
+      // The first shot: a woman screams somewhere off and people run out. Nobody is seen,
+      // and nothing else changes (Edgar, 2026-10-19).
+      if (!panicked) {
+        panicked = true;
+        sounds.panic();
+      }
       if (shots === 0) autoReloadAt = now + AUTO_RELOAD_MS;
       const page = pages.find((p) => {
         if (p.shot || p.landedAt !== null || now < p.at) return false;
