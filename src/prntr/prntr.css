@@ -196,11 +196,14 @@
   image-rendering: pixelated;
 }
 
+/* The lightning's flash: a canvas with the place it lights drawn in it (Edgar, 2026-10-20),
+   white or blue, shown at the flash's opacity. */
 .prntr-flash {
   position: absolute;
   inset: 0;
   z-index: 2;
-  background: #FFFFFF;
+  width: 100%;
+  height: 100%;
   opacity: 0;
   pointer-events: none;
 }
