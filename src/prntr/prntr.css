@@ -651,6 +651,14 @@
 }
 
 /* Game over: the same dim, nothing on it, half a second before the host drops in. */
+/* The death beat (Edgar, 2026-10-19: the hearts are lives): a red dim while the room is frozen. */
+.prntr-room-death {
+  position: absolute;
+  inset: 0;
+  background: rgba(184, 20, 10, 0.3);
+  pointer-events: none;
+}
+
 .prntr-room-over {
   position: absolute;
   inset: 0;
