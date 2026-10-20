@@ -82,6 +82,13 @@ const EXIT_FLICKER: [number, number][] = [
 const EXIT_FALL_MS = 550;
 const EXIT_WALL = { x: 17, y: 31 };
 const EXIT_FLOOR = { x: 20, y: 108 };
+/** The door (Edgar, 2026-10-19): ajar DOOR_AJAR px on black; DOOR_DELAY_MS after the sign hits the
+ * floor it creaks open to DOOR_OPEN px over DOOR_OPEN_MS, and the red from inside reaches into
+ * the room (.prntr-room-frame.is-open, prntr.css). It never closes again. */
+const DOOR_AJAR = 6;
+const DOOR_OPEN = 22;
+const DOOR_DELAY_MS = 400;
+const DOOR_OPEN_MS = 1400;
 /** The quiet room after 1337, before Prntr ends: 0.5 s of lights coming back, then a full second of nothing. */
 const HOLD_END_MS = 1500;
 
@@ -207,11 +214,13 @@ export const room: Stage = {
     if (!cg) throw new Error('prntr: no 2d context');
     const light = el('div', 'prntr-room-light');
     const spill = el('div', 'prntr-room-spill');
+    // The red that reaches into the room once the door is open: a multiply wash, off until then.
+    const dread = el('div', 'prntr-room-dread');
     const wash = el('div', 'prntr-room-wash');
     // The red glow on everything that can be shot: DOM boxes over the pixel layer,
     // unpixelated like the door's light (Edgar, 2026-10-19). One per projectile, pooled.
     const glows = el('div', 'prntr-room-glows');
-    for (const n of [light, spill, wash, glows]) n.setAttribute('aria-hidden', 'true');
+    for (const n of [light, spill, dread, wash, glows]) n.setAttribute('aria-hidden', 'true');
     const hud = el('div', 'prntr-room-hud');
     const scoreEl = el('div', 'prntr-room-score', 'SCORE 0000');
     const hiEl = el('div', 'prntr-room-hi', 'HI 1337');
@@ -249,7 +258,7 @@ export const room: Stage = {
     const overEl = el('div', 'prntr-room-over');
     overEl.setAttribute('aria-hidden', 'true');
     overEl.hidden = true;
-    frame.append(canvas, light, spill, wash, glows, hud, cursor, continueEl, overEl);
+    frame.append(canvas, light, spill, dread, wash, glows, hud, cursor, continueEl, overEl);
     wrap.append(frame);
     root.append(wrap);
 
@@ -282,6 +291,7 @@ export const room: Stage = {
       buttonBright: false,
       broken: { clock: false, poster: false, tank: false, plant: false, vase: false },
       exit: { state: 'up', x: EXIT_WALL.x, y: EXIT_WALL.y, tilt: 0, lit: true },
+      doorGap: DOOR_AJAR,
     };
     let phase: Phase = 'look';
     let phaseAt = performance.now();
@@ -320,6 +330,11 @@ export const room: Stage = {
     let panicked = false;
     /** When the EXIT sign was last hit (its flicker, swing and fall count from here). */
     let exitAt = 0;
+    /** When the door starts to open (set as the sign lands), and when it did. */
+    let doorAt: number | null = null;
+    let doorOpenAt: number | null = null;
+    /** The width the door's light is drawn at, so the style is set only when it changes. */
+    let lightGap = DOOR_AJAR;
     const attackGap = () => Math.round((score >= LATE_SCORE ? ATTACK_GAP_LATE_MS : ATTACK_GAP_MS) * Math.pow(RAGE_STEP, rage));
     const scheduleBlink = (from: number, delay: number) => {
       nextBlinkAt = from + delay + Math.random() * (BLINK_MAX_MS - BLINK_MIN_MS);
@@ -706,6 +721,7 @@ export const room: Stage = {
         broken: () => BREAKABLES.filter((b) => scene.broken[b.id]).map((b) => b.id),
         attackGap,
         exit: (): ExitSign['state'] => scene.exit.state,
+        doorGap: () => scene.doorGap,
       };
     }
 
@@ -790,6 +806,13 @@ export const room: Stage = {
         scene.exit.x = EXIT_FLOOR.x;
         scene.exit.y = EXIT_FLOOR.y;
         sounds.signCrash();
+        doorAt = now + DOOR_DELAY_MS;
+      }
+      if (doorAt !== null && now >= doorAt) {
+        doorAt = null;
+        doorOpenAt = now;
+        sounds.doorCreak();
+        frame.classList.add('is-open');
       }
       if (phase === 'look') {
         if (now - lastTickAt >= TICK_MS) {
@@ -896,8 +919,19 @@ export const room: Stage = {
         sign.tilt = Math.round(4 + 5 * u);
       }
     };
+    // The door swings in, easing out, a pixel at a time; the light in it is drawn as wide.
+    const poseDoor = (now: number) => {
+      if (doorOpenAt === null) return;
+      const u = reduced ? 1 : Math.min(1, (now - doorOpenAt) / DOOR_OPEN_MS);
+      scene.doorGap = DOOR_AJAR + Math.floor((DOOR_OPEN - DOOR_AJAR) * (1 - (1 - u) * (1 - u)));
+      if (scene.doorGap !== lightGap) {
+        lightGap = scene.doorGap;
+        light.style.width = `calc(${lightGap}px * var(--s))`;
+      }
+    };
     const render = (now: number) => {
       poseSign(now);
+      poseDoor(now);
       scene.flashWhite = flashFrames > 0;
       if (flashFrames > 0) flashFrames--;
       scene.buttonBright = phase === 'fight' && buttonBright(now);

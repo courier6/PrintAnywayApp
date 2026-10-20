@@ -346,6 +346,7 @@
   height: calc(65px * var(--s));
   background: linear-gradient(to bottom, #2A0404 0%, #5A0A0A 45%, #8A1410 100%);
   box-shadow: 0 0 calc(4.4px * var(--s)) calc(1.6px * var(--s)) rgba(120, 14, 12, 0.42);
+  transition: box-shadow 1500ms ease-out;
   pointer-events: none;
 }
 
@@ -358,7 +359,43 @@
   border-radius: 50%;
   background: radial-gradient(ellipse at center, rgba(140, 18, 14, 0.5) 0%, rgba(140, 18, 14, 0) 70%);
   filter: blur(calc(0.6px * var(--s)));
+  transition:
+    left 1500ms ease-out,
+    top 1500ms ease-out,
+    width 1500ms ease-out,
+    height 1500ms ease-out;
   pointer-events: none;
+}
+
+/* Once the door has creaked open (the EXIT sign shot down; Edgar, 2026-10-19): the light in it
+   is wider (the stage sets its width as the door swings), its glow reaches further, the spill
+   on the carpet is larger, and the red from inside reaches the wall around the door, the
+   cooler, the poster and the near side of the machine, the whole room a shade darker and
+   redder with it. The wash multiplies, so every pixel keeps its edges; the HUD, the glows
+   and the cursor sit above it. */
+.prntr-room-frame.is-open .prntr-room-light {
+  box-shadow: 0 0 calc(9px * var(--s)) calc(3px * var(--s)) rgba(140, 16, 12, 0.55);
+}
+
+.prntr-room-frame.is-open .prntr-room-spill {
+  left: calc(-6px * var(--s));
+  top: calc(98px * var(--s));
+  width: calc(74px * var(--s));
+  height: calc(22px * var(--s));
+}
+
+.prntr-room-dread {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse 48% 68% at 11% 48%, rgba(255, 60, 30, 0.9) 0%, rgba(210, 40, 20, 0.7) 25%, rgba(140, 75, 75, 0.38) 55%, rgba(130, 80, 80, 0.35) 100%);
+  mix-blend-mode: multiply;
+  opacity: 0;
+  transition: opacity 1500ms ease-out;
+  pointer-events: none;
+}
+
+.prntr-room-frame.is-open .prntr-room-dread {
+  opacity: 1;
 }
 
 /* PROTECT YOURSELF. on the wall between the clock and the machine, the binding under it; in over 300 ms with the

@@ -5,8 +5,8 @@ import type { PrntrAudio } from '../../audio';
  * .wav files beside it are renders for listening). Same recipes and numbers, played
  * live through Prntr's master gain instead of the context's destination. Without an
  * AudioContext every sound is a no-op. pageFeed, staplePunch, panic, death, gameOver,
- * shatter, tear, rustle and the sign's three are not in sounds.js: Edgar asked for them
- * after playing the room (2026-10-19).
+ * shatter, tear, rustle, the sign's three and doorCreak are not in sounds.js: Edgar asked
+ * for them after playing the room (2026-10-19).
  */
 
 export interface Hum {
@@ -59,6 +59,8 @@ export interface RoomSounds {
   signSnap(): void;
   /** The sign hitting the floor. */
   signCrash(): void;
+  /** The door creaking open, 1.3 s, faint under everything else. */
+  doorCreak(): void;
 }
 
 const noop = () => undefined;
@@ -86,6 +88,7 @@ const SILENT: RoomSounds = {
   signHit: noop,
   signSnap: noop,
   signCrash: noop,
+  doorCreak: noop,
 };
 
 /** Two seconds of white noise, made once per context. */
@@ -392,6 +395,37 @@ export function createRoomSounds(audio: PrntrAudio): RoomSounds {
       tone(t, 0.12, { f0: 140, f1: 40, gain: 0.5, decay: 0.04 });
       [4600, 3700].forEach((f0, i) => tone(t + 0.03 + i * 0.07, 0.12, { f0, f1: f0 * 0.8, gain: 0.12, decay: 0.025 }));
       for (const d of [0.18, 0.3]) noise(t + d, 0.03, { lp: 3000, gain: 0.25, decay: 0.006 });
+    },
+    // two sawtooths a fifth apart sliding 70 → 115 Hz over 1.3 s through a 600 Hz lowpass, the
+    // gain catching three times on the way; faint, so it sits under the fight
+    doorCreak() {
+      const t = now();
+      for (const [f0, f1, gain] of [
+        [70, 115, 0.06],
+        [105, 172, 0.035],
+      ] as const) {
+        const o = ctx.createOscillator();
+        o.type = 'sawtooth';
+        o.frequency.setValueAtTime(f0, t);
+        o.frequency.linearRampToValueAtTime(f1, t + 1.3);
+        const lp = ctx.createBiquadFilter();
+        lp.type = 'lowpass';
+        lp.frequency.value = 600;
+        const g = ctx.createGain();
+        g.gain.setValueAtTime(0, t);
+        g.gain.linearRampToValueAtTime(gain, t + 0.1);
+        for (const d of [0.35, 0.7, 1.0]) {
+          g.gain.setValueAtTime(gain * 0.3, t + d);
+          g.gain.linearRampToValueAtTime(gain, t + d + 0.08);
+        }
+        g.gain.setValueAtTime(gain, t + 1.15);
+        g.gain.linearRampToValueAtTime(0, t + 1.3);
+        o.connect(lp);
+        lp.connect(g);
+        g.connect(out);
+        o.start(t);
+        o.stop(t + 1.32);
+      }
     },
   };
 

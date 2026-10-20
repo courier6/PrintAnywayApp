@@ -72,6 +72,8 @@ export interface SceneState {
   buttonBright: boolean;
   broken: Broken;
   exit: ExitSign;
+  /** How wide the door stands open on black, in px: ajar at 6; once the sign is down it swings in (Edgar, 2026-10-19). */
+  doorGap: number;
 }
 
 /**
@@ -102,7 +104,9 @@ export function drawRoom(p: Pix, s: SceneState): void {
   // the door, ajar on black, EXIT above it
   p.rect(10, 40, 44, 108, 'E');
   p.rect(13, 43, 41, 108, 'D');
-  p.rect(13, 43, 19, 108, 'z');
+  p.rect(13, 43, 13 + s.doorGap, 108, 'z');
+  // the door's leading edge, once it has swung further in
+  if (s.doorGap > 6) p.rect(13 + s.doorGap, 43, 14 + s.doorGap, 108, 'E');
   p.rect(36, 76, 38, 78, 'K');
   // the EXIT sign: on the wall, hanging loose, falling, or on the floor in front of the door
   const sign = s.exit;
