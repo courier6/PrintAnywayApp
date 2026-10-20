@@ -155,8 +155,8 @@ const DOOR = { x0: 10, y0: 40, x1: 44, y1: 108 };
 const WINDOW = { x0: 160, y0: 36, x1: 224, y1: 90 };
 /** The carpet starts here. */
 const FLOOR_Y = 109;
-/** This many holes in the blind and it comes apart, for BREAK_POINTS (Edgar, 2026-10-20). */
-const WINDOW_BREAK_SHOTS = 6;
+/** This many holes in the blind and it comes apart, for BREAK_POINTS (Edgar, 2026-10-20; six, then half again as many). */
+const WINDOW_BREAK_SHOTS = 9;
 /** The quiet room after 1337, before Prntr ends: 0.5 s of lights coming back, then a full second of nothing. */
 const HOLD_END_MS = 1500;
 
