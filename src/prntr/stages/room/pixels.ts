@@ -57,6 +57,11 @@ export class Pix {
     this.rect(0, 0, W, H, key);
   }
 
+  /** Every pixel transparent (the cursor layer starts each frame empty). */
+  clear(): void {
+    this.d.fill(0);
+  }
+
   /** Half-open like the designer's Python: x0..x1-1, y0..y1-1. */
   rect(x0: number, y0: number, x1: number, y1: number, key: PalKey): void {
     for (let y = Math.max(0, y0); y < Math.min(H, y1); y++) {

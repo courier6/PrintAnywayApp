@@ -159,6 +159,15 @@ export const room: Stage = {
     canvas.setAttribute('aria-label', ROOM_ALT);
     const g = canvas.getContext('2d', { willReadFrequently: true });
     if (!g) throw new Error('prntr: no 2d context');
+    // The pointer and crosshair on a transparent canvas of their own, above the door's
+    // light, the spill and the glows, so the cursor is never behind them (Edgar, 2026-10-19).
+    const cursor = document.createElement('canvas');
+    cursor.className = 'prntr-room-cursor';
+    cursor.width = W;
+    cursor.height = H;
+    cursor.setAttribute('aria-hidden', 'true');
+    const cg = cursor.getContext('2d');
+    if (!cg) throw new Error('prntr: no 2d context');
     const light = el('div', 'prntr-room-light');
     const spill = el('div', 'prntr-room-spill');
     const wash = el('div', 'prntr-room-wash');
@@ -203,7 +212,7 @@ export const room: Stage = {
     const overEl = el('div', 'prntr-room-over');
     overEl.setAttribute('aria-hidden', 'true');
     overEl.hidden = true;
-    frame.append(canvas, light, spill, wash, glows, hud, continueEl, overEl);
+    frame.append(canvas, light, spill, wash, glows, hud, cursor, continueEl, overEl);
     wrap.append(frame);
     root.append(wrap);
 
@@ -225,6 +234,7 @@ export const room: Stage = {
 
     // ---- state ------------------------------------------------------------
     const pix = new Pix();
+    const cpix = new Pix();
     const scene: SceneState = {
       lights: [true, true],
       printer: 'idle',
@@ -795,12 +805,14 @@ export const room: Stage = {
         const slide = lt > PAGE_LANDED_MS ? ((lt - PAGE_LANDED_MS) / PAGE_SLIDE_MS) * 80 : 0;
         pix.blit(Math.floor(p.x1 - 20), Math.floor(p.y1 - 26 + slide), SPR.PAGE_PRINTED, 4, { skew: 10 });
       }
+      cpix.clear();
       if (pointer) {
         const aim = phase === 'fight' || phase === 'continue' || phase === 'over';
-        if (aim) pix.blit(Math.floor(pointer.x) - 5, Math.floor(pointer.y) - 6, SPR.CROSSHAIR);
-        else pix.blit(Math.floor(pointer.x) - 2, Math.floor(pointer.y), SPR.POINTER);
+        if (aim) cpix.blit(Math.floor(pointer.x) - 5, Math.floor(pointer.y) - 6, SPR.CROSSHAIR);
+        else cpix.blit(Math.floor(pointer.x) - 2, Math.floor(pointer.y), SPR.POINTER);
       }
       pix.present(g);
+      cpix.present(cg);
       drawGlows(now);
       canvas.classList.toggle('is-inverted', invertFrame);
       invertFrame = false;

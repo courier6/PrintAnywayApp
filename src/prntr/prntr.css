@@ -310,7 +310,7 @@
   position: relative;
   flex: none;
   overflow: hidden;
-  cursor: none; /* the POINTER and CROSSHAIR sprites are drawn in the pixel layer */
+  cursor: none; /* the POINTER and CROSSHAIR sprites are drawn on .prntr-room-cursor */
 }
 
 .prntr-room-canvas {
@@ -323,6 +323,17 @@
 /* The scan's one inverted frame. */
 .prntr-room-canvas.is-inverted {
   filter: invert(1);
+}
+
+/* The pointer and crosshair: a transparent canvas of their own above the door's light,
+   the spill and the glows, so the cursor never sits behind a glow (Edgar, 2026-10-19). */
+.prntr-room-cursor {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+  pointer-events: none;
 }
 
 /* The light in the door: deliberately the one unpixelated thing in the room
