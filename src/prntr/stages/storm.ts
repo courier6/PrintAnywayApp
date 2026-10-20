@@ -13,7 +13,8 @@
  * flickers the cute cloud is red and torn: cut into bands and blocks that jump along random
  * angles, some tilted, re-rolled every few frames.
  * The storm sounds like one, in the room's style: rain, a gusting wind, thunder after each
- * strike (Edgar, 2026-10-20).
+ * strike (Edgar, 2026-10-20). Between the near strikes, lightning flickers far off behind the
+ * clouds, seen only below them and its thunder comes half a second to a second later, a distant roll.
  */
 
 import type { PrntrAudio } from '../audio';
@@ -38,7 +39,7 @@ export interface Storm {
 
 /** The storm's sound: the rain and wind loop from the storm's start; thunder on request. */
 export interface StormSound {
-  /** Thunder `delaySec` after now: a crack and a clap when near, only the roll when far. */
+  /** Thunder `delaySec` after now: a crack and a clap when near, only a distant roll when far. */
   thunder(delaySec: number, near: boolean): void;
   stop(): void;
 }
@@ -139,7 +140,12 @@ export function startStormSound(ctx: AudioContext, out: AudioNode): StormSound {
         burst(when, 0.4, 400, 5000, 0.5, 0.004, 0.08);
         burst(when + 0.1, 3.5, 0, 160, 5, 0.04, 0.7);
       }
-      burst(when + (near ? 0.5 : 0), 5, 0, 80, near ? 4 : 2.5, 0.6, 1.3);
+      if (near) burst(when + 0.5, 5, 0, 80, 4, 0.6, 1.3);
+      else {
+        // far off: a long low roll that builds slowly, with a soft grumble above it so small speakers carry it
+        burst(when, 6, 0, 70, 2, 0.8, 1.6);
+        burst(when + 0.1, 4, 0, 220, 0.4, 0.5, 1);
+      }
     },
     stop() {
       if (stopped) return;
@@ -173,6 +179,14 @@ const STRIKE_FIRST_MS = 2500;
 const STRIKE_MIN_MS = 4000;
 const STRIKE_MAX_MS = 9000;
 const FLASH_MS = 220;
+/** Far lightning: the first this soon after the storm starts, then every FAR_MIN–FAR_MAX ms,
+ * never within FAR_GAP_MS of a near strike; its thunder comes THUNDER_MIN–THUNDER_MAX s later. */
+const FAR_FIRST_MS = 4500;
+const FAR_MIN_MS = 3000;
+const FAR_MAX_MS = 7000;
+const FAR_GAP_MS = 1500;
+const THUNDER_MIN_S = 0.5;
+const THUNDER_MAX_S = 1;
 
 /** A cloud's shades: its lit top edge, its body, the shade in its saddles and above its
  * underside, its underside. */
@@ -188,6 +202,10 @@ const WATER = '#7FC8FF';
 const WATER_LIGHT = '#BFE7FF';
 const BOLT = '#FFFFFF';
 const BOLT_EDGE = '#9FD8FF';
+/** Far lightning: a thin dim bolt in a faint glow, behind the clouds. */
+const FAR_BOLT = '#6A7A9C';
+const FAR_GLOW = 'rgba(150, 170, 220, 0.18)';
+const FAR_FLASH = 'rgba(150, 170, 220, 0.1)';
 
 /** A cloud as a union of round puffs on a flat base with rounded ends (`baseH` rows deep):
  * `cols` wide and `rows` high in cells of U. Where two puffs meet the cloud thins to a saddle,
@@ -387,9 +405,11 @@ export function startStorm(root: HTMLElement, h1: HTMLElement, slots: StormSlot[
   let weather: Weather = 'calm';
   let nextStrike = Infinity;
   let sound: StormSound | null = null;
-  /** The first strike is near; after that, half of them. */
-  let strikes = 0;
   let bolt: { pts: [number, number][]; until: number; again: number } | null = null;
+  /** The far lightning: a zigzag behind the clouds, on 0–60 ms, off, on 130–190 ms. */
+  let far: { pts: [number, number][]; at: number } | null = null;
+  let nextFar = Infinity;
+  let lastNear = -Infinity;
   let flashAt = 0;
   let flashBlue = false;
   let last = performance.now();
@@ -526,12 +546,34 @@ export function startStorm(root: HTMLElement, h1: HTMLElement, slots: StormSlot[
     }
     pts.push([x, target]);
     bolt = { pts, until: now + 60, again: now + 130 };
-    // the thunder: right on a near strike, a second or so after a far one
-    const near = strikes++ === 0 || Math.random() < 0.5;
-    sound?.thunder(near ? 0.15 : 0.6 + Math.random() * 0.8, near);
+    // the thunder: right behind the flash
+    sound?.thunder(0.15, true);
+    lastNear = now;
+    if (nextFar < now + FAR_GAP_MS) nextFar = now + FAR_GAP_MS;
     flashAt = now;
     flashBlue = !flashBlue;
     nextStrike = now + STRIKE_MIN_MS + Math.random() * (STRIKE_MAX_MS - STRIKE_MIN_MS);
+  };
+
+  /** Lightning far behind the clouds, from under them down to about the word's top line, at a
+   * random place along the bank; its top is hidden by the clouds drawn over it, so it comes out
+   * of their underside. Its thunder is a half to a whole second later. */
+  const farStrike = (now: number) => {
+    if (now - lastNear < FAR_GAP_MS) {
+      nextFar = lastNear + FAR_GAP_MS;
+      return;
+    }
+    const pts: [number, number][] = [];
+    const left = extras[0].x + 3 * U;
+    const right = extras[1].x + extras[1].cells[0].length * U - 3 * U;
+    let x = snap(left + Math.random() * (right - left));
+    for (let y = cloudY + cloud.length * U - 2 * U; y < wordTop - P; y += 2 * U) {
+      pts.push([x, y]);
+      x += Math.round(((Math.random() - 0.5) * 3 * U) / U) * U;
+    }
+    far = { pts, at: now };
+    sound?.thunder(THUNDER_MIN_S + Math.random() * (THUNDER_MAX_S - THUNDER_MIN_S), false);
+    nextFar = now + FAR_MIN_MS + Math.random() * (FAR_MAX_MS - FAR_MIN_MS);
   };
 
   const step = (now: number) => {
@@ -573,12 +615,30 @@ export function startStorm(root: HTMLElement, h1: HTMLElement, slots: StormSlot[
     }
     // lightning, once it storms
     if (weather === 'storm' && now >= nextStrike) strike(now);
+    if (weather === 'storm' && now >= nextFar) farStrike(now);
   };
 
   const draw = (now: number) => {
     g.clearRect(0, 0, W, H);
     if (!ready) return;
     const lit = bolt !== null && (now < bolt.until || (now >= bolt.again && now < bolt.again + 60));
+    // the far lightning, behind the clouds
+    if (far) {
+      const ft = now - far.at;
+      if (ft >= 190) far = null;
+      else if (ft < 60 || ft >= 130) {
+        const [mx, my] = far.pts[Math.floor(far.pts.length / 2)];
+        const glow = g.createRadialGradient(mx, my, 0, mx, my, 10 * P);
+        glow.addColorStop(0, FAR_GLOW);
+        glow.addColorStop(1, 'rgba(150, 170, 220, 0)');
+        g.fillStyle = FAR_FLASH;
+        g.fillRect(0, 0, W, H);
+        g.fillStyle = glow;
+        g.fillRect(mx - 10 * P, my - 10 * P, 20 * P, 20 * P);
+        g.fillStyle = FAR_BOLT;
+        for (const [x, y] of far.pts) g.fillRect(x, y, U, 2 * U);
+      }
+    }
     // the clouds, in the weather's shades: the cute one while calm or red, in the storm the
     // two more behind, then the first
     if (weather === 'storm') {
@@ -655,6 +715,7 @@ export function startStorm(root: HTMLElement, h1: HTMLElement, slots: StormSlot[
       rollAt = 0;
       if (w === 'storm') {
         nextStrike = performance.now() + STRIKE_FIRST_MS;
+        nextFar = performance.now() + FAR_FIRST_MS;
         if (audio.context && audio.master && !sound) sound = startStormSound(audio.context, audio.master);
       }
     },
