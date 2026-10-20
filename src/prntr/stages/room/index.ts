@@ -1,7 +1,7 @@
 import { reducedMotion, wait } from '../../anim';
 import type { Handoff, Stage } from '../../types';
 import { H, Pix, W } from './pixels';
-import { SPR, drawRoom, fireRect, inDoorway, type Broken, type ExitSign, type Hole, type SceneState } from './scene';
+import { SPR, drawRoom, drawWindowWreck, fireRect, inDoorway, type Broken, type ExitSign, type Hole, type SceneState } from './scene';
 import { createRoomSounds, type FireSound, type Hum } from './sounds';
 
 // ---------------------------------------------------------------------------
@@ -144,6 +144,8 @@ const DOOR = { x0: 10, y0: 40, x1: 44, y1: 108 };
 const WINDOW = { x0: 160, y0: 36, x1: 224, y1: 90 };
 /** The carpet starts here. */
 const FLOOR_Y = 109;
+/** This many holes in the blind and it comes apart, for BREAK_POINTS (Edgar, 2026-10-20). */
+const WINDOW_BREAK_SHOTS = 6;
 /** The quiet room after 1337, before Prntr ends: 0.5 s of lights coming back, then a full second of nothing. */
 const HOLD_END_MS = 1500;
 
@@ -304,13 +306,18 @@ export const room: Stage = {
     const slotLight = el('div', 'prntr-room-slot-light');
     // The red light through the holes in the door and the blind, one box per hole.
     const holeLights = el('div', 'prntr-room-hole-lights');
+    // The window shot open: the red pours through it (a glow, and the fill clipped off the
+    // machine's corner), and reaches that side of the room with a multiply wash of its own.
+    const windowLight = el('div', 'prntr-room-window-light');
+    windowLight.append(el('div', 'prntr-room-window-fill'));
+    const dreadWindow = el('div', 'prntr-room-dread-window');
     // The red that reaches into the room once the door is open: a multiply wash, off until then.
     const dread = el('div', 'prntr-room-dread');
     const wash = el('div', 'prntr-room-wash');
     // The red glow on everything that can be shot: DOM boxes over the pixel layer,
     // unpixelated like the door's light (Edgar, 2026-10-19). One per projectile, pooled.
     const glows = el('div', 'prntr-room-glows');
-    for (const n of [light, spill, fireLight, slotLight, holeLights, dread, wash, glows]) n.setAttribute('aria-hidden', 'true');
+    for (const n of [light, spill, fireLight, slotLight, holeLights, windowLight, dread, dreadWindow, wash, glows]) n.setAttribute('aria-hidden', 'true');
     const hud = el('div', 'prntr-room-hud');
     const scoreEl = el('div', 'prntr-room-score', 'SCORE 0000');
     const hiEl = el('div', 'prntr-room-hi', 'HI 1337');
@@ -363,7 +370,7 @@ export const room: Stage = {
     const deathEl = el('div', 'prntr-room-death');
     deathEl.setAttribute('aria-hidden', 'true');
     deathEl.hidden = true;
-    frame.append(canvas, light, spill, fireLight, slotLight, holeLights, front, dread, wash, glows, hud, cursor, hurtEl, deathEl, continueEl, overEl);
+    frame.append(canvas, light, spill, fireLight, slotLight, holeLights, windowLight, front, dread, dreadWindow, wash, glows, hud, cursor, hurtEl, deathEl, continueEl, overEl);
     wrap.append(frame);
     root.append(wrap);
 
@@ -403,7 +410,10 @@ export const room: Stage = {
       shake: { x: 0, y: 0 },
       inkBehind: [],
       holes: [],
+      windowOpen: false,
     };
+    /** Holes in the blind so far. */
+    let windowShots = 0;
     /** The red light of each hole through the door or the blind. */
     const holeLightOf = new Map<Hole, HTMLElement>();
     let phase: Phase = 'look';
@@ -823,7 +833,7 @@ export const room: Stage = {
       // Nothing to hit: the shot marks what it lands on. Into the black of the doorway, nothing.
       if (x >= 13 && x < 13 + scene.doorGap && y >= 43 && y < DOOR.y1) return;
       if (x >= DOOR.x0 && x < DOOR.x1 && y >= DOOR.y0 && y < DOOR.y1) addHole('door', x, y);
-      else if (x >= WINDOW.x0 && x < WINDOW.x1 && y >= WINDOW.y0 && y < WINDOW.y1) windowShot(x, y);
+      else if (x >= WINDOW.x0 && x < WINDOW.x1 && y >= WINDOW.y0 && y < WINDOW.y1) windowShot(x, y, now);
       else if (y < FLOOR_Y) addHole('wall', x, y);
     };
     // A hole where the shot landed; through the door or the blind, a red light in it.
@@ -843,8 +853,22 @@ export const room: Stage = {
       holeLightOf.set(hole, box);
       holeLights.append(box);
     };
-    const windowShot = (x: number, y: number) => {
+    // Shot open, the window takes no more holes: the shots go into the red.
+    const windowShot = (x: number, y: number, now: number) => {
+      if (scene.windowOpen) return;
       addHole('window', x, y);
+      if (++windowShots >= WINDOW_BREAK_SHOTS) breakWindow(now);
+    };
+    const breakWindow = (now: number) => {
+      scene.windowOpen = true;
+      frame.classList.add('is-window-open');
+      for (const [hole, box] of holeLightOf) if (hole.kind === 'window') box.hidden = true;
+      sounds.shatter();
+      // the slats clattering down after the crack
+      window.setTimeout(() => {
+        if (!signal.aborted) sounds.signCrash();
+      }, 120);
+      addScore(BREAK_POINTS, now);
     };
     // The water reaches the machine: a short, a flash, and a fire on that side that grows.
     const startFire = (now: number) => {
@@ -1002,6 +1026,7 @@ export const room: Stage = {
         },
         sprays: () => sprays.length,
         holes: () => scene.holes.map((h) => h.kind),
+        windowOpen: () => scene.windowOpen,
         /** The x of a nozzle spraying right now, or null. */
         nozzle: () => sprays.find((s) => spraying(s, performance.now()))?.nx ?? null,
       };
@@ -1307,6 +1332,7 @@ export const room: Stage = {
       drawRoom(pix, scene);
       // What the machine throws goes on the front layer, over the slot's light.
       fpix.clear();
+      if (scene.windowOpen) drawWindowWreck(fpix);
       // Out of the slot: only the top rows of the sprite so far, then the whole thing.
       for (const s of staples) {
         if (now < s.at || s.hit || s.shot) continue;

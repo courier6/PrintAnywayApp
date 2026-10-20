@@ -456,6 +456,49 @@
   box-shadow: 0 0 calc(2.4px * var(--s)) calc(0.8px * var(--s)) rgba(140, 16, 12, 0.55);
 }
 
+/* The window shot open (Edgar, 2026-10-20): the red from behind the door pours through the
+   gap where the blind was (163,39 58×48), glowing past the frame, and fades in over 1.5 s. The
+   fill is clipped off the machine's corner (x < 165 below y 79), which stands in front of the
+   window; the blind's remnants are drawn over it on the front canvas. */
+.prntr-room-window-light {
+  position: absolute;
+  left: calc(163px * var(--s));
+  top: calc(39px * var(--s));
+  width: calc(58px * var(--s));
+  height: calc(48px * var(--s));
+  box-shadow: 0 0 calc(9px * var(--s)) calc(3px * var(--s)) rgba(140, 16, 12, 0.55);
+  opacity: 0;
+  transition: opacity 1500ms ease-out;
+  pointer-events: none;
+}
+
+.prntr-room-window-fill {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at 50% 60%, #B01A12 0%, #8A1410 35%, #5A0A0A 75%, #2A0404 100%);
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 3.45% 100%, 3.45% 83.33%, 0 83.33%);
+}
+
+.prntr-room-frame.is-window-open .prntr-room-window-light {
+  opacity: 1;
+}
+
+/* The red from the window reaching the plant, the right wall and the machine's far side; it
+   fades out at its edge, so the rest of the room keeps the light it had. */
+.prntr-room-dread-window {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse 45% 62% at 80% 40%, rgba(255, 60, 30, 0.9) 0%, rgba(210, 40, 20, 0.7) 25%, rgba(170, 70, 60, 0.3) 60%, rgba(170, 70, 60, 0) 100%);
+  mix-blend-mode: multiply;
+  opacity: 0;
+  transition: opacity 1500ms ease-out;
+  pointer-events: none;
+}
+
+.prntr-room-frame.is-window-open .prntr-room-dread-window {
+  opacity: 1;
+}
+
 /* The fire's light (Edgar, 2026-10-19): an orange glow the size of the flames, set each frame. */
 .prntr-room-fire-light {
   position: absolute;

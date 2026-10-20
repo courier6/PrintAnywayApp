@@ -119,6 +119,8 @@ export interface SceneState {
   inkBehind: InkDot[];
   /** The bullet holes, oldest first. */
   holes: Hole[];
+  /** The window's blind shot to pieces (Edgar, 2026-10-20): a gaping hole, the red behind it. */
+  windowOpen: boolean;
 }
 
 /** A cheap hash to 0..1, so a flame column flickers on its own without random state. */
@@ -183,6 +185,37 @@ function drawFire(p: Pix, f: Fire, layer: 'back' | 'mid' | 'front'): void {
   }
 }
 
+/**
+ * What is left of the blind once it is shot open, drawn over the window's red light (on the
+ * stage's front layer): the head rail, a strip hanging at each side, a slat torn loose and
+ * hanging askew from the top, and a piece of the bottom slat. Nothing left of x 167 below y 79,
+ * where the machine's corner stands in front of the window.
+ */
+export function drawWindowWreck(p: Pix): void {
+  p.rect(163, 39, 221, 41, 's');
+  p.rect(163, 41, 221, 42, 'a');
+  // the left strip, ragged at its end
+  p.rect(163, 42, 167, 62, 's');
+  for (let y = 45; y < 62; y += 4) p.rect(163, y, 167, y + 1, 'a');
+  p.set(164, 62, 's');
+  p.set(165, 63, 's');
+  // the right strip, shorter
+  p.rect(215, 42, 221, 54, 's');
+  for (let y = 45; y < 54; y += 4) p.rect(215, y, 221, y + 1, 'a');
+  p.set(217, 54, 's');
+  p.set(218, 55, 's');
+  p.set(220, 54, 's');
+  // a slat hanging from its left end, down to the right
+  for (let i = 0; i < 18; i++) {
+    const y = 42 + Math.floor(i / 2);
+    p.set(181 + i, y, 's');
+    p.set(181 + i, y + 1, 'a');
+  }
+  // the bottom slat's right half
+  p.rect(196, 85, 221, 87, 's');
+  p.rect(196, 85, 221, 86, 'a');
+}
+
 /** A wall hole is a dark cross; a door or blind hole goes through to the black behind. */
 function drawHoles(p: Pix, s: SceneState): void {
   for (const h of s.holes) {
@@ -192,7 +225,7 @@ function drawHoles(p: Pix, s: SceneState): void {
       p.set(h.x, h.y - 1, 'X');
       p.set(h.x, h.y + 1, 'X');
       p.set(h.x, h.y, 'K');
-    } else if (!inDoorway(h, s.doorGap)) {
+    } else if (!inDoorway(h, s.doorGap) && !(h.kind === 'window' && s.windowOpen)) {
       p.rect(h.x - 1, h.y - 1, h.x + 1, h.y + 1, 'z');
     }
   }
@@ -236,10 +269,19 @@ export function drawRoom(p: Pix, s: SceneState): void {
   else p.blit(Math.round(sign.x), Math.round(sign.y), SPR.EXIT, 1, { remap: { n: sign.lit ? 'R' : 'G' }, tilt: sign.tilt });
   p.blit(66, 40, s.broken.poster ? SPR.POSTER_TORN : SPR.POSTER);
   p.blit(112, 36, s.broken.clock ? SPR.CLOCK_BROKEN : SPR.CLOCK);
-  // the window: light, blinds, nothing outside
+  // the window: light, blinds, nothing outside; shot open, the black the red light fills
   p.rect(160, 36, 224, 90, 'e');
-  p.rect(163, 39, 221, 87, 's');
-  for (let y = 41; y < 87; y += 4) p.rect(163, y, 221, y + 1, 'a');
+  if (s.windowOpen) {
+    p.rect(163, 39, 221, 87, 'z');
+    // the slats that came down, on the baseboard and the carpet under the window
+    p.rect(170, 108, 178, 109, 's');
+    p.rect(181, 111, 186, 112, 'a');
+    p.rect(188, 109, 196, 110, 's');
+    p.rect(176, 113, 181, 114, 's');
+  } else {
+    p.rect(163, 39, 221, 87, 's');
+    for (let y = 41; y < 87; y += 4) p.rect(163, y, 221, y + 1, 'a');
+  }
   // the bullet holes, under the cooler, the plant and the machine, which stand in front of the wall
   drawHoles(p, s);
   // cooler and plant, their shadows to the left (the window is the light)
