@@ -82,8 +82,8 @@ const MAD_AFTER_MS = 1500;
 const SHAKE_FRAMES = 3;
 /** Once the machine's health is down to SPREAD_HEALTH and the fire is burning, it spreads onto the
  * machine over FIRE_SPREAD_MS; engulfed, the machine's health runs out over DEPLETE_MS and the
- * player wins, unless the machine gets them first (Edgar, 2026-10-19). */
-const SPREAD_HEALTH = 0.65;
+ * player wins, unless the machine gets them first (Edgar, 2026-10-19; three quarters, 2026-10-20). */
+const SPREAD_HEALTH = 0.75;
 const FIRE_SPREAD_MS = 20_000;
 const DEPLETE_MS = 1500;
 /** The mad machine's fourth attack (Edgar, 2026-10-19): ink sprayed from the cartridge bay under
