@@ -39,6 +39,16 @@ export interface Broken {
   vase: boolean;
 }
 
+/**
+ * The fire once the water jug has broken (Edgar, 2026-10-19): it starts in the gap between
+ * the cooler and the machine and grows over the cooler, then burns on. `u` is its growth,
+ * `t` the frame's time for the flicker (0 = still).
+ */
+export interface Fire {
+  u: number;
+  t: number;
+}
+
 /** The EXIT sign (Edgar, 2026-10-19): shot once it hangs loose from its left corner, shot again it falls. */
 export interface ExitSign {
   state: 'up' | 'loose' | 'falling' | 'down';
@@ -74,6 +84,65 @@ export interface SceneState {
   exit: ExitSign;
   /** How wide the door stands open on black, in px: ajar at 6; once the sign is down it swings in (Edgar, 2026-10-19). */
   doorGap: number;
+  fire: Fire | null;
+}
+
+/** A cheap hash to 0..1, so a flame column flickers on its own without random state. */
+function hash(n: number): number {
+  let x = Math.imul(n ^ 0x9e3779b9, 0x85ebca6b);
+  x ^= x >>> 13;
+  x = Math.imul(x, 0xc2b2ae35);
+  x ^= x >>> 16;
+  return (x >>> 0) / 4294967296;
+}
+
+/** The main flame's footprint at growth u: from a lick in the gap to a blaze over the cooler. */
+export function fireRect(u: number): { x0: number; x1: number; y0: number; y1: number } {
+  const cx = 74 - 12 * u;
+  const w = 4 + 16 * u;
+  const h = 8 + 52 * u;
+  return { x0: Math.round(cx - w), x1: Math.round(cx + w), y0: 146 - Math.round(h), y1: 146 };
+}
+
+/**
+ * One flame: a dome of columns of height h over half-width w, standing on `floor`, each
+ * column flickering by its own hash (seeded) every 50 ms; yellow at the floor, orange, red
+ * at the tips, a spark now and then above them.
+ */
+function drawFlame(p: Pix, cx: number, w: number, h: number, floor: number, seed: number, t: number): void {
+  if (h < 1 || w < 1) return;
+  const tick = Math.floor(t / 50);
+  for (let x = Math.round(cx - w); x <= Math.round(cx + w); x++) {
+    const k = (x - cx) / w;
+    const n = 0.5 * (hash(x * 31 + tick * 7 + seed) + hash((x + 1) * 31 + tick * 7 + seed));
+    const col = h * Math.sqrt(Math.max(0, 1 - k * k)) * (0.65 + 0.35 * n);
+    if (col < 1) continue;
+    const top = floor - col;
+    for (let y = Math.ceil(top); y < floor; y++) {
+      const q = (floor - y) / col;
+      p.set(x, y, q < 0.35 ? 'y' : q < 0.7 ? 'o' : 'R');
+    }
+    if (n > 0.93) p.set(x, Math.ceil(top) - 2 - (Math.floor(n * 100) % 4), 'o');
+  }
+}
+
+/** A later flame's own growth: 0 until the fire reaches `from`, 1 when it is full. */
+const later = (u: number, from: number) => Math.max(0, Math.min(1, (u - from) / (1 - from)));
+
+/**
+ * The fire in three layers, so it sits among the things it burns rather than in front of
+ * them (Edgar): `back`, two smaller flames behind the cooler on the floor further in (they
+ * come as the fire grows and round it out); `mid`, the main flame, in front of the cooler
+ * and behind the machine; `front`, a low lick at the machine's foot and the cooler's base.
+ */
+function drawFire(p: Pix, f: Fire, layer: 'back' | 'mid' | 'front'): void {
+  const r = fireRect(f.u);
+  const h = r.y1 - r.y0;
+  if (layer === 'mid') drawFlame(p, (r.x0 + r.x1) / 2, (r.x1 - r.x0) / 2, h, r.y1, 0, f.t);
+  else if (layer === 'back') {
+    drawFlame(p, 50, 7 * later(f.u, 0.35), 0.9 * h * later(f.u, 0.35), 142, 100, f.t);
+    drawFlame(p, 70, 6 * later(f.u, 0.55), 0.95 * h * later(f.u, 0.55), 142, 200, f.t);
+  } else drawFlame(p, 76, 5 * later(f.u, 0.2), 0.3 * h * later(f.u, 0.2), 146, 300, f.t);
 }
 
 /**
@@ -120,6 +189,7 @@ export function drawRoom(p: Pix, s: SceneState): void {
   for (let y = 41; y < 87; y += 4) p.rect(163, y, 221, y + 1, 'a');
   // cooler and plant, their shadows to the left (the window is the light)
   p.rect(42, 128, 56, 131, 'X');
+  if (s.fire) drawFire(p, s.fire, 'back');
   if (s.broken.tank) {
     // the water on the carpet, the stump of the bottle, the cooler itself
     p.rect(46, 135, 78, 137, 'L');
@@ -129,6 +199,7 @@ export function drawRoom(p: Pix, s: SceneState): void {
   } else {
     p.blit(50, 92, SPR.COOLER, 2);
   }
+  if (s.fire) drawFire(p, s.fire, 'mid');
   p.rect(190, 132, 206, 135, 'X');
   p.blit(200, 103, s.broken.plant ? SPR.PLANT_BARE : PLANT_TOP, 2);
   p.blit(200, 123, s.broken.vase ? SPR.POT_BROKEN : PLANT_POT, 2);
@@ -164,4 +235,5 @@ export function drawRoom(p: Pix, s: SceneState): void {
     p.blit(132, 110, SPR.INFO, 1, s.stickerRed ? { remap: { c: 'R' } } : {});
     if (s.trayPage) p.blit(98, 118, SPR.PAGE_SMALL);
   }
+  if (s.fire) drawFire(p, s.fire, 'front');
 }

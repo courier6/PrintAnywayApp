@@ -15,6 +15,12 @@ export interface Hum {
   stop(): void;
 }
 
+export interface FireSound {
+  /** 0 just lit … 1 the full blaze. */
+  setLevel(u: number): void;
+  stop(): void;
+}
+
 export interface RoomSounds {
   /** The fluorescent hum; loops until stop(). */
   hum(): Hum;
@@ -61,6 +67,10 @@ export interface RoomSounds {
   signCrash(): void;
   /** The door creaking open, 1.3 s, faint under everything else. */
   doorCreak(): void;
+  /** The machine shorting out when the water reaches it. */
+  zap(): void;
+  /** The fire's roar and crackle; loops until stop(), at the level set. */
+  fire(): FireSound;
 }
 
 const noop = () => undefined;
@@ -89,6 +99,8 @@ const SILENT: RoomSounds = {
   signSnap: noop,
   signCrash: noop,
   doorCreak: noop,
+  zap: noop,
+  fire: () => ({ setLevel: noop, stop: noop }),
 };
 
 /** Two seconds of white noise, made once per context. */
@@ -426,6 +438,62 @@ export function createRoomSounds(audio: PrntrAudio): RoomSounds {
         o.start(t);
         o.stop(t + 1.32);
       }
+    },
+    // the short: five bursts 90 ms apart of a 60 → 120 Hz square with a crackle on each
+    zap() {
+      const t = now();
+      for (let i = 0; i < 5; i++) {
+        tone(t + i * 0.09, 0.06, { type: 'square', f0: 60 + i * 15, gain: 0.25, attack: 0.003, release: 0.01 });
+        noise(t + i * 0.09, 0.05, { hp: 3000, gain: 0.5, decay: 0.008 });
+      }
+    },
+    // a roar (looping noise through a 220 Hz lowpass) under crackles every 40–160 ms,
+    // both scaled by the level; scheduled a quarter second ahead from a 100 ms timer
+    fire() {
+      const master = ctx.createGain();
+      master.gain.value = 0;
+      const src = ctx.createBufferSource();
+      src.buffer = NOISE;
+      src.loop = true;
+      const lp = ctx.createBiquadFilter();
+      lp.type = 'lowpass';
+      lp.frequency.value = 220;
+      src.connect(lp);
+      lp.connect(master);
+      master.connect(out);
+      src.start();
+      let level = 0;
+      let next = now();
+      const timer = window.setInterval(() => {
+        const t = now();
+        if (next < t) next = t;
+        while (next < t + 0.25) {
+          noise(next, 0.03, { hp: 1200, lp: 6000, gain: 0.3 * level * (0.4 + 0.6 * Math.random()), decay: 0.004 });
+          next += 0.04 + Math.random() * 0.12;
+        }
+      }, 100);
+      let stopped = false;
+      return {
+        setLevel(u) {
+          level = u;
+          master.gain.setTargetAtTime(0.14 * u, now(), 0.2);
+        },
+        stop() {
+          if (stopped) return;
+          stopped = true;
+          window.clearInterval(timer);
+          master.gain.cancelScheduledValues(now());
+          master.gain.setTargetAtTime(0, now(), 0.05);
+          window.setTimeout(() => {
+            try {
+              src.stop();
+            } catch {
+              // already stopped
+            }
+            master.disconnect();
+          }, 400);
+        },
+      };
     },
   };
 

@@ -390,6 +390,16 @@
   height: calc(22px * var(--s));
 }
 
+/* The fire's light (Edgar, 2026-10-19): an orange glow the size of the flames, set each frame. */
+.prntr-room-fire-light {
+  position: absolute;
+  border-radius: 50%;
+  box-shadow:
+    0 0 calc(4px * var(--s)) calc(1.5px * var(--s)) rgba(255, 150, 40, 0.35),
+    0 0 calc(9px * var(--s)) calc(4px * var(--s)) rgba(255, 90, 20, 0.3);
+  pointer-events: none;
+}
+
 .prntr-room-dread {
   position: absolute;
   inset: 0;

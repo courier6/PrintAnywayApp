@@ -1,8 +1,8 @@
 import { reducedMotion, wait } from '../../anim';
 import type { Handoff, Stage } from '../../types';
 import { H, Pix, W } from './pixels';
-import { SPR, drawRoom, type Broken, type ExitSign, type SceneState } from './scene';
-import { createRoomSounds, type Hum } from './sounds';
+import { SPR, drawRoom, fireRect, type Broken, type ExitSign, type SceneState } from './scene';
+import { createRoomSounds, type FireSound, type Hum } from './sounds';
 
 // ---------------------------------------------------------------------------
 // Tunables. The attack cycle is "tune freely" (handoff §2.7), slowed down and made
@@ -70,6 +70,9 @@ const RAGE_STEP = 0.85;
 const RAGE_MAX = 4;
 /** Shooting one of the room's things breaks it, once, for this many points (Edgar, 2026-10-19). */
 const BREAK_POINTS = 5;
+/** The water jug breaking shorts the machine: a fire on its wet side grows over the cooler for
+ * this long, then burns on at that size (Edgar, 2026-10-19). */
+const FIRE_GROW_MS = 12_000;
 /** The EXIT sign (Edgar, 2026-10-19), BREAK_POINTS a hit: its hit box (the sprite plus 2 px, and the
  * room it swings in); the first hit knocks it loose and its letters are on only in these ms windows
  * after it, then out; the second brings it down over EXIT_FALL_MS from the wall to the floor. */
@@ -214,13 +217,16 @@ export const room: Stage = {
     if (!cg) throw new Error('prntr: no 2d context');
     const light = el('div', 'prntr-room-light');
     const spill = el('div', 'prntr-room-spill');
+    // The fire's light: an unpixelated orange glow sized to the flames each frame.
+    const fireLight = el('div', 'prntr-room-fire-light');
+    fireLight.hidden = true;
     // The red that reaches into the room once the door is open: a multiply wash, off until then.
     const dread = el('div', 'prntr-room-dread');
     const wash = el('div', 'prntr-room-wash');
     // The red glow on everything that can be shot: DOM boxes over the pixel layer,
     // unpixelated like the door's light (Edgar, 2026-10-19). One per projectile, pooled.
     const glows = el('div', 'prntr-room-glows');
-    for (const n of [light, spill, dread, wash, glows]) n.setAttribute('aria-hidden', 'true');
+    for (const n of [light, spill, fireLight, dread, wash, glows]) n.setAttribute('aria-hidden', 'true');
     const hud = el('div', 'prntr-room-hud');
     const scoreEl = el('div', 'prntr-room-score', 'SCORE 0000');
     const hiEl = el('div', 'prntr-room-hi', 'HI 1337');
@@ -258,7 +264,7 @@ export const room: Stage = {
     const overEl = el('div', 'prntr-room-over');
     overEl.setAttribute('aria-hidden', 'true');
     overEl.hidden = true;
-    frame.append(canvas, light, spill, dread, wash, glows, hud, cursor, continueEl, overEl);
+    frame.append(canvas, light, spill, fireLight, dread, wash, glows, hud, cursor, continueEl, overEl);
     wrap.append(frame);
     root.append(wrap);
 
@@ -292,6 +298,7 @@ export const room: Stage = {
       broken: { clock: false, poster: false, tank: false, plant: false, vase: false },
       exit: { state: 'up', x: EXIT_WALL.x, y: EXIT_WALL.y, tilt: 0, lit: true },
       doorGap: DOOR_AJAR,
+      fire: null,
     };
     let phase: Phase = 'look';
     let phaseAt = performance.now();
@@ -330,6 +337,9 @@ export const room: Stage = {
     let panicked = false;
     /** When the EXIT sign was last hit (its flicker, swing and fall count from here). */
     let exitAt = 0;
+    /** When the fire started (the water jug broke), and its crackle. */
+    let fireAt: number | null = null;
+    let fireSound: FireSound | null = null;
     /** When the door starts to open (set as the sign lands), and when it did. */
     let doorAt: number | null = null;
     let doorOpenAt: number | null = null;
@@ -601,7 +611,15 @@ export const room: Stage = {
         scene.broken[thing.id] = true;
         sounds[thing.sound]();
         addScore(BREAK_POINTS, now);
+        if (thing.id === 'tank') startFire(now);
       }
+    };
+    // The water reaches the machine: a short, a flash, and a fire on that side that grows.
+    const startFire = (now: number) => {
+      fireAt = now;
+      flashFrames = HIT_FLASH_FRAMES * 2;
+      sounds.zap();
+      fireSound = sounds.fire();
     };
     // The machine does not move. Scan, staples, pages, in rotation.
     const launchAttack = (now: number) => {
@@ -800,6 +818,7 @@ export const room: Stage = {
         hintFadeAt = 0;
       }
       if (hintHideAt && now >= hintHideAt) hideHint();
+      if (fireAt !== null) fireSound?.setLevel(Math.min(1, (now - fireAt) / FIRE_GROW_MS));
       // The falling sign lands (not while the room is frozen).
       if (scene.exit.state === 'falling' && frozenAt === null && now - exitAt >= (reduced ? 0 : EXIT_FALL_MS)) {
         scene.exit.state = 'down';
@@ -929,9 +948,22 @@ export const room: Stage = {
         light.style.width = `calc(${lightGap}px * var(--s))`;
       }
     };
+    // The fire grows for FIRE_GROW_MS, then holds; its glow box follows the flames.
+    const poseFire = (now: number) => {
+      if (fireAt === null) return;
+      scene.fire = { u: Math.min(1, (now - fireAt) / FIRE_GROW_MS), t: reduced ? 0 : now };
+      const r = fireRect(scene.fire.u);
+      fireLight.hidden = false;
+      fireLight.style.left = `${r.x0 * scale}px`;
+      fireLight.style.top = `${r.y0 * scale}px`;
+      fireLight.style.width = `${(r.x1 - r.x0) * scale}px`;
+      fireLight.style.height = `${(r.y1 - r.y0) * scale}px`;
+      fireLight.style.opacity = reduced ? '0.8' : String(0.65 + 0.35 * Math.abs(Math.sin(now / 90)));
+    };
     const render = (now: number) => {
       poseSign(now);
       poseDoor(now);
+      poseFire(now);
       scene.flashWhite = flashFrames > 0;
       if (flashFrames > 0) flashFrames--;
       scene.buttonBright = phase === 'fight' && buttonBright(now);
@@ -980,6 +1012,7 @@ export const room: Stage = {
         done = true;
         cancelAnimationFrame(raf);
         hum.stop();
+        fireSound?.stop();
       };
       // On abort the host removes the root. On finish the frame stays painted until
       // the host's drop (sky or Tetris) has covered it (PRNTR-STAGE-1.md §4.10).
