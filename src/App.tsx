@@ -8,7 +8,7 @@ import { prntrAudioContext } from './components/prntrAudio';
 import type { Certificate } from './prntr/types';
 import { ErrorState, type ErrorKind } from './components/ErrorState';
 import { t, useLocale } from './i18n';
-import { INKS } from './lib/inks';
+import { GOLD_INK, INKS } from './lib/inks';
 import { fileKind, loadDocument } from './lib/loadDocument';
 import { classifyError, logAppError, type ErrorCode } from './lib/errors';
 import { PageStore } from './lib/pageStore';
@@ -44,6 +44,9 @@ export default function App() {
     kind: 'processing',
   });
   const [inkIndex, setInkIndex] = useState(0);
+  // Gold, the secret ink, is on offer once Prntr's room has been won, until the page is reloaded.
+  const [goldUnlocked, setGoldUnlocked] = useState(false);
+  const inks = goldUnlocked ? [...INKS, GOLD_INK] : INKS;
   const [fileName, setFileName] = useState('');
   const [format, setFormat] = useState<ExportFormat>('pdf');
   const [pageCount, setPageCount] = useState(0);
@@ -214,7 +217,7 @@ export default function App() {
 
   function selectInk(index: number) {
     setInkIndex(index);
-    const hex = INKS[index].hex;
+    const hex = inks[index].hex;
     inkRef.current = hex;
     // Visible page synchronously; the rest catch up in idle time.
     store.ensureRecolored(currentPage, hex);
@@ -291,6 +294,10 @@ export default function App() {
     setHolding(false);
     setFileName(`prntr-certificate-${id.slice(-9).replace('-', '')}.pdf`);
     setFormat('pdf');
+    // the certificate comes up in gold, the secret ink, which stays on offer from here on
+    setGoldUnlocked(true);
+    setInkIndex(INKS.length);
+    inkRef.current = GOLD_INK.hex;
     store.reset(1);
     store.setSource(0, page);
     store.ensureRecolored(0, inkRef.current);
@@ -349,7 +356,7 @@ export default function App() {
     else setAppState('empty');
   }
 
-  const inkHex = INKS[inkIndex].hex;
+  const inkHex = inks[inkIndex].hex;
   const recoloredCanvas = appState === 'preview' ? store.getRecolored(currentPage, inkHex) : null;
   const sourceCanvas = appState === 'preview' ? store.getSource(currentPage) : null;
   const firstPage = appState === 'processing' ? store.getRecolored(0, inkHex) : null;
@@ -381,6 +388,7 @@ export default function App() {
             pageCount={pageCount}
             currentPage={currentPage}
             onPageChange={goToPage}
+            inks={inks}
             inkIndex={inkIndex}
             onSelectInk={selectInk}
             onChooseFile={openPicker}
