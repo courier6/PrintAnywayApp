@@ -1,6 +1,6 @@
 import { reducedMotion, wait } from '../../anim';
 import type { Handoff, Stage } from '../../types';
-import { H, Pix, W } from './pixels';
+import { H, Pix, W, rotateSprite } from './pixels';
 import { CLOCK_AT, MACHINE_PIECES, SPR, drawFireFront, drawRoom, drawWindowWreck, fireRect, inDoorway, type Broken, type ExitSign, type Hole, type SceneState } from './scene';
 import type { PalKey } from './palette';
 import { createRoomSounds, type FireSound, type Hum } from './sounds';
@@ -32,7 +32,7 @@ const RESPAWN_MS = 2000;
  * lands takes HIT_DAMAGE of it and the room flashes red for HURT_MS; the hit that empties it
  * costs a life (the death beat above), and the bar is full again when the beat is over. */
 const PLAYER_HEALTH = 100;
-const HIT_DAMAGE = { staple: 25, page: 34, ink: 50 } as const;
+const HIT_DAMAGE = { staple: 25, page: 34, ink: 50, nut: 68, bolt: 68 } as const;
 const HURT_MS = 150;
 /** A lost heart's ghost floating up can be shot (± GHOST_HIT_PAD virtual px around it): it pops
  * like a balloon, its bits gone after POP_MS (Edgar, 2026-10-20). No points: it was the player's. */
@@ -66,6 +66,14 @@ const STAPLE_MS = 1500;
 const STAPLE_STAGGER_MS = 500;
 /** The staple's hit box: its sprite at the current scale, plus this many virtual px around. */
 const STAPLE_HIT_PAD = 3;
+/** At half health or less the machine throws nuts and bolts too (Edgar, 2026-10-20): out of the
+ * slot and at the camera like the staples, spinning, a little quicker, twice a page's damage
+ * (HIT_DAMAGE), BOLT_POINTS when shot. */
+const BOLT_HEALTH = 0.5;
+const BOLT_MS = 1300;
+const BOLT_STAGGER_MS = 400;
+const BOLT_POINTS = 2;
+const BOLT_SPIN_MS = 100;
 /** 1.8 s, then a quarter longer on Edgar's review (2026-10-19): they were landing too fast. */
 const PAGE_MS = 2250;
 const PAGE_STAGGER_MS = 450;
@@ -271,8 +279,16 @@ const ROOM_ALT =
   'A quiet office: drop ceiling with two fluorescent panels, a door ajar on black with an EXIT sign, a clock, a Simple Products board with notes on it by a bright window with nothing outside, a water cooler, a plant, one large copier in the middle, and a USB stick on the carpet beside it';
 
 type Phase = 'look' | 'sticker' | 'fight' | 'continue' | 'over' | 'end';
+type AttackKind = 'scan' | 'staples' | 'pages' | 'ink' | 'bolts';
+
+/** A staple, or a nut or a bolt: all thrown out of the slot at the camera. */
+type ThrownKind = 'staple' | 'nut' | 'bolt';
+const THROWN_SPR: Record<ThrownKind, keyof typeof SPR> = { staple: 'STAPLE', nut: 'NUT', bolt: 'BOLT' };
 
 interface Staple {
+  kind: ThrownKind;
+  /** Its flight time, from the slot to the camera. */
+  ms: number;
   /** Where it leaves the slot, and where it arrives. */
   x0: number;
   x: number;
@@ -933,20 +949,29 @@ export const room: Stage = {
       const y = y0 + (p.y1 - y0) * v;
       return { x: Math.floor(x - 5 * sc), y: Math.floor(y - 6.5 * sc), w: 10 * sc, h: 13 * sc };
     };
-    // A staple punches up out of the slot at 1× for the first part of STAPLE_MS (the rect is
-    // the rows showing), then flies out of it at the camera: 1× → 2× → 4×.
+    /** A thrown thing's sprite: a nut or a bolt spins a quarter turn every BOLT_SPIN_MS. */
+    const thrownSprite = (s: Staple, now: number) => {
+      const spr = SPR[THROWN_SPR[s.kind]];
+      if (s.kind === 'staple' || reduced) return spr;
+      return rotateSprite(spr, Math.floor((now - s.at) / BOLT_SPIN_MS) % 4);
+    };
+    // A staple (or a nut or a bolt) punches up out of the slot at 1× for the first part of its
+    // flight (the rect is the rows showing), then flies out of it at the camera: 1× → 2× → 4×.
     const staplePose = (s: Staple, now: number) => {
-      const u = Math.min(1, (now - s.at) / STAPLE_MS);
+      const spr = thrownSprite(s, now);
+      const hw = spr.w / 2;
+      const hh = spr.h / 2;
+      const u = Math.min(1, (now - s.at) / s.ms);
       if (u < STAPLE_EJECT) {
-        const rows = Math.round((u / STAPLE_EJECT) * SPR.STAPLE.h);
-        return { x: Math.floor(s.x0 - 3), y: SLOT.y - rows, w: 6, h: rows };
+        const rows = Math.round((u / STAPLE_EJECT) * spr.h);
+        return { x: Math.floor(s.x0 - hw), y: SLOT.y - rows, w: spr.w, h: rows };
       }
       const v = (u - STAPLE_EJECT) / (1 - STAPLE_EJECT);
       const sc = v < 1 / 3 ? 1 : v < 2 / 3 ? 2 : 4;
-      const y0 = SLOT.y - 2.5;
+      const y0 = SLOT.y - hh;
       const x = s.x0 + (s.x - s.x0) * v;
       const y = y0 + (s.y - y0) * v;
-      return { x: Math.floor(x - 3 * sc), y: Math.floor(y - 2.5 * sc), w: 6 * sc, h: 5 * sc };
+      return { x: Math.floor(x - hw * sc), y: Math.floor(y - hh * sc), w: spr.w * sc, h: spr.h * sc };
     };
     // A jet: its end (the nozzle shot, or SPRAY_MS), when its last particle lands, and whether
     // the nozzle is still spraying (and so can be shot).
@@ -1025,7 +1050,7 @@ export const room: Stage = {
       });
       if (staple) {
         staple.shot = true;
-        addScore(STAPLE_POINTS, now);
+        addScore(staple.kind === 'staple' ? STAPLE_POINTS : BOLT_POINTS, now);
         return;
       }
       // A spraying tube, its head or the hose over the edge: the jet stops; what is already in the air still lands.
@@ -1193,11 +1218,23 @@ export const room: Stage = {
         bits.push({ x: x + (Math.random() - 0.5) * 10, y: y + (Math.random() - 0.5) * 6, vx: (Math.random() - 0.5) * 16, vy: -20 - Math.random() * 30, g: 0, born: now, life: 500 + Math.random() * 400, size: 1 + Math.floor(Math.random() * 2), color: Math.random() < 0.5 ? 'l' : 'T' });
       }
     };
-    // The machine does not move. Scan, staples, pages, in rotation; once it is mad, ink too.
+    /** The next attack the dev hook asked for, if any. */
+    let forcedKind: AttackKind | null = null;
+    // The machine does not move. Scan, staples, pages, in rotation; once it is mad, ink too; at
+    // half health or less, nuts and bolts too.
     const launchAttack = (now: number) => {
       const gap = attackGap();
-      const kind = attackIndex++ % (mad ? 4 : 3);
-      if (kind === 3) {
+      const kinds: AttackKind[] = ['scan', 'staples', 'pages'];
+      if (mad) kinds.push('ink');
+      if (score >= HI * BOLT_HEALTH) kinds.push('bolts');
+      const kind = forcedKind ?? kinds[attackIndex++ % kinds.length];
+      forcedKind = null;
+      if (kind === 'bolts') {
+        for (let i = 0; i < 3; i++) {
+          staples.push({ kind: Math.random() < 0.5 ? 'nut' : 'bolt', ms: BOLT_MS, x0: SLOT.x0 + 4 + Math.random() * (SLOT.x1 - SLOT.x0 - 8), x: 20 + Math.random() * 180, y: 40 + Math.random() * 70, at: now + i * BOLT_STAGGER_MS, hit: false, shot: false, fed: false });
+        }
+        nextAttackAt = now + 2 * BOLT_STAGGER_MS + BOLT_MS + gap;
+      } else if (kind === 'ink') {
         const first = Math.floor(Math.random() * INK_COLORS.length);
         for (let i = 0; i < SPRAY_COUNT; i++) {
           // the last jet goes at the fire while it burns: into the middle of the main flame
@@ -1212,13 +1249,13 @@ export const room: Stage = {
           sprays.push({ nx: NOZZLES_X[Math.floor(Math.random() * NOZZLES_X.length)], x, y, at: now + TUBE_RISE_MS + i * SPRAY_STAGGER_MS, color: INK_COLORS[(first + i) % INK_COLORS.length], fire: atFire, stoppedAt: null, done: false, fed: false });
         }
         nextAttackAt = now + TUBE_RISE_MS + (SPRAY_COUNT - 1) * SPRAY_STAGGER_MS + SPRAY_MS + SPRAY_FLIGHT_MS + gap;
-      } else if (kind === 0) {
+      } else if (kind === 'scan') {
         scanAt = now;
         sounds.scanFlash();
         nextAttackAt = now + SCAN_MS + WASH_MS + gap;
-      } else if (kind === 1) {
+      } else if (kind === 'staples') {
         for (let i = 0; i < 3; i++) {
-          staples.push({ x0: SLOT.x0 + 3 + Math.random() * (SLOT.x1 - SLOT.x0 - 6), x: 20 + Math.random() * 180, y: 40 + Math.random() * 70, at: now + i * STAPLE_STAGGER_MS, hit: false, shot: false, fed: false });
+          staples.push({ kind: 'staple', ms: STAPLE_MS, x0: SLOT.x0 + 3 + Math.random() * (SLOT.x1 - SLOT.x0 - 6), x: 20 + Math.random() * 180, y: 40 + Math.random() * 70, at: now + i * STAPLE_STAGGER_MS, hit: false, shot: false, fed: false });
         }
         nextAttackAt = now + 2 * STAPLE_STAGGER_MS + STAPLE_MS + gap;
       } else {
@@ -1350,11 +1387,12 @@ export const room: Stage = {
         spread: () => spreadAt !== null,
         stokes: () => stokes,
         spreadMs: () => spreadMs,
-        /** The next attack, now: scan, staples, pages or (mad only) ink. */
-        attack: (kind: 'scan' | 'staples' | 'pages' | 'ink') => {
-          attackIndex = ['scan', 'staples', 'pages', 'ink'].indexOf(kind);
+        /** The next attack, now: scan, staples, pages, ink or bolts, whatever the machine's state. */
+        attack: (kind: AttackKind) => {
+          forcedKind = kind;
           nextAttackAt = 0;
         },
+        bolts: () => staples.filter((s) => s.kind !== 'staple').length,
         sprays: () => sprays.length,
         tubes: () => scene.tubes.map((t) => ({ ...t })),
         holes: () => scene.holes.map((h) => h.kind),
@@ -1537,12 +1575,14 @@ export const room: Stage = {
         for (const s of staples) {
           if (!s.fed && now >= s.at) {
             s.fed = true;
-            sounds.staplePunch();
+            if (s.kind === 'staple') sounds.staplePunch();
+            else sounds.boltPunch();
           }
-          if (!s.hit && !s.shot && now - s.at >= STAPLE_MS) {
+          if (!s.hit && !s.shot && now - s.at >= s.ms) {
             s.hit = true;
-            sounds.stapleHit();
-            hurt('staple', now);
+            if (s.kind === 'staple') sounds.stapleHit();
+            else sounds.boltHit();
+            hurt(s.kind, now);
           }
         }
         staples = staples.filter((s) => !s.hit && !s.shot);
@@ -1721,7 +1761,7 @@ export const room: Stage = {
       for (const s of staples) {
         if (now < s.at || s.hit || s.shot) continue;
         const r = staplePose(s, now);
-        const spr = SPR.STAPLE;
+        const spr = thrownSprite(s, now);
         if (r.h < spr.h) fpix.blit(r.x, r.y, { w: spr.w, h: r.h, rows: spr.rows.slice(0, r.h) });
         else fpix.blit(r.x, r.y, spr, r.w / spr.w);
       }

@@ -9,6 +9,8 @@ export const SPR = {
   POINTER: parseSprite(SPRITES.POINTER),
   CROSSHAIR: parseSprite(SPRITES.CROSSHAIR),
   STAPLE: parseSprite(SPRITES.STAPLE),
+  NUT: parseSprite(SPRITES.NUT),
+  BOLT: parseSprite(SPRITES.BOLT),
   COOLER: parseSprite(SPRITES.COOLER),
   PLANT: parseSprite(SPRITES.PLANT),
   POSTER: parseSprite(SPRITES.POSTER),

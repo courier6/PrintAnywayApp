@@ -35,6 +35,10 @@ export interface RoomSounds {
   /** The scan's whine; the flash burst is scheduled 0.6 s later by the same call. */
   scanFlash(): void;
   stapleHit(): void;
+  /** A nut or a bolt hitting the glass: a clang (Edgar, 2026-10-20). */
+  boltHit(): void;
+  /** A nut or a bolt thrown out of the slot: a heavier clack than a staple's. */
+  boltPunch(): void;
   /** Gun shot: a pistol (Edgar, 2026-10-19; the designer's candidates A and B are in sounds.js). */
   shot(): void;
   /** Firing an empty gun. */
@@ -103,6 +107,8 @@ const SILENT: RoomSounds = {
   lidShut: noop,
   scanFlash: noop,
   stapleHit: noop,
+  boltHit: noop,
+  boltPunch: noop,
   shot: noop,
   dryClick: noop,
   reload: noop,
@@ -329,6 +335,21 @@ export function createRoomSounds(audio: PrntrAudio): RoomSounds {
       tone(t, 0.05, { f0: 4200, gain: 0.3, decay: 0.006 });
       tone(t, 0.05, { f0: 6300, gain: 0.15, decay: 0.004 });
       noise(t, 0.03, { hp: 4000, gain: 0.25, decay: 0.003 });
+    },
+    // a clang: two rings falling from 2.4 and 3.6 kHz over a 60 ms thud
+    boltHit() {
+      const t = now();
+      noise(t, 0.04, { hp: 2500, gain: 0.4, decay: 0.006 });
+      tone(t, 0.25, { f0: 2400, f1: 1900, gain: 0.3, decay: 0.05 });
+      tone(t, 0.2, { f0: 3600, f1: 3000, gain: 0.15, decay: 0.035 });
+      tone(t, 0.06, { f0: 200, f1: 80, gain: 0.4, decay: 0.015 });
+    },
+    // a nut or a bolt out of the slot: a metal tick over a heavier 80 ms thud, 240 → 70 Hz
+    boltPunch() {
+      const t = now();
+      tone(t, 0.04, { f0: 3000, f1: 2000, gain: 0.25, decay: 0.008 });
+      noise(t, 0.08, { lp: 1200, gain: 0.55, decay: 0.015 });
+      tone(t, 0.08, { f0: 240, f1: 70, gain: 0.5, decay: 0.02 });
     },
     // a pistol: a 30 ms crack on a 90 ms bang, a thump dropping 160 → 45 Hz, and a lowpassed tail
     shot() {

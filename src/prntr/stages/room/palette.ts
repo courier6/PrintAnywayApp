@@ -118,6 +118,24 @@ KWK.....KWK
 ....KWK....
 ....KWK....
 `,
+  // 7 × 7: a nut, and 9 × 5: a bolt, thrown from the slot once the machine is at half health
+  // (Edgar, 2026-10-20; not in sprites.txt)
+  NUT: `
+..KKK..
+.KgggK.
+KggKggK
+KgK.KgK
+KggKggK
+.KgggK.
+..KKK..
+`,
+  BOLT: `
+KKKK.....
+KggGKKKKK
+KgggGgGgK
+KggGKKKKK
+KKKK.....
+`,
   // 6 × 5
   STAPLE: `
 gggggg
