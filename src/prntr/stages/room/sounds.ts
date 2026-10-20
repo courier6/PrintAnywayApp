@@ -83,6 +83,8 @@ export interface RoomSounds {
   clatter(): void;
   /** The clock catching fire: a whoosh. */
   whoosh(): void;
+  /** The engulfed machine bursting apart: a bang, then its pieces coming down. */
+  burst(): void;
 }
 
 const noop = () => undefined;
@@ -119,6 +121,7 @@ const SILENT: RoomSounds = {
   knock: noop,
   clatter: noop,
   whoosh: noop,
+  burst: noop,
 };
 
 /** Two seconds of white noise, made once per context. */
@@ -543,6 +546,19 @@ export function createRoomSounds(audio: PrntrAudio): RoomSounds {
         tone(t + d, 0.1, { f0: 130, f1: 50, gain: 0.4 * k, decay: 0.03 });
         tone(t + d, 0.12, { f0: 2900, f1: 2300, gain: 0.1 * k, decay: 0.03 });
       });
+    },
+    // a bang: a crack, a 0.3 s burst, a thump falling 120 → 30 Hz, and three clatters of the pieces
+    // coming down between 0.45 and 0.9 s
+    burst() {
+      const t = now();
+      noise(t, 0.04, { hp: 1500, gain: 0.9, decay: 0.008 });
+      noise(t, 0.3, { lp: 3000, gain: 0.8, decay: 0.06 });
+      tone(t, 0.35, { f0: 120, f1: 30, gain: 0.7, decay: 0.09 });
+      noise(t + 0.05, 0.6, { lp: 600, gain: 0.3, decay: 0.15 });
+      for (const d of [0.45, 0.62, 0.9]) {
+        noise(t + d, 0.08, { lp: 2500, gain: 0.45, decay: 0.015 });
+        tone(t + d, 0.1, { f0: 140, f1: 50, gain: 0.35, decay: 0.03 });
+      }
     },
     // a whoosh: low noise rising and a brighter breath over it, 0.4 s
     whoosh() {

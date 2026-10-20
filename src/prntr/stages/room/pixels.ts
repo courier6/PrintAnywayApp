@@ -23,6 +23,11 @@ export function sliceRows(s: Sprite, from: number, to: number): Sprite {
   return { w: s.w, h: to - from, rows: s.rows.slice(from, to) };
 }
 
+/** Columns x0..x1-1 of rows y0..y1-1 of a sprite as a sprite of their own (the machine's pieces). */
+export function sliceRect(s: Sprite, x0: number, y0: number, x1: number, y1: number): Sprite {
+  return { w: x1 - x0, h: y1 - y0, rows: s.rows.slice(y0, y1).map((r) => r.slice(x0, x1)) };
+}
+
 /** A sprite turned a quarter turn clockwise `quarters` times (the clock rolling). */
 export function rotateSprite(s: Sprite, quarters: number): Sprite {
   let out = s;

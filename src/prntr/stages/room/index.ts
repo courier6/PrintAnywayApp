@@ -1,7 +1,7 @@
 import { reducedMotion, wait } from '../../anim';
 import type { Handoff, Stage } from '../../types';
 import { H, Pix, W } from './pixels';
-import { CLOCK_AT, SPR, drawFireFront, drawRoom, drawWindowWreck, fireRect, inDoorway, type Broken, type ExitSign, type Hole, type SceneState } from './scene';
+import { CLOCK_AT, MACHINE_PIECES, SPR, drawFireFront, drawRoom, drawWindowWreck, fireRect, inDoorway, type Broken, type ExitSign, type Hole, type SceneState } from './scene';
 import { createRoomSounds, type FireSound, type Hum } from './sounds';
 
 // ---------------------------------------------------------------------------
@@ -173,6 +173,13 @@ const FLOOR_Y = 109;
 const WINDOW_BREAK_SHOTS = 9;
 /** The quiet room after 1337, before Prntr ends: 0.5 s of lights coming back, then a full second of nothing. */
 const HOLD_END_MS = 1500;
+/** Engulfed, the machine bursts apart (Edgar, 2026-10-20): its eight pieces fly out and up and fall
+ * under PIECE_GRAVITY px/s² to the floor, each a little nearer than the last; the fire rages on,
+ * its flames on the machine growing by RAGE_MORE over the end's first second instead of dying
+ * down, and the stage ends BURN_END_MS after 1337. */
+const PIECE_GRAVITY = 260;
+const RAGE_MORE = 0.25;
+const BURN_END_MS = 2500;
 
 /** The machine at 3×: the gun's target. */
 const MACHINE = { x0: 72, y0: 80, x1: 168, y1: 146 };
@@ -458,6 +465,7 @@ export const room: Stage = {
       tubes: [],
       holes: [],
       windowOpen: false,
+      pieces: [],
     };
     /** Holes in the blind so far. */
     let windowShots = 0;
@@ -517,6 +525,9 @@ export const room: Stage = {
     let spreadAt: number | null = null;
     let depleteAt: number | null = null;
     let depleteFrom = 0;
+    /** The machine burst at this moment (engulfed), its pieces thrown like this. */
+    let burstAt = 0;
+    let thrown: { hx: number; hy: number; vx: number; vy: number; floor: number; land: number }[] = [];
     /** How long the spread onto the machine takes, shortened by each stoke. */
     let spreadMs = FIRE_SPREAD_MS;
     let fireShots = 0;
@@ -763,6 +774,44 @@ export const room: Stage = {
       overEl.hidden = false;
       sounds.gameOver();
       ctx.announce('Game over.');
+    };
+    // Engulfed: the machine bursts into its pieces, thrown out and up from its middle, and the
+    // fight is as good as won. Nothing more comes out of it.
+    const burst = (now: number) => {
+      scene.printer = 'wreck';
+      burstAt = now;
+      thrown = MACHINE_PIECES.map((pc, i) => {
+        const cx = pc.hx + pc.spr.w / 2;
+        const vx = (cx - 16) * (2.5 + Math.random() * 2) + (Math.random() - 0.5) * 20;
+        const vy = -(50 + Math.random() * 110) - (pc.hy === 0 ? 60 : 0);
+        const floor = 146 + 2 + ((i * 5) % 9);
+        const hy = MACHINE.y0 + pc.hy * 3;
+        const h = pc.spr.h * 3;
+        // when its bottom reaches its floor: ½g t² + vy t + (hy + h − floor) = 0
+        const land = (-vy + Math.sqrt(vy * vy - 2 * PIECE_GRAVITY * (hy + h - floor))) / PIECE_GRAVITY;
+        return { hx: MACHINE.x0 + pc.hx * 3, hy, vx, vy, floor, land };
+      });
+      staples = [];
+      pages = [];
+      sprays = [];
+      scanAt = null;
+      scene.scanRow = 0;
+      scene.shake = { x: 0, y: 0 };
+      nextAttackAt = Infinity;
+      frame.classList.remove('is-mad');
+      wash.classList.remove('is-on');
+      washUntil = 0;
+      flashFrames = HIT_FLASH_FRAMES * 2;
+      sounds.burst();
+      ctx.announce('The printer bursts apart.');
+    };
+    const posePieces = (now: number) => {
+      const t = reduced ? Infinity : (now - burstAt) / 1000;
+      scene.pieces = thrown.map((q, i) => {
+        const pc = MACHINE_PIECES[i];
+        const tt = Math.min(t, q.land);
+        return { spr: pc.spr, x: q.hx + q.vx * tt, y: tt >= q.land ? q.floor - pc.spr.h * 3 : q.hy + q.vy * tt + 0.5 * PIECE_GRAVITY * tt * tt };
+      });
     };
     const startEnd = (now: number) => {
       phase = 'end';
@@ -1218,6 +1267,8 @@ export const room: Stage = {
         ghosts: () => ghosts.length,
         name: () => lifeName.textContent,
         clock: () => ({ ...scene.clock }),
+        wreck: () => scene.printer === 'wreck',
+        pieces: () => scene.pieces.map((q) => [Math.round(q.x), Math.round(q.y)]),
         windowOpen: () => scene.windowOpen,
         /** The x of a nozzle spraying right now, or null. */
         nozzle: () => sprays.find((s) => spraying(s, performance.now()))?.nx ?? null,
@@ -1285,6 +1336,12 @@ export const room: Stage = {
       ],
       // One second of the quiet room, exactly as at the start. Do not shorten it.
       [HOLD_END_MS, () => finish()],
+    ];
+    // The end by fire (Edgar, 2026-10-20): the machine in pieces, the fire raging on in the dark
+    // room, the HUD gone; then out. The lights stay off and nothing comes back.
+    const BURN_END_STEPS: [number, () => void][] = [
+      [0, () => showFightUi(false)],
+      [BURN_END_MS, () => finish()],
     ];
     const runSteps = (steps: [number, () => void][], index: number, t: number): number => {
       while (index < steps.length && t >= steps[index][0]) steps[index++][1]();
@@ -1370,6 +1427,7 @@ export const room: Stage = {
         if (spreadAt !== null && depleteAt === null && now - spreadAt >= spreadMs) {
           depleteAt = now;
           depleteFrom = score;
+          burst(now);
         }
         if (depleteAt !== null) {
           const k = Math.min(1, (now - depleteAt) / DEPLETE_MS);
@@ -1449,7 +1507,7 @@ export const room: Stage = {
       } else if (phase === 'over') {
         if (t >= OVER_HOLD_MS) finish();
       } else if (phase === 'end') {
-        endStep = runSteps(END_STEPS, endStep, t);
+        endStep = runSteps(scene.printer === 'wreck' ? BURN_END_STEPS : END_STEPS, endStep, t);
       }
     };
 
@@ -1521,10 +1579,12 @@ export const room: Stage = {
         for (const [hole, box] of holeLightOf) box.hidden = inDoorway(hole, scene.doorGap);
       }
     };
-    /** The spread onto the machine, 0..1; it dies down over the end's first second as the machine shuts. */
+    /** The spread onto the machine, 0..1. Won by the gun, it dies down over the end's first second as
+     * the machine shuts; won by the fire, it rages on, up to 1 + RAGE_MORE over that second. */
     const spreadU = (now: number) => {
       if (spreadAt === null) return 0;
       const v = Math.min(1, (now - spreadAt) / spreadMs);
+      if (scene.printer === 'wreck') return v + RAGE_MORE * Math.min(1, Math.max(0, now - burstAt - DEPLETE_MS) / 1000);
       return phase === 'end' ? v * Math.max(0, 1 - (now - phaseAt) / 1000) : v;
     };
     // The fire grows for FIRE_GROW_MS, then holds; its glow box follows the flames.
@@ -1546,10 +1606,11 @@ export const room: Stage = {
       poseFire(now);
       scene.flashWhite = flashFrames > 0;
       if (flashFrames > 0) flashFrames--;
-      scene.buttonBright = phase === 'fight' && (mad || buttonBright(now));
+      scene.buttonBright = phase === 'fight' && scene.printer === 'mad' && (mad || buttonBright(now));
+      if (scene.printer === 'wreck') posePieces(now);
       // The tremble: a new offset of ±1 px every few frames while the mad machine fights.
       frameCount++;
-      if (mad && phase === 'fight' && frozenAt === null && !reduced) {
+      if (mad && phase === 'fight' && scene.printer === 'mad' && frozenAt === null && !reduced) {
         if (frameCount % SHAKE_FRAMES === 0) scene.shake = { x: Math.floor(Math.random() * 3) - 1, y: -Math.floor(Math.random() * 2) };
       } else {
         scene.shake = { x: 0, y: 0 };

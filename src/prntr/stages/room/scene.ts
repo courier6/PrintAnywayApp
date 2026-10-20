@@ -1,5 +1,5 @@
 import { SPRITES, type PalKey } from './palette';
-import { H, Pix, W, parseSprite, rotateSprite, sliceRows } from './pixels';
+import { H, Pix, W, parseSprite, rotateSprite, sliceRect, sliceRows, type Sprite } from './pixels';
 
 export const SPR = {
   MFC: parseSprite(SPRITES.MFC),
@@ -82,9 +82,31 @@ export interface ExitSign {
 /**
  * idle: closed, 2× at 88,100. lid: lid up, still 2× at 88,100 (1.1 s into the sticker
  * beat). between: lid up, 2× at 80,90 (the first of the two steps forward).
- * mad: 3× at 72,80.
+ * mad: 3× at 72,80. wreck: burst into `pieces`, engulfed (Edgar, 2026-10-20).
  */
-export type PrinterPose = 'idle' | 'lid' | 'between' | 'mad';
+export type PrinterPose = 'idle' | 'lid' | 'between' | 'mad' | 'wreck';
+
+/** A piece of the burst machine (Edgar, 2026-10-20): its part of MFC_MAD and where it is now, drawn at 3×. */
+export interface Piece {
+  spr: Sprite;
+  x: number;
+  y: number;
+}
+
+/** MFC_MAD cut into eight: the lid, the panel in two, the body in three above and two below, with
+ * each part's home offset in sprite px (the machine's 3× pose puts the sprite at 72,80). */
+export const MACHINE_PIECES: { spr: Sprite; hx: number; hy: number }[] = (
+  [
+    [0, 0, 32, 3],
+    [0, 3, 16, 9],
+    [16, 3, 32, 9],
+    [0, 9, 11, 16],
+    [11, 9, 22, 16],
+    [22, 9, 32, 16],
+    [0, 16, 16, 22],
+    [16, 16, 32, 22],
+  ] as const
+).map(([x0, y0, x1, y1]) => ({ spr: sliceRect(SPR.MFC_MAD, x0, y0, x1, y1), hx: x0, hy: y0 }));
 
 /** An ink particle on the far half of its flight, drawn behind the machine (Edgar, 2026-10-20). */
 export interface InkDot {
@@ -145,6 +167,8 @@ export interface SceneState {
   holes: Hole[];
   /** The window's blind shot to pieces (Edgar, 2026-10-20): a gaping hole, the red behind it. */
   windowOpen: boolean;
+  /** The burst machine's pieces, where they are this frame (printer `wreck`). */
+  pieces: Piece[];
 }
 
 /** Where the clock hangs (16×15) and where the post-it board does (20×18): swapped on Edgar's
@@ -369,6 +393,10 @@ export function drawRoom(p: Pix, s: SceneState): void {
   // the printer; its shadow falls the other way. Nothing points it out.
   const white = s.flashWhite;
   switch (s.printer) {
+    case 'wreck':
+      // the burst machine: its pieces in the air and on the floor, the fire raging where it stood
+      for (const pc of s.pieces) p.blit(Math.round(pc.x), Math.round(pc.y), pc.spr, 3);
+      break;
     case 'mad': {
       const { x, y } = s.shake;
       p.rect(84 + x, 146 + y, 176 + x, 152 + y, 'X');
