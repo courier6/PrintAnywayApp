@@ -55,6 +55,20 @@ const AUTO_RELOAD_MS = 800;
 /** A reload refills the shot pips in two steps this far apart: half at once, the rest right
  * after the slide is racked (the sound in sounds.ts ends at 330 ms). */
 const RELOAD_STEP_MS = 360;
+/** The cross reports the gun, not the mouse (PRNTR-FIGHT-DESIGN.md §3). A shot throws it up
+ * KICK_UP and KICK_SIDE either way at random, easing back over KICK_MS; the shot goes where
+ * the cross is. A shot also opens the four lines by BLOOM_PER_SHOT over the BLOOM_BASE gap,
+ * at most BLOOM_MAX, cooling at BLOOM_COOL px/s; the gap is the spread, and the round lands
+ * at a random point inside it. A reload cools it at once. */
+const KICK_UP = 3;
+const KICK_SIDE = 1;
+const KICK_MS = 150;
+const BLOOM_BASE = 1;
+const BLOOM_PER_SHOT = 3;
+const BLOOM_MAX = 12;
+const BLOOM_COOL = 6;
+/** On touch there is no hover cross: it shows at the tap for this long, so the kick and the bloom show. */
+const TOUCH_CROSS_MS = 500;
 /** Slowed to 2.5 / 3 / 2 s, then made a quarter faster. */
 const FIRST_ATTACK_MS = 2000;
 const ATTACK_GAP_MS = 2250;
@@ -566,6 +580,14 @@ export const room: Stage = {
     let shots = SHOTS;
     /** Virtual px; null on touch or when the mouse is outside the frame. */
     let pointer: { x: number; y: number } | null = null;
+    /** The last shot's moment and the cross's sideways kick then; it eases back over KICK_MS. */
+    let kickAt = -Infinity;
+    let kickDx = 0;
+    /** The bloom over the base gap at `heatAt`; it cools from there. */
+    let heat = 0;
+    let heatAt = 0;
+    /** On touch, the last tap and its moment: the cross shows there for TOUCH_CROSS_MS. */
+    let tap: { x: number; y: number; at: number } | null = null;
     let flashFrames = 0;
     let invertFrame = false;
     let lastTickAt = phaseAt;
@@ -1034,10 +1056,42 @@ export const room: Stage = {
       const u = Math.min(1, (lt - INK_LANDED_MS) / INK_SLIDE_MS);
       return (H + 7 * sc - s.y) * u * u;
     };
+    /** The cross's gap now: the base plus what is left of the bloom, cooling since the last shot. */
+    const spreadNow = (now: number) => BLOOM_BASE + Math.max(0, heat - ((now - heatAt) / 1000) * BLOOM_COOL);
+    /** The cross's offset from the mouse now: the kick, easing back. None under reduced motion. */
+    const kickNow = (now: number) => {
+      if (reduced) return { x: 0, y: 0 };
+      const u = Math.min(1, (now - kickAt) / KICK_MS);
+      const k = (1 - u) * (1 - u);
+      return { x: kickDx * k, y: -KICK_UP * k };
+    };
+    /** Where a shot at `v` goes: where the cross is (the kick), scattered inside its gap (the bloom). */
+    const aim = (v: { x: number; y: number }, now: number) => {
+      const k = kickNow(now);
+      const r = (spreadNow(now) - BLOOM_BASE) * Math.sqrt(Math.random());
+      const a = Math.random() * 2 * Math.PI;
+      return { x: v.x + k.x + r * Math.cos(a), y: v.y + k.y + r * Math.sin(a) };
+    };
+    /** The shot's recoil: the lines open and the cross kicks. */
+    const recoil = (now: number) => {
+      heat = Math.min(BLOOM_MAX - BLOOM_BASE, spreadNow(now) - BLOOM_BASE + BLOOM_PER_SHOT);
+      heatAt = now;
+      kickAt = now;
+      kickDx = (Math.floor(Math.random() * 3) - 1) * KICK_SIDE;
+    };
+    /** The cross on the cursor layer: a dot at (cx, cy) and four lines, `spread` empty px between the dot and each cap. */
+    const drawCross = (cx: number, cy: number, spread: number) => {
+      cpix.set(cx, cy, 'W');
+      cpix.blit(cx - 1, cy - spread - 5, SPR.CROSS_V);
+      cpix.blit(cx - 1, cy + spread + 1, SPR.CROSS_V);
+      cpix.blit(cx - spread - 5, cy - 1, SPR.CROSS_H);
+      cpix.blit(cx + spread + 1, cy - 1, SPR.CROSS_H);
+    };
     const reload = (now: number) => {
       if (phase !== 'fight' || frozenAt !== null) return;
       if (shots === SHOTS || reloadSecondAt !== null) return;
       sounds.reload();
+      heat = 0;
       autoReloadAt = null;
       shots = Math.max(shots, SHOTS / 2);
       drawShots();
@@ -1051,6 +1105,7 @@ export const room: Stage = {
       shots--;
       drawShots();
       sounds.shot();
+      recoil(now);
       // The first shot: a woman screams somewhere off and people run out. Nobody is seen,
       // and nothing else changes.
       if (!panicked) {
@@ -1390,7 +1445,11 @@ export const room: Stage = {
         }
         if (e.button !== 0) return;
         if (phase === 'look') clickRoom(v, now);
-        else if (phase === 'fight' && frozenAt === null) fire(v.x, v.y, now);
+        else if (phase === 'fight' && frozenAt === null) {
+          if (e.pointerType === 'touch') tap = { x: v.x, y: v.y, at: now };
+          const a = aim(v, now);
+          fire(a.x, a.y, now);
+        }
         else if (phase === 'continue') answerContinue(now);
       },
       { signal },
@@ -1490,6 +1549,18 @@ export const room: Stage = {
         windowOpen: () => scene.windowOpen,
         /** The x of a nozzle spraying right now, or null. */
         nozzle: () => sprays.find((s) => spraying(s, performance.now()))?.nx ?? null,
+        /** The cross's gap and its offset from the mouse now (the bloom and the kick). `spread` is taken by the fire. */
+        gap: () => spreadNow(performance.now()),
+        kick: () => kickNow(performance.now()),
+        /** A shot at a virtual point through the gun (the kick, the bloom, the recoil): where it went
+         * and the shots left, or null outside the fight. */
+        shoot: (x: number, y: number) => {
+          if (phase !== 'fight' || frozenAt !== null) return null;
+          const now = performance.now();
+          const a = aim({ x, y }, now);
+          fire(a.x, a.y, now);
+          return { x: a.x, y: a.y, shots };
+        },
       };
     }
 
@@ -1910,11 +1981,12 @@ export const room: Stage = {
         fpix.rect(x, y, x + b.size, y + b.size, b.color);
       }
       cpix.clear();
-      if (pointer) {
-        const aim = phase === 'fight' || phase === 'continue' || phase === 'over';
-        if (aim) cpix.blit(Math.floor(pointer.x) - 5, Math.floor(pointer.y) - 6, SPR.CROSSHAIR);
-        else cpix.blit(Math.floor(pointer.x) - 2, Math.floor(pointer.y), SPR.POINTER);
-      }
+      const aiming = phase === 'fight' || phase === 'continue' || phase === 'over';
+      const at = pointer ?? (aiming && tap && now - tap.at < TOUCH_CROSS_MS ? tap : null);
+      if (at && aiming) {
+        const k = kickNow(now);
+        drawCross(Math.floor(at.x + k.x), Math.floor(at.y + k.y), Math.round(spreadNow(now)));
+      } else if (pointer) cpix.blit(Math.floor(pointer.x) - 2, Math.floor(pointer.y), SPR.POINTER);
       pix.present(g);
       fpix.present(fg);
       cpix.present(cg);
