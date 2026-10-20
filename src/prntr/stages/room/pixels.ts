@@ -23,6 +23,21 @@ export function sliceRows(s: Sprite, from: number, to: number): Sprite {
   return { w: s.w, h: to - from, rows: s.rows.slice(from, to) };
 }
 
+/** A sprite turned a quarter turn clockwise `quarters` times (the clock rolling). */
+export function rotateSprite(s: Sprite, quarters: number): Sprite {
+  let out = s;
+  for (let q = 0; q < ((quarters % 4) + 4) % 4; q++) {
+    const rows: string[] = [];
+    for (let y = 0; y < out.w; y++) {
+      let row = '';
+      for (let x = 0; x < out.h; x++) row += out.rows[out.h - 1 - x][y];
+      rows.push(row);
+    }
+    out = { w: out.h, h: out.w, rows };
+  }
+  return out;
+}
+
 const RGB = Object.fromEntries(
   (Object.keys(PAL) as PalKey[]).map((k) => {
     const n = parseInt(PAL[k].slice(1), 16);

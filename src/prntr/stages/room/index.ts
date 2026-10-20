@@ -1,7 +1,7 @@
 import { reducedMotion, wait } from '../../anim';
 import type { Handoff, Stage } from '../../types';
 import { H, Pix, W } from './pixels';
-import { SPR, drawFireFront, drawRoom, drawWindowWreck, fireRect, inDoorway, type Broken, type ExitSign, type Hole, type SceneState } from './scene';
+import { CLOCK_AT, SPR, drawFireFront, drawRoom, drawWindowWreck, fireRect, inDoorway, type Broken, type ExitSign, type Hole, type SceneState } from './scene';
 import { createRoomSounds, type FireSound, type Hum } from './sounds';
 
 // ---------------------------------------------------------------------------
@@ -196,13 +196,27 @@ const BOARD_HIT = { x0: 132, y0: 42, x1: 160, y1: 68 };
 /** What the gun can break and where (virtual px, half-open rects): the clock and the board (the
  * poster) as their hotspots; the cooler's bottle (COOLER rows 0–7 at 2×), the plant's leaves (PLANT
  * rows 0–9 at 2×) and its pot (rows 10–15), each with a 2 px margin. Not the door, not the machine. */
-const BREAKABLES: { id: keyof Broken; x0: number; y0: number; x1: number; y1: number; sound: 'shatter' | 'tear' | 'rustle' }[] = [
-  { id: 'clock', ...CLOCK_HIT, sound: 'shatter' },
+const BREAKABLES: { id: keyof Broken; x0: number; y0: number; x1: number; y1: number; sound: 'shatter' | 'tear' | 'rustle' | 'knock' }[] = [
+  { id: 'clock', ...CLOCK_HIT, sound: 'knock' },
   { id: 'poster', ...BOARD_HIT, sound: 'tear' },
   { id: 'tank', x0: 48, y0: 90, x1: 76, y1: 108, sound: 'shatter' },
   { id: 'plant', x0: 198, y0: 101, x1: 230, y1: 123, sound: 'rustle' },
   { id: 'vase', x0: 204, y0: 123, x1: 224, y1: 137, sound: 'shatter' },
 ];
+/** The clock shot (Edgar, 2026-10-20): it falls off the wall over CLOCK_FALL_MS, drifting to
+ * CLOCK_LAND_X, to the floor in front of the cooler (its top at CLOCK_FLOOR_Y, its bottom at 140,
+ * nearer than the cooler's base), bounces, and rolls to the left over CLOCK_ROLL_MS, slowing,
+ * to rest at CLOCK_REST_X, a quarter turn every CLOCK_ROLL_PX. Rolling or at rest within
+ * CLOCK_IGNITE_PAD of the burning cooler's flames, it catches fire and rolls on to the left at
+ * CLOCK_BURN_SPEED px/s until it is out of the frame. */
+const CLOCK_FALL_MS = 550;
+const CLOCK_LAND_X = 70;
+const CLOCK_FLOOR_Y = 125;
+const CLOCK_ROLL_MS = 2000;
+const CLOCK_REST_X = 28;
+const CLOCK_ROLL_PX = 12;
+const CLOCK_IGNITE_PAD = 2;
+const CLOCK_BURN_SPEED = 28;
 /** The USB stick's hit area in screen px (the handoff's 44 px for the sticker), whatever the scale. */
 const USB_HIT_PX = 44;
 
@@ -435,6 +449,7 @@ export const room: Stage = {
       flashWhite: false,
       buttonBright: false,
       broken: { clock: false, poster: false, tank: false, plant: false, vase: false },
+      clock: { state: 'up', x: CLOCK_AT.x, y: CLOCK_AT.y, rot: 0 },
       exit: { state: 'up', x: EXIT_WALL.x, y: EXIT_WALL.y, tilt: 0, lit: true },
       doorGap: DOOR_AJAR,
       fire: null,
@@ -491,6 +506,10 @@ export const room: Stage = {
     let panicked = false;
     /** When the EXIT sign was last hit (its flicker, swing and fall count from here). */
     let exitAt = 0;
+    /** When the clock's current state began, and where it was and how it lay then. */
+    let clockAt = 0;
+    let clockX0 = CLOCK_AT.x;
+    let clockRot0 = 0;
     /** When the fire started (the water jug broke), and its crackle. */
     let fireAt: number | null = null;
     let fireSound: FireSound | null = null;
@@ -968,6 +987,10 @@ export const room: Stage = {
         sounds[thing.sound]();
         addScore(BREAK_POINTS, now);
         if (thing.id === 'tank') startFire(now);
+        if (thing.id === 'clock') {
+          scene.clock.state = 'falling';
+          clockAt = now;
+        }
         return;
       }
       // Nothing to hit: the shot marks what it lands on. Into the black of the doorway, nothing.
@@ -1194,6 +1217,7 @@ export const room: Stage = {
         holes: () => scene.holes.map((h) => h.kind),
         ghosts: () => ghosts.length,
         name: () => lifeName.textContent,
+        clock: () => ({ ...scene.clock }),
         windowOpen: () => scene.windowOpen,
         /** The x of a nozzle spraying right now, or null. */
         nozzle: () => sprays.find((s) => spraying(s, performance.now()))?.nx ?? null,
@@ -1294,6 +1318,29 @@ export const room: Stage = {
         doorOpenAt = now;
         sounds.doorCreak();
         frame.classList.add('is-open');
+      }
+      // The clock: lands, comes to rest, catches fire by the burning cooler, rolls out (not while frozen).
+      if (frozenAt === null) {
+        const ck = scene.clock;
+        if (ck.state === 'falling' && now - clockAt >= (reduced ? 0 : CLOCK_FALL_MS)) {
+          ck.state = 'rolling';
+          clockAt = now;
+          sounds.clatter();
+        } else if (ck.state === 'rolling' && now - clockAt >= (reduced ? 0 : CLOCK_ROLL_MS)) {
+          ck.state = 'rest';
+        }
+        if ((ck.state === 'rolling' || ck.state === 'rest') && fireAt !== null) {
+          const r = fireRect(Math.min(1, (now - fireAt) / FIRE_GROW_MS));
+          if (r.x0 - CLOCK_IGNITE_PAD <= ck.x + SPR.CLOCK.w && ck.x <= r.x1 + CLOCK_IGNITE_PAD) {
+            ck.state = 'burning';
+            clockAt = now;
+            clockX0 = ck.x;
+            clockRot0 = ck.rot;
+            sounds.whoosh();
+            if (reduced) ck.state = 'gone';
+          }
+        }
+        if (ck.state === 'burning' && ck.x + SPR.CLOCK.w < 0) ck.state = 'gone';
       }
       if (phase === 'look') {
         if (now - lastTickAt >= TICK_MS) {
@@ -1442,6 +1489,27 @@ export const room: Stage = {
         sign.tilt = Math.round(4 + 5 * u);
       }
     };
+    // The clock off the wall: a fall with a half turn, a hop as it lands, then a roll to the left
+    // that slows to a stop, or on and out of the frame once it burns (cuts under reduced motion).
+    const poseClock = (now: number) => {
+      const ck = scene.clock;
+      const t = now - clockAt;
+      if (ck.state === 'falling') {
+        const u = reduced ? 1 : Math.min(1, t / CLOCK_FALL_MS);
+        ck.x = CLOCK_AT.x + (CLOCK_LAND_X - CLOCK_AT.x) * u;
+        ck.y = CLOCK_AT.y + (CLOCK_FLOOR_Y - CLOCK_AT.y) * u * u;
+        ck.rot = Math.floor(u * 2) % 4;
+      } else if (ck.state === 'rolling') {
+        const u = reduced ? 1 : Math.min(1, t / CLOCK_ROLL_MS);
+        ck.x = CLOCK_LAND_X + (CLOCK_REST_X - CLOCK_LAND_X) * (1 - (1 - u) * (1 - u));
+        ck.y = CLOCK_FLOOR_Y - (!reduced && t < 160 ? Math.round(2 * Math.sin((Math.PI * t) / 160)) : 0);
+        ck.rot = 2 - Math.floor((CLOCK_LAND_X - ck.x) / CLOCK_ROLL_PX);
+      } else if (ck.state === 'burning') {
+        ck.x = clockX0 - (CLOCK_BURN_SPEED * t) / 1000;
+        ck.y = CLOCK_FLOOR_Y;
+        ck.rot = clockRot0 - Math.floor((clockX0 - ck.x) / CLOCK_ROLL_PX);
+      }
+    };
     // The door swings in, easing out, a pixel at a time; the light in it is drawn as wide.
     const poseDoor = (now: number) => {
       if (doorOpenAt === null) return;
@@ -1473,6 +1541,7 @@ export const room: Stage = {
     };
     const render = (now: number) => {
       poseSign(now);
+      poseClock(now);
       poseDoor(now);
       poseFire(now);
       scene.flashWhite = flashFrames > 0;

@@ -77,6 +77,12 @@ export interface RoomSounds {
   fire(): FireSound;
   /** A heart's ghost shot: a balloon's pop. */
   pop(): void;
+  /** The clock shot off its hook: a knock. */
+  knock(): void;
+  /** The clock landing on the floor and bouncing. */
+  clatter(): void;
+  /** The clock catching fire: a whoosh. */
+  whoosh(): void;
 }
 
 const noop = () => undefined;
@@ -110,6 +116,9 @@ const SILENT: RoomSounds = {
   inkSplat: noop,
   fire: () => ({ setLevel: noop, stop: noop }),
   pop: noop,
+  knock: noop,
+  clatter: noop,
+  whoosh: noop,
 };
 
 /** Two seconds of white noise, made once per context. */
@@ -519,6 +528,28 @@ export function createRoomSounds(audio: PrntrAudio): RoomSounds {
       };
     },
     pop,
+    // a knock on wood: a 50 ms low burst and a 180 → 90 Hz thud
+    knock() {
+      const t = now();
+      noise(t, 0.05, { lp: 1200, gain: 0.5, decay: 0.01 });
+      tone(t, 0.08, { f0: 180, f1: 90, gain: 0.4, decay: 0.02 });
+    },
+    // the clock on the floor: a thud and a tin ring, then two smaller bounces 110 and 190 ms on
+    clatter() {
+      const t = now();
+      [0, 0.11, 0.19].forEach((d, i) => {
+        const k = 1 - i * 0.35;
+        noise(t + d, 0.06, { lp: 2500, gain: 0.5 * k, decay: 0.012 });
+        tone(t + d, 0.1, { f0: 130, f1: 50, gain: 0.4 * k, decay: 0.03 });
+        tone(t + d, 0.12, { f0: 2900, f1: 2300, gain: 0.1 * k, decay: 0.03 });
+      });
+    },
+    // a whoosh: low noise rising and a brighter breath over it, 0.4 s
+    whoosh() {
+      const t = now();
+      noise(t, 0.4, { lp: 700, gain: 0.3, decay: 0.12 });
+      noise(t + 0.05, 0.3, { hp: 400, lp: 2500, gain: 0.15, decay: 0.08 });
+    },
   };
 
   // a balloon's pop: an 8 ms crack, a 60 ms burst through a 1.5 kHz lowpass, and a hollow

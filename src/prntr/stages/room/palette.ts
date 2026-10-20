@@ -287,7 +287,8 @@ KwiiiwwwwK
 KwwwwwwwwK
 KKKKKKKKKK
 `,
-  // 16 × 15: the clock shot: a crack from the top down the right, both hands hanging.
+  // 16 × 15: the clock shot: a crack from the top down the right, both hands hanging. No longer
+  // drawn: the clock falls off the wall instead (Edgar, 2026-10-20).
   CLOCK_BROKEN: `
 .....KKKKKK.....
 ...KKrrrrrrKK...

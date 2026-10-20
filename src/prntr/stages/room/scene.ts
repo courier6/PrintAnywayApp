@@ -1,5 +1,5 @@
 import { SPRITES, type PalKey } from './palette';
-import { H, Pix, W, parseSprite, sliceRows } from './pixels';
+import { H, Pix, W, parseSprite, rotateSprite, sliceRows } from './pixels';
 
 export const SPR = {
   MFC: parseSprite(SPRITES.MFC),
@@ -16,7 +16,6 @@ export const SPR = {
   EXIT: parseSprite(SPRITES.EXIT),
   PAGE_SMALL: parseSprite(SPRITES.PAGE_SMALL),
   PAGE_PRINTED: parseSprite(SPRITES.PAGE_PRINTED),
-  CLOCK_BROKEN: parseSprite(SPRITES.CLOCK_BROKEN),
   POSTER_TORN: parseSprite(SPRITES.POSTER_TORN),
   TANK_BROKEN: parseSprite(SPRITES.TANK_BROKEN),
   PLANT_BARE: parseSprite(SPRITES.PLANT_BARE),
@@ -25,6 +24,8 @@ export const SPR = {
   SPLAT: parseSprite(SPRITES.SPLAT),
   TUBE_HEAD: parseSprite(SPRITES.TUBE_HEAD),
 };
+/** The clock at each quarter turn, for rolling (Edgar, 2026-10-20). */
+const CLOCK_ROT = [0, 1, 2, 3].map((q) => rotateSprite(SPR.CLOCK, q));
 /** The cooler below its bottle, the plant's leaves and its pot, so each half can break alone. */
 const COOLER_BODY = sliceRows(SPR.COOLER, 8, 22);
 const PLANT_TOP = sliceRows(SPR.PLANT, 0, 10);
@@ -32,6 +33,7 @@ const PLANT_POT = sliceRows(SPR.PLANT, 10, 16);
 
 /** What the gun has broken (Edgar, 2026-10-19): each stays broken for the rest of the stage. */
 export interface Broken {
+  /** Shot off the wall (it falls and rolls: `Clock`). */
   clock: boolean;
   poster: boolean;
   /** The cooler's bottle. */
@@ -52,6 +54,17 @@ export interface Fire {
   t: number;
   /** How far it has spread onto the machine (0 none … 1 engulfed), once the machine is weak. */
   v: number;
+}
+
+/** The clock (Edgar, 2026-10-20): shot, it falls off the wall to the floor in front of the cooler and
+ * rolls to the left; near the burning cooler it catches fire and rolls on out of the frame. */
+export interface Clock {
+  state: 'up' | 'falling' | 'rolling' | 'rest' | 'burning' | 'gone';
+  /** Its top-left corner once it is off the wall. */
+  x: number;
+  y: number;
+  /** Quarter turns clockwise. */
+  rot: number;
 }
 
 /** The EXIT sign (Edgar, 2026-10-19): shot once it hangs loose from its left corner, shot again it falls. */
@@ -117,6 +130,7 @@ export interface SceneState {
   /** The red button on the open machine's panel, lit bright for a blink (mad only). */
   buttonBright: boolean;
   broken: Broken;
+  clock: Clock;
   exit: ExitSign;
   /** How wide the door stands open on black, in px: ajar at 6; once the sign is down it swings in (Edgar, 2026-10-19). */
   doorGap: number;
@@ -293,7 +307,7 @@ export function drawRoom(p: Pix, s: SceneState): void {
   if (sign.state === 'down') p.blit(Math.round(sign.x), Math.round(sign.y), SPR.EXIT_BROKEN);
   else p.blit(Math.round(sign.x), Math.round(sign.y), SPR.EXIT, 1, { remap: { n: sign.lit ? 'R' : 'G' }, tilt: sign.tilt });
   // the clock where the board was, the post-it board lower and by the window (Edgar, 2026-10-20)
-  p.blit(CLOCK_AT.x, CLOCK_AT.y, s.broken.clock ? SPR.CLOCK_BROKEN : SPR.CLOCK);
+  if (s.clock.state === 'up') p.blit(CLOCK_AT.x, CLOCK_AT.y, SPR.CLOCK);
   p.blit(BOARD_AT.x, BOARD_AT.y, s.broken.poster ? SPR.POSTER_TORN : SPR.POSTER);
   // the window: light, blinds, nothing outside; shot open, the black the red light fills
   p.rect(160, 36, 224, 90, 'e');
@@ -321,6 +335,15 @@ export function drawRoom(p: Pix, s: SceneState): void {
     p.blit(50, 108, COOLER_BODY, 2);
   } else {
     p.blit(50, 92, SPR.COOLER, 2);
+  }
+  // the clock off the wall: falling, rolling or lying in front of the cooler, burning as it goes
+  const ck = s.clock;
+  if (ck.state !== 'up' && ck.state !== 'gone') {
+    const spr = CLOCK_ROT[((ck.rot % 4) + 4) % 4];
+    const x = Math.round(ck.x);
+    const y = Math.round(ck.y);
+    p.blit(x, y, spr);
+    if (ck.state === 'burning') drawFlame(p, x + spr.w / 2, spr.w / 2 - 1, 14, y + spr.h, 500, s.fire?.t ?? 0);
   }
   if (s.fire) drawFire(p, s.fire, 'mid');
   p.rect(190, 132, 206, 135, 'X');
