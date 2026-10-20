@@ -1,7 +1,7 @@
 import { nextInput, reducedMotion, wait } from '../anim';
 import type { Stage } from '../types';
 import { H, W } from './room/pixels';
-import { startStorm, type StormSlot } from './storm';
+import { startGlitchPulse, startStorm, type StormSlot } from './storm';
 
 /** 0 = every letter on the baseline, 1 = approved, 2 = twice as messy. */
 const WOBBLE = 1;
@@ -155,7 +155,14 @@ export const opening: Stage = {
     credit.classList.add('is-glowing');
     // The flicker: something shows through. Under reduced motion one steady
     // corrupted frame instead of two flashes.
-    const corrupt = (on: boolean) => root.classList.toggle('is-corrupt', on);
+    // While the frame is corrupted a low tone pulses very fast (Edgar, 2026-10-20), and stops with it.
+    let pulse: { stop(): void } | null = null;
+    const corrupt = (on: boolean) => {
+      root.classList.toggle('is-corrupt', on);
+      pulse?.stop();
+      pulse = on && audio.context && audio.master ? startGlitchPulse(audio.context, audio.master) : null;
+    };
+    signal.addEventListener('abort', () => pulse?.stop(), { once: true });
     for (const [on, off] of reduced ? [[250, 90]] : FLICKER) {
       await at(d + CREDIT_AFTER_TITLE_MS - on);
       corrupt(true);

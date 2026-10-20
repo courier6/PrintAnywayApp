@@ -50,6 +50,67 @@ export interface StormSound {
   stop(fadeS?: number): void;
 }
 
+/** The glitch's pulse (Edgar, 2026-10-20): a low tone, PULSE_HZ, gated on and off PULSE_RATE
+ * times a second like a synthesizer's fastest pulse, lowpassed at PULSE_LP, while the screen
+ * and the cloud are glitched; it stops the moment the glitch does. */
+const PULSE_HZ = 55;
+const PULSE_RATE = 26;
+const PULSE_LP = 480;
+const PULSE_GAIN = 0.16;
+
+/** A very fast pulse of a low tone, from now until stop(): the sound of the opening's glitch. */
+export function startGlitchPulse(ctx: AudioContext, out: AudioNode): { stop(): void } {
+  const t0 = ctx.currentTime;
+  const saw = ctx.createOscillator();
+  saw.type = 'sawtooth';
+  saw.frequency.value = PULSE_HZ;
+  const sub = ctx.createOscillator();
+  sub.type = 'square';
+  sub.frequency.value = PULSE_HZ / 2;
+  const subG = ctx.createGain();
+  subG.gain.value = 0.5;
+  const lp = ctx.createBiquadFilter();
+  lp.type = 'lowpass';
+  lp.frequency.value = PULSE_LP;
+  // the gate: 0.5 plus a square wave of ±0.5, so the tone is all on or all off
+  const gate = ctx.createGain();
+  gate.gain.value = 0.5;
+  const lfo = ctx.createOscillator();
+  lfo.type = 'square';
+  lfo.frequency.value = PULSE_RATE;
+  const lfoG = ctx.createGain();
+  lfoG.gain.value = 0.5;
+  lfo.connect(lfoG);
+  lfoG.connect(gate.gain);
+  const master = ctx.createGain();
+  master.gain.setValueAtTime(0, t0);
+  master.gain.linearRampToValueAtTime(PULSE_GAIN, t0 + 0.01);
+  saw.connect(lp);
+  sub.connect(subG);
+  subG.connect(lp);
+  lp.connect(gate);
+  gate.connect(master);
+  master.connect(out);
+  saw.start(t0);
+  sub.start(t0);
+  lfo.start(t0);
+  let stopped = false;
+  return {
+    stop() {
+      if (stopped) return;
+      stopped = true;
+      const t = ctx.currentTime;
+      master.gain.cancelScheduledValues(t);
+      master.gain.setTargetAtTime(0, t, 0.006);
+      const end = t + 0.08;
+      saw.stop(end);
+      sub.stop(end);
+      lfo.stop(end);
+      saw.onended = () => master.disconnect();
+    },
+  };
+}
+
 /** The rain's and the wind's gain, and how long each takes to come in. */
 const RAIN_GAIN = 0.07;
 const RAIN_IN_S = 1.5;
