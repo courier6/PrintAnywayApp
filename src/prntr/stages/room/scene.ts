@@ -179,20 +179,29 @@ const later = (u: number, from: number) => Math.max(0, Math.min(1, (u - from) / 
  * The fire in three layers, so it sits among the things it burns rather than in front of
  * them (Edgar): `back`, two smaller flames behind the cooler on the floor further in (they
  * come as the fire grows and round it out); `mid`, the main flame, in front of the cooler
- * and behind the machine; `front`, a low lick at the machine's foot and the cooler's base.
+ * and behind the machine. The third, `drawFireFront`, goes on the stage's front canvas.
  */
-function drawFire(p: Pix, f: Fire, layer: 'back' | 'mid' | 'front'): void {
+function drawFire(p: Pix, f: Fire, layer: 'back' | 'mid'): void {
   const r = fireRect(f.u);
   const h = r.y1 - r.y0;
   if (layer === 'mid') drawFlame(p, (r.x0 + r.x1) / 2, (r.x1 - r.x0) / 2, h, r.y1, 0, f.t);
-  else if (layer === 'back') {
+  else {
     drawFlame(p, 50, 7 * later(f.u, 0.35), 0.9 * h * later(f.u, 0.35), 142, 100, f.t);
     drawFlame(p, 70, 6 * later(f.u, 0.55), 0.95 * h * later(f.u, 0.55), 142, 200, f.t);
-  } else {
-    drawFlame(p, 76, 5 * later(f.u, 0.2), 0.3 * h * later(f.u, 0.2), 146, 300, f.t);
-    // onto the machine from its left side, until the whole of it is in flames (72–168 × 80–146)
-    if (f.v > 0) drawFlame(p, 80 + 40 * f.v, 8 + 42 * f.v, 20 + 48 * f.v, 146, 400, f.t);
   }
+}
+
+/**
+ * The fire's front layer: a low lick at the machine's foot and the cooler's base, and the
+ * flames on the machine once it spreads. Drawn on the front canvas (Edgar, 2026-10-20), so
+ * they are in front of the slot's red light like the pages, under the things the machine throws.
+ */
+export function drawFireFront(p: Pix, f: Fire): void {
+  const r = fireRect(f.u);
+  const h = r.y1 - r.y0;
+  drawFlame(p, 76, 5 * later(f.u, 0.2), 0.3 * h * later(f.u, 0.2), 146, 300, f.t);
+  // onto the machine from its left side, until the whole of it is in flames (72–168 × 80–146)
+  if (f.v > 0) drawFlame(p, 80 + 40 * f.v, 8 + 42 * f.v, 20 + 48 * f.v, 146, 400, f.t);
 }
 
 /**
@@ -356,5 +365,4 @@ export function drawRoom(p: Pix, s: SceneState): void {
     p.rect(168, 146, 184, 148, 'X');
     p.blit(166, 136, SPR.USB, 2);
   }
-  if (s.fire) drawFire(p, s.fire, 'front');
 }

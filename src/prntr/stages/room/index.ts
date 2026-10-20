@@ -1,7 +1,7 @@
 import { reducedMotion, wait } from '../../anim';
 import type { Handoff, Stage } from '../../types';
 import { H, Pix, W } from './pixels';
-import { SPR, drawRoom, drawWindowWreck, fireRect, inDoorway, type Broken, type ExitSign, type Hole, type SceneState } from './scene';
+import { SPR, drawFireFront, drawRoom, drawWindowWreck, fireRect, inDoorway, type Broken, type ExitSign, type Hole, type SceneState } from './scene';
 import { createRoomSounds, type FireSound, type Hum } from './sounds';
 
 // ---------------------------------------------------------------------------
@@ -1387,9 +1387,11 @@ export const room: Stage = {
         }
       }
       drawRoom(pix, scene);
-      // What the machine throws goes on the front layer, over the slot's light.
+      // What the machine throws goes on the front layer, over the slot's light, and the fire's
+      // front flames with it: the flames on the burning machine were behind that glow too.
       fpix.clear();
       if (scene.windowOpen) drawWindowWreck(fpix);
+      if (scene.fire) drawFireFront(fpix, scene.fire);
       // Out of the slot: only the top rows of the sprite so far, then the whole thing.
       for (const s of staples) {
         if (now < s.at || s.hit || s.shot) continue;
