@@ -40,7 +40,8 @@ const STAPLE_MS = 1500;
 const STAPLE_STAGGER_MS = 500;
 /** The staple's hit box: its sprite at the current scale, plus this many virtual px around. */
 const STAPLE_HIT_PAD = 3;
-const PAGE_MS = 1800;
+/** 1.8 s, then a quarter longer on Edgar's review (2026-10-19): they were landing too fast. */
+const PAGE_MS = 2250;
 const PAGE_STAGGER_MS = 450;
 const PAGE_LANDED_MS = 1500;
 const PAGE_SLIDE_MS = 400;
