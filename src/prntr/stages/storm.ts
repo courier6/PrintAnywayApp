@@ -50,6 +50,27 @@ const WATER_LIGHT = '#BFE7FF';
 const BOLT = '#FFFFFF';
 const BOLT_EDGE = '#9FD8FF';
 
+/** A cloud's cells (true = cloud): a slab four rows deep with bumps on top, `rows` high and
+ * `cols` wide in units of U; `seed` varies the bumps. */
+function makeCloud(cols: number, rows: number, seed: number): boolean[][] {
+  const cells = Array.from({ length: rows }, () => new Array<boolean>(cols).fill(false));
+  const slab = rows - 4;
+  for (let r = slab; r < rows; r++) for (let c = 0; c < cols; c++) cells[r][c] = r < rows - 1 || (c > 0 && c < cols - 1);
+  const bumps = Math.max(3, Math.round(cols / 5));
+  for (let b = 0; b < bumps; b++) {
+    const cx = ((b + 0.5) / bumps) * cols + (hash(b * 13 + seed * 101) - 0.5) * 2;
+    const rad = 2 + Math.round(hash(b * 29 + seed * 101) * 1.5);
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const dx = c + 0.5 - cx;
+        const dy = r + 0.5 - (slab + 0.5);
+        if (dx * dx + dy * dy <= rad * rad) cells[r][c] = true;
+      }
+    }
+  }
+  return cells;
+}
+
 /** A cheap hash to 0..1. */
 function hash(n: number): number {
   let x = Math.imul(n ^ 0x9e3779b9, 0x85ebca6b);
@@ -88,6 +109,8 @@ export function startStorm(root: HTMLElement, h1: HTMLElement, slots: StormSlot[
   let U = 8;
   let cloudX = 0;
   let cloudY = 0;
+  /** Two more clouds for the storm, behind the first and a row lower (Edgar, 2026-10-20). */
+  let extras: { cells: boolean[][]; x: number; y: number }[] = [];
   let ready = false;
 
   const measure = () => {
@@ -151,24 +174,19 @@ export function startStorm(root: HTMLElement, h1: HTMLElement, slots: StormSlot[
     if (wordRight <= wordLeft) return;
     // the cloud: a slab with a few bumps on top, as wide as most of the word, one word-height above it
     const wordH = wordBottom - wordTop;
-    const cols = Math.max(8, Math.round((0.85 * (wordRight - wordLeft)) / U));
+    const wordW = wordRight - wordLeft;
+    const cols = Math.max(8, Math.round((0.85 * wordW) / U));
     const rows = 7;
-    cloud = Array.from({ length: rows }, () => new Array<boolean>(cols).fill(false));
-    for (let r = 3; r < rows; r++) for (let c = 0; c < cols; c++) cloud[r][c] = r < rows - 1 || (c > 0 && c < cols - 1);
-    const bumps = Math.max(3, Math.round(cols / 5));
-    for (let b = 0; b < bumps; b++) {
-      const cx = ((b + 0.5) / bumps) * cols + (hash(b * 13) - 0.5) * 2;
-      const rad = 2 + Math.round(hash(b * 29) * 1.5);
-      for (let r = 0; r < rows; r++) {
-        for (let c = 0; c < cols; c++) {
-          const dx = c + 0.5 - cx;
-          const dy = r + 0.5 - 3.5;
-          if (dx * dx + dy * dy <= rad * rad) cloud[r][c] = true;
-        }
-      }
-    }
+    cloud = makeCloud(cols, rows, 0);
     cloudX = Math.round((wordLeft + wordRight) / 2 - (cols * U) / 2);
     cloudY = wordTop - wordH - rows * U;
+    // two more for the storm, one each side, behind the first and a row lower: together they
+    // cover the word and a tenth of its width beyond each end. The rain is the first one's.
+    const side = Math.max(6, Math.round((0.4 * wordW) / U));
+    extras = [
+      { cells: makeCloud(side, rows - 1, 1), x: Math.round(wordLeft - 0.1 * wordW), y: cloudY + U },
+      { cells: makeCloud(side, rows - 1, 2), x: Math.round(wordRight + 0.1 * wordW - side * U), y: cloudY + U },
+    ];
     ready = true;
   };
 
@@ -297,8 +315,9 @@ export function startStorm(root: HTMLElement, h1: HTMLElement, slots: StormSlot[
     g.clearRect(0, 0, W, H);
     if (!ready) return;
     const lit = bolt !== null && (now < bolt.until || (now >= bolt.again && now < bolt.again + 60));
-    // the cloud, in its weather's shades
+    // the clouds, in the weather's shades: the two more of the storm behind, then the first
     const shades = weather === 'calm' ? CALM : weather === 'red' ? RED : STORM;
+    if (weather === 'storm') for (const e of extras) drawCloud(e.cells, e.x, e.y, shades, lit);
     drawCloud(cloud, cloudX, cloudY, shades, lit);
     if (reduced) return;
     // the rain
