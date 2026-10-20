@@ -203,7 +203,7 @@ export function fireRect(u: number): { x0: number; x1: number; y0: number; y1: n
  * column flickering by its own hash (seeded) every 50 ms; yellow at the floor, orange, red
  * at the tips, a spark now and then above them.
  */
-function drawFlame(p: Pix, cx: number, w: number, h: number, floor: number, seed: number, t: number): void {
+export function drawFlame(p: Pix, cx: number, w: number, h: number, floor: number, seed: number, t: number): void {
   if (h < 1 || w < 1) return;
   const tick = Math.floor(t / 50);
   for (let x = Math.round(cx - w); x <= Math.round(cx + w); x++) {

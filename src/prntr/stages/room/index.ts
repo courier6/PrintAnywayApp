@@ -1,7 +1,7 @@
 import { reducedMotion, wait } from '../../anim';
 import type { Handoff, Stage } from '../../types';
 import { H, Pix, W, rotateSprite } from './pixels';
-import { CLOCK_AT, MACHINE_PIECES, SPR, drawFireFront, drawRoom, drawWindowWreck, fireRect, inDoorway, type Broken, type ExitSign, type Hole, type SceneState } from './scene';
+import { CLOCK_AT, MACHINE_PIECES, SPR, drawFireFront, drawFlame, drawRoom, drawWindowWreck, fireRect, inDoorway, type Broken, type ExitSign, type Hole, type SceneState } from './scene';
 import type { PalKey } from './palette';
 import { createRoomSounds, type FireSound, type Hum } from './sounds';
 
@@ -32,7 +32,7 @@ const RESPAWN_MS = 2000;
  * lands takes HIT_DAMAGE of it and the room flashes red for HURT_MS; the hit that empties it
  * costs a life (the death beat above), and the bar is full again when the beat is over. */
 const PLAYER_HEALTH = 100;
-const HIT_DAMAGE = { staple: 25, page: 34, ink: 50, nut: 68, bolt: 68 } as const;
+const HIT_DAMAGE = { staple: 25, page: 34, firePage: 43, ink: 50, nut: 68, bolt: 68 } as const;
 const HURT_MS = 150;
 /** A lost heart's ghost floating up can be shot (± GHOST_HIT_PAD virtual px around it): it pops
  * like a balloon, its bits gone after POP_MS (Edgar, 2026-10-20). No points: it was the player's. */
@@ -76,6 +76,9 @@ const BOLT_POINTS = 2;
 const BOLT_SPIN_MS = 100;
 /** 1.8 s, then a quarter longer on Edgar's review (2026-10-19): they were landing too fast. */
 const PAGE_MS = 2250;
+/** While the machine burns, the pages it throws are on fire (Edgar, 2026-10-20): a quarter more
+ * damage (HIT_DAMAGE.firePage, 34 × 1.25) and twice the points when shot. */
+const FIRE_PAGE_POINTS = PAGE_POINTS * 2;
 const PAGE_STAGGER_MS = 450;
 const PAGE_LANDED_MS = 1500;
 const PAGE_SLIDE_MS = 400;
@@ -323,6 +326,8 @@ interface Spray {
 }
 
 interface Page {
+  /** Thrown while the machine burns: it is on fire. */
+  burning: boolean;
   /** Where it leaves the slot, and where it lands. */
   x0: number;
   x1: number;
@@ -1052,7 +1057,7 @@ export const room: Stage = {
       });
       if (page) {
         page.shot = true;
-        addScore(PAGE_POINTS, now);
+        addScore(page.burning ? FIRE_PAGE_POINTS : PAGE_POINTS, now);
         return;
       }
       // Shootable since Edgar's review (the handoff had them unshootable).
@@ -1294,7 +1299,7 @@ export const room: Stage = {
         nextAttackAt = now + 2 * STAPLE_STAGGER_MS + STAPLE_MS + gap;
       } else {
         PAGE_TARGETS_X.forEach((x1, i) => {
-          pages.push({ x0: PAGE_ORIGINS_X[i], x1, y1: 60 + Math.random() * 70, at: now + i * PAGE_STAGGER_MS, landedAt: null, shot: false, fed: false });
+          pages.push({ burning: fireAt !== null, x0: PAGE_ORIGINS_X[i], x1, y1: 60 + Math.random() * 70, at: now + i * PAGE_STAGGER_MS, landedAt: null, shot: false, fed: false });
         });
         nextAttackAt = now + 4 * PAGE_STAGGER_MS + PAGE_MS + gap;
       }
@@ -1427,6 +1432,7 @@ export const room: Stage = {
           nextAttackAt = 0;
         },
         bolts: () => staples.filter((s) => s.kind !== 'staple').length,
+        burningPages: () => pages.filter((p) => p.burning && !p.shot).length,
         deadTubes: () => [...scene.stubs],
         sprays: () => sprays.length,
         tubes: () => scene.tubes.map((t) => ({ ...t })),
@@ -1629,7 +1635,7 @@ export const room: Stage = {
           if (!p.shot && p.landedAt === null && now - p.at >= PAGE_MS) {
             p.landedAt = now;
             sounds.paperSlap();
-            hurt('page', now);
+            hurt(p.burning ? 'firePage' : 'page', now);
           }
         }
         pages = pages.filter((p) => !p.shot && (p.landedAt === null || now - p.landedAt < PAGE_LANDED_MS + PAGE_SLIDE_MS));
@@ -1800,19 +1806,28 @@ export const room: Stage = {
         if (r.h < spr.h) fpix.blit(r.x, r.y, { w: spr.w, h: r.h, rows: spr.rows.slice(0, r.h) });
         else fpix.blit(r.x, r.y, spr, r.w / spr.w);
       }
+      // A burning page (thrown while the machine burns) carries flames up its face, from its
+      // bottom edge, scaled with it; its paper is scorched at the edges.
+      const pageFire = (x: number, y: number, w: number, h: number, seed: number) => {
+        drawFlame(fpix, x + w / 2, w / 2 - 1, h * 0.8, y + h, seed, reduced ? 0 : now);
+      };
       for (const p of pages) {
         if (p.shot || now < p.at || p.landedAt !== null) continue;
         const r = pagePose(p, now);
         const spr = SPR.PAGE_PRINTED;
         if (r.h < spr.h) fpix.blit(r.x, r.y, { w: spr.w, h: r.h, rows: spr.rows.slice(0, r.h) });
-        else fpix.blit(r.x, r.y, spr, r.w / spr.w);
+        else fpix.blit(r.x, r.y, spr, r.w / spr.w, p.burning ? { remap: { K: 'G', w: 'r' } } : {});
+        if (p.burning && r.h >= spr.h) pageFire(r.x, r.y, r.w, r.h, 600 + p.x1);
       }
       // A page on the glass: big, at a slight angle, then it slides off.
       for (const p of pages) {
         if (p.landedAt === null) continue;
         const lt = now - p.landedAt;
         const slide = lt > PAGE_LANDED_MS ? ((lt - PAGE_LANDED_MS) / PAGE_SLIDE_MS) * 80 : 0;
-        fpix.blit(Math.floor(p.x1 - 20), Math.floor(p.y1 - 26 + slide), SPR.PAGE_PRINTED, 4, { skew: 10 });
+        const lx = Math.floor(p.x1 - 20);
+        const ly = Math.floor(p.y1 - 26 + slide);
+        fpix.blit(lx, ly, SPR.PAGE_PRINTED, 4, { skew: 10, ...(p.burning ? { remap: { K: 'G', w: 'r' } } : {}) });
+        if (p.burning) pageFire(lx + 3, ly, 40, 52, 700 + p.x1);
       }
       // Ink: the particles on the near half of their flight (the far half is behind the machine),
       // and the splat building up on the glass, then running down.
