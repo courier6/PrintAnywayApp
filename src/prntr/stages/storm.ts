@@ -7,6 +7,8 @@
  * undersides. Now and then lightning strikes and the screen flashes white or blue. Everything
  * is drawn on one canvas over the viewport in whole "pixels" of P screen px (P from the
  * title's font size). Under reduced motion only the cloud is drawn, in its weather's colours.
+ * While the title comes in (and, glitched, through the flicker) the cloud is one small cute
+ * one; the dark bank of three is the storm's alone (Edgar, 2026-10-20).
  * The storm sounds like one, in the room's style: rain, a gusting wind, thunder after each
  * strike (Edgar, 2026-10-20).
  */
@@ -204,6 +206,30 @@ function makeCloud(cols: number, rows: number, seed: number): boolean[][] {
   return cells;
 }
 
+/** The cute cloud (Edgar, 2026-10-20): `cols` wide, three round puffs, the middle one the
+ * biggest, on a flat base with rounded ends. */
+function makeCute(cols: number): boolean[][] {
+  const R = Math.max(2.5, cols * 0.2);
+  const rows = Math.round(2 * R + 3);
+  const cells = Array.from({ length: rows }, () => new Array<boolean>(cols).fill(false));
+  const puffs = [
+    { cx: cols * 0.5, cy: R + 0.5, r: R },
+    { cx: cols * 0.24, cy: rows - 1.5 - 0.75 * R, r: 0.75 * R },
+    { cx: cols * 0.76, cy: rows - 1.5 - 0.65 * R, r: 0.65 * R },
+  ];
+  const baseY = rows - 1.5;
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const x = c + 0.5;
+      const y = r + 0.5;
+      const sx = Math.min(cols - 1.5, Math.max(1.5, x));
+      const inBase = (x - sx) ** 2 + (y - baseY) ** 2 <= 2.25;
+      cells[r][c] = inBase || puffs.some((p) => (x - p.cx) ** 2 + (y - p.cy) ** 2 <= p.r * p.r);
+    }
+  }
+  return cells;
+}
+
 /** A cheap hash to 0..1. */
 function hash(n: number): number {
   let x = Math.imul(n ^ 0x9e3779b9, 0x85ebca6b);
@@ -244,6 +270,10 @@ export function startStorm(root: HTMLElement, h1: HTMLElement, slots: StormSlot[
   let cloudY = 0;
   /** Two more clouds for the storm, behind the first and a row lower (Edgar, 2026-10-20). */
   let extras: { cells: boolean[][]; x: number; y: number }[] = [];
+  /** The cute cloud of the calm and the red weather, its bottom on the bank's bottom line. */
+  let cute: boolean[][] = [];
+  let cuteX = 0;
+  let cuteY = 0;
   let ready = false;
 
   const measure = () => {
@@ -320,6 +350,12 @@ export function startStorm(root: HTMLElement, h1: HTMLElement, slots: StormSlot[
       { cells: makeCloud(side, rows - 1, 1), x: Math.round(wordLeft - 0.1 * wordW), y: cloudY + U },
       { cells: makeCloud(side, rows - 1, 2), x: Math.round(wordRight + 0.1 * wordW - side * U), y: cloudY + U },
     ];
+    // about a third of the word wide, but never so tall that its top leaves the viewport
+    const bankBottom = cloudY + cloud.length * U;
+    const maxRows = Math.max(6, Math.floor((bankBottom - 2 * P) / U));
+    cute = makeCute(Math.max(8, Math.min(Math.round((0.35 * wordW) / U), Math.floor((maxRows - 3) / 0.4))));
+    cuteX = Math.round((wordLeft + wordRight) / 2 - (cute[0].length * U) / 2);
+    cuteY = cloudY + cloud.length * U - cute.length * U;
     ready = true;
   };
 
@@ -454,10 +490,16 @@ export function startStorm(root: HTMLElement, h1: HTMLElement, slots: StormSlot[
     g.clearRect(0, 0, W, H);
     if (!ready) return;
     const lit = bolt !== null && (now < bolt.until || (now >= bolt.again && now < bolt.again + 60));
-    // the clouds, in the weather's shades: the two more of the storm behind, then the first
-    const shades = weather === 'calm' ? CALM : weather === 'red' ? RED : STORM;
-    if (weather === 'storm') for (const e of extras) drawCloud(e.cells, e.x, e.y, shades, lit);
-    drawCloud(cloud, cloudX, cloudY, shades, lit);
+    // the clouds, in the weather's shades: the cute one while calm or red, in the storm the
+    // two more behind, then the first
+    if (weather === 'storm') {
+      for (const e of extras) drawCloud(e.cells, e.x, e.y, STORM, lit);
+      drawCloud(cloud, cloudX, cloudY, STORM, lit);
+    } else {
+      // it bobs a pixel up and down
+      const bob = reduced ? 0 : Math.round(Math.sin((now / 2400) * 2 * Math.PI) * 1.4) * P;
+      drawCloud(cute, cuteX, cuteY + bob, weather === 'red' ? RED : CALM, false);
+    }
     if (reduced) return;
     // the rain
     for (const d of drops) px(d.x, snap(d.y), WATER, P, 3 * P);
