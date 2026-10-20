@@ -29,7 +29,7 @@ export interface RoomSounds {
   /** The scan's whine; the flash burst is scheduled 0.6 s later by the same call. */
   scanFlash(): void;
   stapleHit(): void;
-  /** Gun shot, candidate A (the crack). Candidate B is in sounds.js if ever wanted. */
+  /** Gun shot: a pistol (Edgar, 2026-10-19; the designer's candidates A and B are in sounds.js). */
   shot(): void;
   /** Firing an empty gun. */
   dryClick(): void;
@@ -272,10 +272,13 @@ export function createRoomSounds(audio: PrntrAudio): RoomSounds {
       tone(t, 0.05, { f0: 6300, gain: 0.15, decay: 0.004 });
       noise(t, 0.03, { hp: 4000, gain: 0.25, decay: 0.003 });
     },
+    // a pistol: a 30 ms crack on a 90 ms bang, a thump dropping 160 → 45 Hz, and a lowpassed tail
     shot() {
       const t = now();
-      noise(t, 0.09, { hp: 1200, gain: 0.6, decay: 0.012 });
-      tone(t, 0.08, { f0: 1020, f1: 120, gain: 0.5, decay: 0.03 });
+      noise(t, 0.03, { hp: 2500, gain: 0.7, decay: 0.006 });
+      noise(t, 0.09, { lp: 6000, gain: 0.6, decay: 0.018 });
+      tone(t, 0.12, { f0: 160, f1: 45, gain: 0.6, decay: 0.035 });
+      noise(t + 0.04, 0.2, { lp: 900, gain: 0.25, decay: 0.05 });
     },
     dryClick() {
       noise(now(), 0.03, { hp: 2500, gain: 0.3, decay: 0.003 });
