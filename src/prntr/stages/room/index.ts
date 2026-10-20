@@ -65,9 +65,13 @@ const HOLD_END_MS = 1500;
 
 /** The machine at 3×: the gun's target. */
 const MACHINE = { x0: 72, y0: 80, x1: 168, y1: 146 };
-/** Where the pages come out. */
-const LID = { x: 120, y: 92 };
+/** The machine's output slot on the 3× pose (MFC_MAD row 11): pages and staples come out of it (Edgar, 2026-10-19). */
+const SLOT = { x0: 84, x1: 153, y: 113 };
+/** The first part of a page's flight is spent rising out of the slot, row by row. */
+const PAGE_EJECT = 0.2;
 const PAGE_TARGETS_X = [30, 75, 120, 165, 210];
+/** Where each of the five pages comes out, left to right along the slot. */
+const PAGE_ORIGINS_X = [94, 107, 120, 133, 146];
 const STICKER = { x: 134.5, y: 112.5 };
 /** The sticker's hit area in screen px (handoff §2.5), whatever the scale. */
 const STICKER_HIT_PX = 44;
@@ -100,6 +104,8 @@ const ROOM_ALT =
 type Phase = 'look' | 'sticker' | 'fight' | 'continue' | 'over' | 'end';
 
 interface Staple {
+  /** Where it leaves the slot, and where it arrives. */
+  x0: number;
   x: number;
   y: number;
   at: number;
@@ -108,11 +114,15 @@ interface Staple {
 }
 
 interface Page {
+  /** Where it leaves the slot, and where it lands. */
+  x0: number;
   x1: number;
   y1: number;
   at: number;
   landedAt: number | null;
   shot: boolean;
+  /** The feed sound has played. */
+  fed: boolean;
 }
 
 function el(tag: string, className: string, text?: string): HTMLElement {
@@ -412,18 +422,30 @@ export const room: Stage = {
     };
 
     // ---- the gun ----------------------------------------------------------
+    // A page rises out of the slot row by row for the first fifth of PAGE_MS (the rect
+    // is the rows showing), then flies from the slot to its target, 2× from halfway.
     const pagePose = (p: Page, now: number) => {
       const u = Math.min(1, (now - p.at) / PAGE_MS);
-      const sc = u < 0.5 ? 1 : 2;
-      const x = LID.x + (p.x1 - LID.x) * u;
-      const y = LID.y + (p.y1 - LID.y) * u;
+      if (u < PAGE_EJECT) {
+        const rows = Math.max(1, Math.ceil((u / PAGE_EJECT) * SPR.PAGE_PRINTED.h));
+        return { x: p.x0 - 5, y: SLOT.y - rows, w: 10, h: rows };
+      }
+      const v = (u - PAGE_EJECT) / (1 - PAGE_EJECT);
+      const sc = v < 0.5 ? 1 : 2;
+      const y0 = SLOT.y - 6.5;
+      const x = p.x0 + (p.x1 - p.x0) * v;
+      const y = y0 + (p.y1 - y0) * v;
       return { x: Math.floor(x - 5 * sc), y: Math.floor(y - 6.5 * sc), w: 10 * sc, h: 13 * sc };
     };
-    // Staples fly at the camera: 1× → 2× → 4×.
+    // Staples fly out of the slot at the camera: 1× → 2× → 4×.
     const staplePose = (s: Staple, now: number) => {
       const st = now - s.at;
+      const u = Math.min(1, st / STAPLE_MS);
       const sc = st < STAPLE_MS / 3 ? 1 : st < (2 * STAPLE_MS) / 3 ? 2 : 4;
-      return { x: Math.floor(s.x - 3 * sc), y: Math.floor(s.y - 2.5 * sc), w: 6 * sc, h: 5 * sc };
+      const y0 = SLOT.y - 2.5;
+      const x = s.x0 + (s.x - s.x0) * u;
+      const y = y0 + (s.y - y0) * u;
+      return { x: Math.floor(x - 3 * sc), y: Math.floor(y - 2.5 * sc), w: 6 * sc, h: 5 * sc };
     };
     const reload = (now: number) => {
       if (phase !== 'fight' || frozenAt !== null) return;
@@ -479,12 +501,12 @@ export const room: Stage = {
         nextAttackAt = now + SCAN_MS + WASH_MS + gap;
       } else if (kind === 1) {
         for (let i = 0; i < 3; i++) {
-          staples.push({ x: 20 + Math.random() * 180, y: 40 + Math.random() * 70, at: now + i * STAPLE_STAGGER_MS, hit: false, shot: false });
+          staples.push({ x0: SLOT.x0 + 3 + Math.random() * (SLOT.x1 - SLOT.x0 - 6), x: 20 + Math.random() * 180, y: 40 + Math.random() * 70, at: now + i * STAPLE_STAGGER_MS, hit: false, shot: false });
         }
         nextAttackAt = now + 2 * STAPLE_STAGGER_MS + STAPLE_MS + gap;
       } else {
         PAGE_TARGETS_X.forEach((x1, i) => {
-          pages.push({ x1, y1: 60 + Math.random() * 70, at: now + i * PAGE_STAGGER_MS, landedAt: null, shot: false });
+          pages.push({ x0: PAGE_ORIGINS_X[i], x1, y1: 60 + Math.random() * 70, at: now + i * PAGE_STAGGER_MS, landedAt: null, shot: false, fed: false });
         });
         nextAttackAt = now + 4 * PAGE_STAGGER_MS + PAGE_MS + gap;
       }
@@ -706,6 +728,10 @@ export const room: Stage = {
         }
         staples = staples.filter((s) => !s.hit && !s.shot);
         for (const p of pages) {
+          if (!p.fed && now >= p.at) {
+            p.fed = true;
+            sounds.pageFeed();
+          }
           if (!p.shot && p.landedAt === null && now - p.at >= PAGE_MS) {
             p.landedAt = now;
             sounds.paperSlap();
@@ -754,10 +780,13 @@ export const room: Stage = {
         const r = staplePose(s, now);
         pix.blit(r.x, r.y, SPR.STAPLE, r.w / 6);
       }
+      // Rising out of the slot: only the top rows of the sprite so far.
       for (const p of pages) {
         if (p.shot || now < p.at || p.landedAt !== null) continue;
         const r = pagePose(p, now);
-        pix.blit(r.x, r.y, SPR.PAGE_PRINTED, r.w / 10);
+        const spr = SPR.PAGE_PRINTED;
+        if (r.h < spr.h) pix.blit(r.x, r.y, { w: spr.w, h: r.h, rows: spr.rows.slice(0, r.h) });
+        else pix.blit(r.x, r.y, spr, r.w / spr.w);
       }
       // A page on the glass: big, at a slight angle, then it slides off.
       for (const p of pages) {

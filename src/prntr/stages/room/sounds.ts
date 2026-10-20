@@ -4,8 +4,8 @@ import type { PrntrAudio } from '../../audio';
  * The room's sounds: a port of prntr/design/stage1/audio/sounds.js (the spec; the
  * .wav files beside it are renders for listening). Same recipes and numbers, played
  * live through Prntr's master gain instead of the context's destination. Without an
- * AudioContext every sound is a no-op. death and gameOver are not in sounds.js: Edgar
- * asked for them after playing the room (2026-10-19).
+ * AudioContext every sound is a no-op. pageFeed, death and gameOver are not in
+ * sounds.js: Edgar asked for them after playing the room (2026-10-19).
  */
 
 export interface Hum {
@@ -35,6 +35,8 @@ export interface RoomSounds {
   reload(): void;
   /** A page landing on the glass. */
   paperSlap(): void;
+  /** The rollers feeding a page out of the machine's slot. */
+  pageFeed(): void;
   /** The last heart gone with a continue still to come: three falling notes. */
   death(): void;
   /** Game over: the three notes, then the long fall. About 1.4 s; it plays on through the host's drop. */
@@ -55,6 +57,7 @@ const SILENT: RoomSounds = {
   dryClick: noop,
   reload: noop,
   paperSlap: noop,
+  pageFeed: noop,
   death: noop,
   gameOver: noop,
 };
@@ -275,6 +278,12 @@ export function createRoomSounds(audio: PrntrAudio): RoomSounds {
       noise(t, 0.05, { lp: 900, gain: 0.08 });
       noise(t + 0.05, 0.08, { lp: 2200, gain: 0.7, decay: 0.012 });
       tone(t + 0.05, 0.025, { f0: 180, gain: 0.6, decay: 0.008 });
+    },
+    // a 55 Hz motor for 0.3 s under four roller ticks 70 ms apart
+    pageFeed() {
+      const t = now();
+      tone(t, 0.3, { type: 'sawtooth', f0: 55, gain: 0.06, attack: 0.02, release: 0.08 });
+      for (let i = 0; i < 4; i++) noise(t + i * 0.07, 0.02, { hp: 1500, lp: 6000, gain: 0.3, decay: 0.003 });
     },
     // A4, G4, F4: square notes of 120 ms, 150 ms apart
     death() {
