@@ -4,8 +4,8 @@ import type { PrntrAudio } from '../../audio';
  * The room's sounds: a port of prntr/design/stage1/audio/sounds.js (the spec; the
  * .wav files beside it are renders for listening). Same recipes and numbers, played
  * live through Prntr's master gain instead of the context's destination. Without an
- * AudioContext every sound is a no-op. pageFeed, death and gameOver are not in
- * sounds.js: Edgar asked for them after playing the room (2026-10-19).
+ * AudioContext every sound is a no-op. pageFeed, death, gameOver, shatter, tear and
+ * rustle are not in sounds.js: Edgar asked for them after playing the room (2026-10-19).
  */
 
 export interface Hum {
@@ -41,6 +41,12 @@ export interface RoomSounds {
   death(): void;
   /** Game over: the three notes, then the long fall. About 1.4 s; it plays on through the host's drop. */
   gameOver(): void;
+  /** Glass breaking: the clock, the cooler's bottle, the pot. */
+  shatter(): void;
+  /** Paper tearing: the poster. */
+  tear(): void;
+  /** Leaves: the plant. */
+  rustle(): void;
 }
 
 const noop = () => undefined;
@@ -60,6 +66,9 @@ const SILENT: RoomSounds = {
   pageFeed: noop,
   death: noop,
   gameOver: noop,
+  shatter: noop,
+  tear: noop,
+  rustle: noop,
 };
 
 /** Two seconds of white noise, made once per context. */
@@ -295,6 +304,22 @@ export function createRoomSounds(audio: PrntrAudio): RoomSounds {
       deathNotes(t);
       tone(t + 0.45, 0.9, { type: 'square', f0: 329.6, f1: 50, gain: 0.14, attack: 0.01, release: 0.2 });
       tone(t + 0.45, 0.9, { type: 'square', f0: 334.5, f1: 50.7, gain: 0.14, attack: 0.01, release: 0.2 });
+    },
+    // a bright crack, then three falling glass pings over 0.35 s
+    shatter() {
+      const t = now();
+      noise(t, 0.12, { hp: 2500, gain: 0.6, decay: 0.02 });
+      [5200, 4100, 3300].forEach((f0, i) => tone(t + 0.04 + i * 0.09, 0.14, { f0, f1: f0 * 0.8, gain: 0.18, decay: 0.03 }));
+    },
+    // a 0.18 s rip: band-passed noise, 0.1 s of it louder
+    tear() {
+      const t = now();
+      noise(t, 0.18, { hp: 600, lp: 4000, gain: 0.55, decay: 0.05 });
+      noise(t, 0.1, { hp: 1800, lp: 6000, gain: 0.3, decay: 0.03 });
+    },
+    // a soft 0.25 s rustle: low-passed noise, a slow decay
+    rustle() {
+      noise(now(), 0.25, { lp: 2200, gain: 0.3, decay: 0.07 });
     },
   };
 

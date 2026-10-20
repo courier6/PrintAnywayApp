@@ -1,7 +1,7 @@
 import { reducedMotion, wait } from '../../anim';
 import type { Handoff, Stage } from '../../types';
 import { H, Pix, W } from './pixels';
-import { SPR, drawRoom, type SceneState } from './scene';
+import { SPR, drawRoom, type Broken, type SceneState } from './scene';
 import { createRoomSounds, type Hum } from './sounds';
 
 // ---------------------------------------------------------------------------
@@ -60,6 +60,8 @@ const BLINK_MAX_MS = 9000;
 const BLINK_FIRST_MS = 1500;
 /** Virtual px of the button on the 3× pose (MFC_MAD row 7, columns 24–26). */
 const BUTTON = { x: 144, y: 101, w: 9, h: 3 };
+/** Shooting one of the room's things breaks it, once, for this many points (Edgar, 2026-10-19). */
+const BREAK_POINTS = 5;
 /** The quiet room after 1337, before Prntr ends: 0.5 s of lights coming back, then a full second of nothing. */
 const HOLD_END_MS = 1500;
 
@@ -73,6 +75,16 @@ const PAGE_TARGETS_X = [30, 75, 120, 165, 210];
 /** Where each of the five pages comes out, left to right along the slot. */
 const PAGE_ORIGINS_X = [94, 107, 120, 133, 146];
 const STICKER = { x: 134.5, y: 112.5 };
+/** What the gun can break and where (virtual px, half-open rects): the clock and poster as
+ * their hotspots; the cooler's bottle (COOLER rows 0–7 at 2×), the plant's leaves (PLANT rows
+ * 0–9 at 2×) and its pot (rows 10–15), each with a 2 px margin. Not the door, not the machine. */
+const BREAKABLES: { id: keyof Broken; x0: number; y0: number; x1: number; y1: number; sound: 'shatter' | 'tear' | 'rustle' }[] = [
+  { id: 'clock', x0: 108, y0: 32, x1: 132, y1: 55, sound: 'shatter' },
+  { id: 'poster', x0: 62, y0: 36, x1: 90, y1: 62, sound: 'tear' },
+  { id: 'tank', x0: 48, y0: 90, x1: 76, y1: 108, sound: 'shatter' },
+  { id: 'plant', x0: 198, y0: 101, x1: 230, y1: 123, sound: 'rustle' },
+  { id: 'vase', x0: 204, y0: 123, x1: 224, y1: 137, sound: 'shatter' },
+];
 /** The sticker's hit area in screen px (handoff §2.5), whatever the scale. */
 const STICKER_HIT_PX = 44;
 
@@ -244,6 +256,7 @@ export const room: Stage = {
       scanRow: 0,
       flashWhite: false,
       buttonBright: false,
+      broken: { clock: false, poster: false, tank: false, plant: false, vase: false },
     };
     let phase: Phase = 'look';
     let phaseAt = performance.now();
@@ -500,6 +513,13 @@ export const room: Stage = {
       if (x >= MACHINE.x0 && x < MACHINE.x1 && y >= MACHINE.y0 && y < MACHINE.y1) {
         flashFrames = HIT_FLASH_FRAMES;
         addScore(HIT_POINTS, now);
+        return;
+      }
+      const thing = BREAKABLES.find((b) => !scene.broken[b.id] && x >= b.x0 && x < b.x1 && y >= b.y0 && y < b.y1);
+      if (thing) {
+        scene.broken[thing.id] = true;
+        sounds[thing.sound]();
+        addScore(BREAK_POINTS, now);
       }
     };
     // The machine does not move. Scan, staples, pages, in rotation.
@@ -617,6 +637,7 @@ export const room: Stage = {
         sticker: () => {
           if (phase === 'look') startSticker(performance.now());
         },
+        broken: () => BREAKABLES.filter((b) => scene.broken[b.id]).map((b) => b.id),
       };
     }
 

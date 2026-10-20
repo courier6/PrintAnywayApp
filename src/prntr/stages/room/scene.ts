@@ -1,5 +1,5 @@
 import { SPRITES } from './palette';
-import { H, Pix, W, parseSprite } from './pixels';
+import { H, Pix, W, parseSprite, sliceRows } from './pixels';
 
 export const SPR = {
   MFC: parseSprite(SPRITES.MFC),
@@ -15,7 +15,28 @@ export const SPR = {
   EXIT: parseSprite(SPRITES.EXIT),
   PAGE_SMALL: parseSprite(SPRITES.PAGE_SMALL),
   PAGE_PRINTED: parseSprite(SPRITES.PAGE_PRINTED),
+  CLOCK_BROKEN: parseSprite(SPRITES.CLOCK_BROKEN),
+  POSTER_TORN: parseSprite(SPRITES.POSTER_TORN),
+  TANK_BROKEN: parseSprite(SPRITES.TANK_BROKEN),
+  PLANT_BARE: parseSprite(SPRITES.PLANT_BARE),
+  POT_BROKEN: parseSprite(SPRITES.POT_BROKEN),
 };
+/** The cooler below its bottle, the plant's leaves and its pot, so each half can break alone. */
+const COOLER_BODY = sliceRows(SPR.COOLER, 8, 22);
+const PLANT_TOP = sliceRows(SPR.PLANT, 0, 10);
+const PLANT_POT = sliceRows(SPR.PLANT, 10, 16);
+
+/** What the gun has broken (Edgar, 2026-10-19): each stays broken for the rest of the stage. */
+export interface Broken {
+  clock: boolean;
+  poster: boolean;
+  /** The cooler's bottle. */
+  tank: boolean;
+  /** The leaves. */
+  plant: boolean;
+  /** The pot. */
+  vase: boolean;
+}
 
 /**
  * idle: closed, 2× at 88,100. lid: lid up, still 2× at 88,100 (1.1 s into the sticker
@@ -36,6 +57,7 @@ export interface SceneState {
   flashWhite: boolean;
   /** The red button on the open machine's panel, lit bright for a blink (mad only). */
   buttonBright: boolean;
+  broken: Broken;
 }
 
 /**
@@ -69,17 +91,33 @@ export function drawRoom(p: Pix, s: SceneState): void {
   p.rect(13, 43, 19, 108, 'z');
   p.rect(36, 76, 38, 78, 'K');
   p.blit(17, 31, SPR.EXIT, 1, { remap: { n: 'R' } });
-  p.blit(66, 40, SPR.POSTER);
-  p.blit(112, 36, SPR.CLOCK);
+  p.blit(66, 40, s.broken.poster ? SPR.POSTER_TORN : SPR.POSTER);
+  p.blit(112, 36, s.broken.clock ? SPR.CLOCK_BROKEN : SPR.CLOCK);
   // the window: light, blinds, nothing outside
   p.rect(160, 36, 224, 90, 'e');
   p.rect(163, 39, 221, 87, 's');
   for (let y = 41; y < 87; y += 4) p.rect(163, y, 221, y + 1, 'a');
   // cooler and plant, their shadows to the left (the window is the light)
   p.rect(42, 128, 56, 131, 'X');
-  p.blit(50, 92, SPR.COOLER, 2);
+  if (s.broken.tank) {
+    // the water on the carpet, the stump of the bottle, the cooler itself
+    p.rect(46, 135, 78, 137, 'L');
+    p.rect(42, 137, 82, 139, 'l');
+    p.blit(50, 92, SPR.TANK_BROKEN, 2);
+    p.blit(50, 108, COOLER_BODY, 2);
+  } else {
+    p.blit(50, 92, SPR.COOLER, 2);
+  }
   p.rect(190, 132, 206, 135, 'X');
-  p.blit(200, 103, SPR.PLANT, 2);
+  p.blit(200, 103, s.broken.plant ? SPR.PLANT_BARE : PLANT_TOP, 2);
+  p.blit(200, 123, s.broken.vase ? SPR.POT_BROKEN : PLANT_POT, 2);
+  if (s.broken.plant) {
+    // leaves on the carpet
+    p.rect(194, 134, 196, 136, 'v');
+    p.rect(198, 136, 200, 138, 'V');
+    p.rect(230, 133, 232, 135, 'V');
+    p.rect(226, 136, 228, 138, 'v');
+  }
   // the printer; its shadow falls the other way. Nothing points it out.
   const white = s.flashWhite;
   switch (s.printer) {

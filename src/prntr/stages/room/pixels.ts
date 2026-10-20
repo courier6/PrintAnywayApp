@@ -18,6 +18,11 @@ export function parseSprite(map: string): Sprite {
   return { w, h: rows.length, rows };
 }
 
+/** Rows from..to-1 of a sprite as a sprite of their own (the plant's top and its pot). */
+export function sliceRows(s: Sprite, from: number, to: number): Sprite {
+  return { w: s.w, h: to - from, rows: s.rows.slice(from, to) };
+}
+
 const RGB = Object.fromEntries(
   (Object.keys(PAL) as PalKey[]).map((k) => {
     const n = parseInt(PAL[k].slice(1), 16);
