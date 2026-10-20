@@ -5,6 +5,7 @@ export const SPR = {
   MFC: parseSprite(SPRITES.MFC),
   MFC_MAD: parseSprite(SPRITES.MFC_MAD),
   INFO: parseSprite(SPRITES.INFO),
+  USB: parseSprite(SPRITES.USB),
   POINTER: parseSprite(SPRITES.POINTER),
   CROSSHAIR: parseSprite(SPRITES.CROSSHAIR),
   STAPLE: parseSprite(SPRITES.STAPLE),
@@ -75,8 +76,11 @@ export interface SceneState {
   /** Left, right fluorescent panel. */
   lights: [boolean, boolean];
   printer: PrinterPose;
-  stickerRed: boolean;
+  /** The machine's power light red (the beat after the USB goes in; the handoff reddened its sticker). */
+  ledRed: boolean;
   trayPage: boolean;
+  /** The USB stick still on the carpet (Edgar, 2026-10-19: it starts the fight). */
+  usb: boolean;
   /** 0 = at rest; 5, 6, 7 = the scan bar's sprite row during the sweep (mad only). */
   scanRow: 0 | 5 | 6 | 7;
   /** The machine drawn all white (the hit flash). */
@@ -239,12 +243,14 @@ export function drawRoom(p: Pix, s: SceneState): void {
       break;
     default:
       p.rect(96, 142, 160, 146, 'X');
-      p.blit(88, 100, SPR.MFC, 2);
+      p.blit(88, 100, SPR.MFC, 2, s.ledRed ? { remap: { n: 'R' } } : {});
   }
-  // the sticker and the tray page exist only while the machine is at 2× in place
-  if (s.printer === 'idle' || s.printer === 'lid') {
-    p.blit(132, 110, SPR.INFO, 1, s.stickerRed ? { remap: { c: 'R' } } : {});
-    if (s.trayPage) p.blit(98, 118, SPR.PAGE_SMALL);
+  // the tray page exists only while the machine is at 2× in place
+  if ((s.printer === 'idle' || s.printer === 'lid') && s.trayPage) p.blit(98, 118, SPR.PAGE_SMALL);
+  // the USB stick on the carpet, right of the machine, with its shadow
+  if (s.usb) {
+    p.rect(168, 146, 184, 148, 'X');
+    p.blit(166, 136, SPR.USB, 2);
   }
   if (s.fire) drawFire(p, s.fire, 'front');
 }

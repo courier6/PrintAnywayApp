@@ -72,13 +72,21 @@ export const SPRITES = {
 .KKKKKKKKKKKKKKKKKKKKKKKKKKKKKK.
 ..KKK......................KKK..
 `,
-  // 5 × 5
+  // 5 × 5 (the handoff's sticker; no longer drawn: the fight starts from the USB stick, Edgar 2026-10-19)
   INFO: `
 .ccc.
 cWWWc
 ccWcc
 ccWcc
 .ccc.
+`,
+  // 10 × 5: a USB stick on the carpet, its cap to the right (Edgar, 2026-10-19; not in sprites.txt)
+  USB: `
+.KKKKKKK..
+KdddddddK.
+KdcddddKgK
+KdddddddK.
+.KKKKKKK..
 `,
   // 8 × 11
   POINTER: `

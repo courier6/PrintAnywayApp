@@ -139,7 +139,11 @@ const STAPLE_EJECT = 0.15;
 const PAGE_TARGETS_X = [30, 75, 120, 165, 210];
 /** Where each of the five pages comes out, left to right along the slot. */
 const PAGE_ORIGINS_X = [94, 107, 120, 133, 146];
-const STICKER = { x: 134.5, y: 112.5 };
+/** The USB stick on the carpet (USB at 2× at 166,136): its centre, and what finding it says before
+ * the beat starts USB_PLUG_MS later (Edgar, 2026-10-19; the handoff started the fight from the sticker). */
+const USB = { x: 176, y: 141 };
+const USB_CAPTION = 'YOU FOUND A USB. YOU PLUG IT INTO THE PRINTER.';
+const USB_PLUG_MS = 2200;
 /** What the gun can break and where (virtual px, half-open rects): the clock and poster as
  * their hotspots; the cooler's bottle (COOLER rows 0–7 at 2×), the plant's leaves (PLANT rows
  * 0–9 at 2×) and its pot (rows 10–15), each with a 2 px margin. Not the door, not the machine. */
@@ -150,8 +154,8 @@ const BREAKABLES: { id: keyof Broken; x0: number; y0: number; x1: number; y1: nu
   { id: 'plant', x0: 198, y0: 101, x1: 230, y1: 123, sound: 'rustle' },
   { id: 'vase', x0: 204, y0: 123, x1: 224, y1: 137, sound: 'shatter' },
 ];
-/** The sticker's hit area in screen px (handoff §2.5), whatever the scale. */
-const STICKER_HIT_PX = 44;
+/** The USB stick's hit area in screen px (the handoff's 44 px for the sticker), whatever the scale. */
+const USB_HIT_PX = 44;
 
 interface Hotspot {
   id: string;
@@ -177,7 +181,7 @@ const HOTSPOTS: Hotspot[] = [
 ];
 
 const ROOM_ALT =
-  'A quiet office: drop ceiling with two fluorescent panels, a door ajar on black with an EXIT sign, a Simple Products poster, a clock, a bright window with nothing outside, a water cooler, a plant, and one large copier in the middle with a small blue information sticker on its panel';
+  'A quiet office: drop ceiling with two fluorescent panels, a door ajar on black with an EXIT sign, a Simple Products poster, a clock, a bright window with nothing outside, a water cooler, a plant, one large copier in the middle, and a USB stick on the carpet beside it';
 
 type Phase = 'look' | 'sticker' | 'fight' | 'continue' | 'over' | 'end';
 
@@ -344,8 +348,9 @@ export const room: Stage = {
     const scene: SceneState = {
       lights: [true, true],
       printer: 'idle',
-      stickerRed: false,
+      ledRed: false,
       trayPage: true,
+      usb: true,
       scanRow: 0,
       flashWhite: false,
       buttonBright: false,
@@ -369,6 +374,8 @@ export const room: Stage = {
     let flashFrames = 0;
     let invertFrame = false;
     let lastTickAt = phaseAt;
+    /** The USB has been found; the beat starts at this moment. */
+    let plugAt: number | null = null;
     let stickerStep = 0;
     let endStep = 0;
     let staples: Staple[] = [];
@@ -761,9 +768,12 @@ export const room: Stage = {
     // ---- looking ----------------------------------------------------------
     const clickRoom = (v: { x: number; y: number }, now: number) => {
       sounds.uiClick();
-      const half = Math.max(4.5, STICKER_HIT_PX / 2 / scale);
-      if (Math.abs(v.x - STICKER.x) <= half && Math.abs(v.y - STICKER.y) <= half) {
-        startSticker(now);
+      if (plugAt !== null) return;
+      const half = Math.max(10, USB_HIT_PX / 2 / scale);
+      if (scene.usb && Math.abs(v.x - USB.x) <= half && Math.abs(v.y - USB.y) <= half) {
+        scene.usb = false;
+        plugAt = now + USB_PLUG_MS;
+        setCaption(USB_CAPTION);
         return;
       }
       // The ceiling, wall, carpet and the light: nothing, and the caption stays.
@@ -852,8 +862,11 @@ export const room: Stage = {
           drawPips();
           if (lives === 0 && phase === 'fight') (continued ? startOver : startContinue)(performance.now());
         },
-        sticker: () => {
-          if (phase === 'look') startSticker(performance.now());
+        usb: () => {
+          if (phase === 'look' && plugAt === null) {
+            scene.usb = false;
+            plugAt = performance.now();
+          }
         },
         broken: () => BREAKABLES.filter((b) => scene.broken[b.id]).map((b) => b.id),
         attackGap,
@@ -878,7 +891,7 @@ export const room: Stage = {
       [
         0,
         () => {
-          scene.stickerRed = true;
+          scene.ledRed = true;
           scene.lights[1] = false;
           sounds.lightTick();
           hum.setFlat(true);
@@ -928,7 +941,7 @@ export const room: Stage = {
           scene.lights[0] = true;
           sounds.lightTick();
           hum.setFlat(false);
-          scene.stickerRed = false;
+          scene.ledRed = false;
           scene.trayPage = true;
         },
       ],
@@ -972,6 +985,7 @@ export const room: Stage = {
           lastTickAt = now;
           sounds.printerTick();
         }
+        if (plugAt !== null && now >= plugAt) startSticker(now);
       } else if (phase === 'sticker') {
         stickerStep = runSteps(STICKER_STEPS, stickerStep, t);
       } else if (phase === 'fight') {
