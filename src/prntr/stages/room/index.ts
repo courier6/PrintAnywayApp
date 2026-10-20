@@ -37,6 +37,16 @@ const HURT_MS = 150;
  * like a balloon, its bits gone after POP_MS (Edgar, 2026-10-20). No points: it was the player's. */
 const GHOST_HIT_PAD = 3;
 const POP_MS = 450;
+/** The player's name under their bar (Edgar, 2026-10-20): NEW PLAYER until there is a login. At
+ * WORN_HEALTH or less it shivers now and then (a letter flipping for a tick every NAME_FLIP_MS or
+ * so); at ROUGH_HEALTH or less it is rough: jittering, split into red and cyan, its letters
+ * breaking up every NAME_GLITCH_MS or so. */
+const PLAYER_NAME = 'NEW PLAYER';
+const WORN_HEALTH = 50;
+const ROUGH_HEALTH = 25;
+const NAME_FLIP_MS = 700;
+const NAME_GLITCH_MS = 110;
+const NAME_GLITCH_CHARS = '#%&/?!0X';
 /** The printer's standby tick while the room is idle. */
 const TICK_MS = 4000;
 const AUTO_RELOAD_MS = 800;
@@ -354,6 +364,9 @@ export const room: Stage = {
     lifeEl.setAttribute('role', 'img');
     const lifeFill = el('div', 'prntr-room-life-fill');
     lifeEl.append(lifeFill);
+    // The player's name under the bar's left end, as the machine's is over its own.
+    const lifeName = el('div', 'prntr-room-life-name prntr-room-fight-ui', PLAYER_NAME);
+    lifeName.setAttribute('aria-hidden', 'true');
     const pipsEl = el('div', 'prntr-room-pips prntr-room-fight-ui');
     pipsEl.setAttribute('role', 'img');
     for (let i = 0; i < LIVES_MAX; i++) pipsEl.append(el('span', ''));
@@ -361,14 +374,14 @@ export const room: Stage = {
     shotsBtn.type = 'button';
     shotsBtn.className = 'prntr-room-shots prntr-room-fight-ui';
     for (let i = 0; i < SHOTS; i++) shotsBtn.append(el('span', ''));
-    for (const n of [healthEl, healthName, lifeEl, pipsEl, shotsBtn]) n.hidden = true;
+    for (const n of [healthEl, healthName, lifeEl, lifeName, pipsEl, shotsBtn]) n.hidden = true;
     // When the fight starts: what to do, and the one binding that matters (Edgar, 2026-10-19).
     const hintEl = el('div', 'prntr-room-hint');
     hintEl.setAttribute('aria-hidden', 'true');
     const touch = window.matchMedia('(hover: none)').matches;
     hintEl.append(el('div', 'prntr-room-hint-title', 'PROTECT YOURSELF.'), el('div', 'prntr-room-hint-keys', touch ? 'TAP TO SHOOT' : 'CLICK TO SHOOT'));
     hintEl.hidden = true;
-    hud.append(scoreEl, hiEl, creditEl, captionEl, healthEl, healthName, lifeEl, pipsEl, shotsBtn, hintEl);
+    hud.append(scoreEl, hiEl, creditEl, captionEl, healthEl, healthName, lifeEl, lifeName, pipsEl, shotsBtn, hintEl);
     const continueEl = el('div', 'prntr-room-continue');
     const countEl = el('div', 'prntr-room-continue-count', '9');
     continueEl.append(el('div', 'prntr-room-continue-label', 'CONTINUE?'), countEl);
@@ -521,7 +534,55 @@ export const room: Stage = {
     };
     const drawHealth = () => {
       lifeFill.style.width = `${health}%`;
-      lifeEl.setAttribute('aria-label', `Your health ${health} of ${PLAYER_HEALTH}`);
+      lifeEl.setAttribute('aria-label', `${PLAYER_NAME}, health ${health} of ${PLAYER_HEALTH}`);
+      // the name wears with the bar: worn at half, rough near the end
+      lifeName.classList.toggle('is-worn', health <= WORN_HEALTH && health > ROUGH_HEALTH);
+      lifeName.classList.toggle('is-rough', health <= ROUGH_HEALTH);
+      nameAt = 0;
+    };
+    /** The name's next flip or glitch, and when a flipped letter goes back (0 = none). */
+    let nameAt = 0;
+    let nameBackAt = 0;
+    /** The name with `n` of its letters broken (a glitch character or a gap). */
+    const brokenName = (n: number) => {
+      const chars = PLAYER_NAME.split('');
+      for (let k = 0; k < n; k++) {
+        const i = Math.floor(Math.random() * chars.length);
+        if (chars[i] === ' ') continue;
+        chars[i] = Math.random() < 0.25 ? ' ' : NAME_GLITCH_CHARS[Math.floor(Math.random() * NAME_GLITCH_CHARS.length)];
+      }
+      return chars.join('');
+    };
+    // Worn: a letter flips for a tick now and then. Rough: the letters break up over and over.
+    // Under reduced motion the rough name is broken once and stays so, and the worn one is plain.
+    const poseName = (now: number) => {
+      if (lifeName.hidden) return;
+      const rough = lifeName.classList.contains('is-rough');
+      const worn = lifeName.classList.contains('is-worn');
+      if (!rough && !worn) {
+        if (lifeName.textContent !== PLAYER_NAME) lifeName.textContent = PLAYER_NAME;
+        return;
+      }
+      if (reduced) {
+        if (nameAt === 0) {
+          nameAt = now;
+          lifeName.textContent = rough ? brokenName(2) : PLAYER_NAME;
+        }
+        return;
+      }
+      if (nameBackAt && now >= nameBackAt) {
+        nameBackAt = 0;
+        lifeName.textContent = PLAYER_NAME;
+      }
+      if (now < nameAt) return;
+      if (rough) {
+        nameAt = now + NAME_GLITCH_MS * (0.6 + Math.random() * 0.8);
+        lifeName.textContent = Math.random() < 0.2 ? PLAYER_NAME : brokenName(1 + Math.floor(Math.random() * 3));
+      } else {
+        nameAt = now + NAME_FLIP_MS * (0.7 + Math.random() * 0.8);
+        lifeName.textContent = brokenName(1);
+        nameBackAt = now + 80;
+      }
     };
     const drawPips = () => {
       Array.from(pipsEl.children).forEach((p, i) => p.classList.toggle('is-off', i >= lives));
@@ -585,7 +646,7 @@ export const room: Stage = {
       shotsBtn.setAttribute('aria-label', `Shots ${shots} of ${SHOTS}. Reload`);
     };
     const showFightUi = (on: boolean) => {
-      for (const n of [healthEl, healthName, lifeEl, pipsEl, shotsBtn]) {
+      for (const n of [healthEl, healthName, lifeEl, lifeName, pipsEl, shotsBtn]) {
         n.classList.remove('is-in');
         n.hidden = !on;
         if (on) {
@@ -1129,6 +1190,7 @@ export const room: Stage = {
         tubes: () => scene.tubes.map((t) => ({ ...t })),
         holes: () => scene.holes.map((h) => h.kind),
         ghosts: () => ghosts.length,
+        name: () => lifeName.textContent,
         windowOpen: () => scene.windowOpen,
         /** The x of a nozzle spraying right now, or null. */
         nozzle: () => sprays.find((s) => spraying(s, performance.now()))?.nx ?? null,
@@ -1210,6 +1272,7 @@ export const room: Stage = {
         hintFadeAt = 0;
       }
       if (hintHideAt && now >= hintHideAt) hideHint();
+      poseName(now);
       if (fireAt !== null) fireSound?.setLevel(Math.min(1, (now - fireAt) / FIRE_GROW_MS) + 0.5 * spreadU(now) + (now - stokeAt < STOKE_FLARE_MS ? 0.3 : 0));
       if (fireAt !== null && !mad && now - fireAt >= MAD_AFTER_MS) {
         mad = true;

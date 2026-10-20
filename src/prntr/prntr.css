@@ -702,6 +702,57 @@
   animation: prntr-hurt 250ms steps(1, end) 2;
 }
 
+/* The player's name under the left end of their bar (Edgar, 2026-10-20), NEW PLAYER until there
+   is a login. Worn (half the health or less) it shivers now and then; rough (a quarter or less,
+   the end of this life near) it jitters, flickers and splits into red and cyan, while the stage
+   breaks its letters up. */
+.prntr-room-life-name {
+  position: absolute;
+  left: calc(70px * var(--s));
+  bottom: calc(6px * var(--s) - 13px);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  white-space: pre;
+}
+
+.prntr-room-life-name.is-worn {
+  animation: prntr-name-worn 1600ms steps(1, end) infinite;
+}
+
+.prntr-room-life-name.is-rough {
+  color: #FFE4E0;
+  text-shadow: -1px 0 #19B8F0, 1px 0 #B8140A, 2px 2px 0 #1E1433;
+  animation: prntr-name-rough 180ms steps(1, end) infinite;
+}
+
+@keyframes prntr-name-worn {
+  0%, 100% { transform: none; opacity: 1; }
+  62% { transform: translate(1px, 0); opacity: 0.75; }
+  66% { transform: none; opacity: 1; }
+  90% { transform: translate(-1px, 1px); }
+  93% { transform: none; }
+}
+
+@keyframes prntr-name-rough {
+  0% { transform: translate(0, 0); opacity: 1; }
+  20% { transform: translate(2px, -1px); opacity: 0.7; }
+  40% { transform: translate(-1px, 1px); opacity: 1; }
+  60% { transform: translate(1px, 2px); opacity: 0.85; }
+  80% { transform: translate(-2px, 0); opacity: 0.6; }
+  100% { transform: translate(0, -1px); opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .prntr-room-life-name.is-worn,
+  .prntr-room-life-name.is-rough {
+    animation: none;
+  }
+
+  .prntr-room-life-name.is-worn {
+    opacity: 0.7;
+  }
+}
+
 /* A hit that leaves health: a short red flash over the room. */
 .prntr-room-hurt {
   position: absolute;
@@ -887,6 +938,8 @@
 /* small frames: CREDIT and the shots fill the bottom row, so the bar sits just above CREDIT */
 .prntr-room-frame.is-small .prntr-room-life { left: calc(8px * var(--s)); right: auto; width: calc(90px * var(--s)); bottom: calc(6px * var(--s) + 14px); }
 .prntr-room-frame.is-small .prntr-room-health-name { top: calc(14px * var(--s) - 10px); font-size: 7px; }
+/* small frames: CREDIT is right under the bar, so the name goes over it */
+.prntr-room-frame.is-small .prntr-room-life-name { left: calc(8px * var(--s)); bottom: calc(6px * var(--s) + 26px); font-size: 7px; }
 .prntr-room-frame.is-small .prntr-room-pips { gap: 6px; bottom: calc(6px * var(--s) + 24px); }
 .prntr-room-frame.is-small .prntr-room-pips span { width: 14px; height: 12px; }
 .prntr-room-frame.is-small .prntr-room-shots span { width: 7px; height: 16px; border-width: 2px; }
