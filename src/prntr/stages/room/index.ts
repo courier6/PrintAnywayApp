@@ -27,8 +27,9 @@ const HURT_GRACE_MS = 1500;
 /** The printer's standby tick while the room is idle. */
 const TICK_MS = 4000;
 const AUTO_RELOAD_MS = 800;
-/** A reload refills the shot pips in two steps this far apart. */
-const RELOAD_STEP_MS = 160;
+/** A reload refills the shot pips in two steps this far apart: half at once, the rest right
+ * after the slide is racked (the sound in sounds.ts ends at 330 ms; Edgar, 2026-10-19). */
+const RELOAD_STEP_MS = 360;
 const FIRST_ATTACK_MS = 2500;
 const ATTACK_GAP_MS = 3000;
 const ATTACK_GAP_LATE_MS = 2000;

@@ -33,6 +33,7 @@ export interface RoomSounds {
   shot(): void;
   /** Firing an empty gun. */
   dryClick(): void;
+  /** Magazine out, in, and the slide racked, over 0.33 s; the stage fills the pips right after. */
   reload(): void;
   /** A page landing on the glass. */
   paperSlap(): void;
@@ -279,11 +280,19 @@ export function createRoomSounds(audio: PrntrAudio): RoomSounds {
     dryClick() {
       noise(now(), 0.03, { hp: 2500, gain: 0.3, decay: 0.003 });
     },
-    // two clicks 160 ms apart, the second a little louder
+    // a weapon's reload (Edgar, 2026-10-19; the designer's was two clicks): the magazine out
+    // (a click), in (a clunk at 80 ms), then the slide racked at 200 and 290 ms, a scrape and a
+    // snap each; it is done at 330 ms, right before the pips fill
     reload() {
       const t = now();
       uiClick();
-      noise(t + 0.16, 0.015, { lp: 3500, gain: 0.45, decay: 0.002 });
+      noise(t + 0.08, 0.05, { lp: 1200, gain: 0.5, decay: 0.01 });
+      tone(t + 0.08, 0.06, { f0: 240, f1: 110, gain: 0.35, decay: 0.014 });
+      for (const d of [0.2, 0.29]) {
+        noise(t + d, 0.045, { hp: 1800, lp: 7000, gain: 0.35, decay: 0.012 });
+        noise(t + d + 0.03, 0.015, { hp: 2500, gain: 0.5, decay: 0.002 });
+        tone(t + d + 0.03, 0.03, { f0: 3400, f1: 2200, gain: 0.18, decay: 0.005 });
+      }
     },
     // a 50 ms flutter, then an 80 ms slap with a 180 Hz thwap
     paperSlap() {
