@@ -73,6 +73,10 @@ const BREAK_POINTS = 5;
 /** The water jug breaking shorts the machine: a fire on its wet side grows over the cooler for
  * this long, then burns on at that size (Edgar, 2026-10-19). */
 const FIRE_GROW_MS = 12_000;
+/** This long after the fire starts the machine is mad (Edgar, 2026-10-19): its slot glows red like
+ * the door, its button stays bright, and it trembles (a new offset every SHAKE_FRAMES frames). */
+const MAD_AFTER_MS = 1500;
+const SHAKE_FRAMES = 3;
 /** The EXIT sign (Edgar, 2026-10-19), BREAK_POINTS a hit: its hit box (the sprite plus 2 px, and the
  * room it swings in); the first hit knocks it loose and its letters are on only in these ms windows
  * after it, then out; the second brings it down over EXIT_FALL_MS from the wall to the floor. */
@@ -220,13 +224,15 @@ export const room: Stage = {
     // The fire's light: an unpixelated orange glow sized to the flames each frame.
     const fireLight = el('div', 'prntr-room-fire-light');
     fireLight.hidden = true;
+    // The mad machine's slot, lit red like the door (.is-mad on the frame fades it in).
+    const slotLight = el('div', 'prntr-room-slot-light');
     // The red that reaches into the room once the door is open: a multiply wash, off until then.
     const dread = el('div', 'prntr-room-dread');
     const wash = el('div', 'prntr-room-wash');
     // The red glow on everything that can be shot: DOM boxes over the pixel layer,
     // unpixelated like the door's light (Edgar, 2026-10-19). One per projectile, pooled.
     const glows = el('div', 'prntr-room-glows');
-    for (const n of [light, spill, fireLight, dread, wash, glows]) n.setAttribute('aria-hidden', 'true');
+    for (const n of [light, spill, fireLight, slotLight, dread, wash, glows]) n.setAttribute('aria-hidden', 'true');
     const hud = el('div', 'prntr-room-hud');
     const scoreEl = el('div', 'prntr-room-score', 'SCORE 0000');
     const hiEl = el('div', 'prntr-room-hi', 'HI 1337');
@@ -264,7 +270,7 @@ export const room: Stage = {
     const overEl = el('div', 'prntr-room-over');
     overEl.setAttribute('aria-hidden', 'true');
     overEl.hidden = true;
-    frame.append(canvas, light, spill, fireLight, dread, wash, glows, hud, cursor, continueEl, overEl);
+    frame.append(canvas, light, spill, fireLight, slotLight, dread, wash, glows, hud, cursor, continueEl, overEl);
     wrap.append(frame);
     root.append(wrap);
 
@@ -299,6 +305,7 @@ export const room: Stage = {
       exit: { state: 'up', x: EXIT_WALL.x, y: EXIT_WALL.y, tilt: 0, lit: true },
       doorGap: DOOR_AJAR,
       fire: null,
+      shake: { x: 0, y: 0 },
     };
     let phase: Phase = 'look';
     let phaseAt = performance.now();
@@ -340,6 +347,9 @@ export const room: Stage = {
     /** When the fire started (the water jug broke), and its crackle. */
     let fireAt: number | null = null;
     let fireSound: FireSound | null = null;
+    /** The machine is mad (MAD_AFTER_MS into the fire): the cues above, and the ink to come. */
+    let mad = false;
+    let frameCount = 0;
     /** When the door starts to open (set as the sign lands), and when it did. */
     let doorAt: number | null = null;
     let doorOpenAt: number | null = null;
@@ -480,6 +490,8 @@ export const room: Stage = {
       pages = [];
       scanAt = null;
       scene.scanRow = 0;
+      scene.shake = { x: 0, y: 0 };
+      frame.classList.remove('is-mad');
       wash.classList.remove('is-on');
       washUntil = 0;
       setCaption('');
@@ -740,6 +752,8 @@ export const room: Stage = {
         attackGap,
         exit: (): ExitSign['state'] => scene.exit.state,
         doorGap: () => scene.doorGap,
+        fire: () => fireAt !== null,
+        mad: () => mad,
       };
     }
 
@@ -819,6 +833,10 @@ export const room: Stage = {
       }
       if (hintHideAt && now >= hintHideAt) hideHint();
       if (fireAt !== null) fireSound?.setLevel(Math.min(1, (now - fireAt) / FIRE_GROW_MS));
+      if (fireAt !== null && !mad && now - fireAt >= MAD_AFTER_MS) {
+        mad = true;
+        frame.classList.add('is-mad');
+      }
       // The falling sign lands (not while the room is frozen).
       if (scene.exit.state === 'falling' && frozenAt === null && now - exitAt >= (reduced ? 0 : EXIT_FALL_MS)) {
         scene.exit.state = 'down';
@@ -966,7 +984,14 @@ export const room: Stage = {
       poseFire(now);
       scene.flashWhite = flashFrames > 0;
       if (flashFrames > 0) flashFrames--;
-      scene.buttonBright = phase === 'fight' && buttonBright(now);
+      scene.buttonBright = phase === 'fight' && (mad || buttonBright(now));
+      // The tremble: a new offset of ±1 px every few frames while the mad machine fights.
+      frameCount++;
+      if (mad && phase === 'fight' && frozenAt === null && !reduced) {
+        if (frameCount % SHAKE_FRAMES === 0) scene.shake = { x: Math.floor(Math.random() * 3) - 1, y: -Math.floor(Math.random() * 2) };
+      } else {
+        scene.shake = { x: 0, y: 0 };
+      }
       drawRoom(pix, scene);
       // Out of the slot: only the top rows of the sprite so far, then the whole thing.
       for (const s of staples) {

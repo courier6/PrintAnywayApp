@@ -85,6 +85,8 @@ export interface SceneState {
   /** How wide the door stands open on black, in px: ajar at 6; once the sign is down it swings in (Edgar, 2026-10-19). */
   doorGap: number;
   fire: Fire | null;
+  /** The mad machine's tremble: the 3× pose drawn this far off its place (Edgar, 2026-10-19). */
+  shake: { x: number; y: number };
 }
 
 /** A cheap hash to 0..1, so a flame column flickers on its own without random state. */
@@ -213,11 +215,13 @@ export function drawRoom(p: Pix, s: SceneState): void {
   // the printer; its shadow falls the other way. Nothing points it out.
   const white = s.flashWhite;
   switch (s.printer) {
-    case 'mad':
-      p.rect(84, 146, 176, 152, 'X');
-      p.blit(72, 80, SPR.MFC_MAD, 3, { white, remap: s.buttonBright ? { R: 'Q' } : undefined });
-      if (s.scanRow && !white) p.rect(72 + 3 * 2, 80 + 3 * s.scanRow, 72 + 3 * 23, 80 + 3 * (s.scanRow + 1), 'c');
+    case 'mad': {
+      const { x, y } = s.shake;
+      p.rect(84 + x, 146 + y, 176 + x, 152 + y, 'X');
+      p.blit(72 + x, 80 + y, SPR.MFC_MAD, 3, { white, remap: s.buttonBright ? { R: 'Q' } : undefined });
+      if (s.scanRow && !white) p.rect(72 + x + 3 * 2, 80 + y + 3 * s.scanRow, 72 + x + 3 * 23, 80 + y + 3 * (s.scanRow + 1), 'c');
       break;
+    }
     case 'between':
       p.rect(90, 144, 168, 149, 'X');
       p.blit(80, 90, SPR.MFC_MAD, 2, { white });
