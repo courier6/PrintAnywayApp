@@ -187,6 +187,24 @@
 /* The room's frame (240×160 virtual px at --s, set by the stage), centred: the prompt and the
    footer are placed in it as the room's caption and CREDIT are, so CREDIT stays put at the cut
    (Edgar, 2026-10-19; the handoff had the footer 48 px in and 40 px up from the viewport). */
+/* The storm over the title (Edgar, 2026-10-19): one canvas over the viewport for the cloud, the
+   rain and the water on the letters, and the lightning's flash over everything. */
+.prntr-storm {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  image-rendering: pixelated;
+}
+
+.prntr-flash {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  background: #FFFFFF;
+  opacity: 0;
+  pointer-events: none;
+}
+
 .prntr-arcade {
   position: absolute;
   left: calc(50% - 120px * var(--s));

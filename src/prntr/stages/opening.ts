@@ -1,6 +1,7 @@
 import { nextInput, reducedMotion, wait } from '../anim';
 import type { Stage } from '../types';
 import { H, W } from './room/pixels';
+import { startStorm, type StormSlot } from './storm';
 
 /** 0 = every letter on the baseline, 1 = approved, 2 = twice as messy. */
 const WOBBLE = 1;
@@ -98,8 +99,13 @@ export const opening: Stage = {
     const wrap = el('div', 'prntr-title-wrap');
     const h1 = el('h1', 'prntr-title');
     h1.setAttribute('aria-label', 'prntr');
+    const stormSlots: StormSlot[] = [];
+    /** When each letter is solid (its pop done), so the rain lands on it only then. */
+    const inAt: number[] = [];
     LETTERS.forEach((l, i) => {
       const slot = el('span', 'prntr-title-slot');
+      stormSlots.push({ el: slot, ch: l.ch, rot: l.rot * WOBBLE });
+      inAt.push(reduced ? d : Math.round((i * (d - POP_MS)) / 4) + POP_MS);
       slot.setAttribute('aria-hidden', 'true');
       slot.style.color = l.color;
       if (l.y !== 0 || l.rot !== 0) {
@@ -115,6 +121,9 @@ export const opening: Stage = {
     });
     wrap.append(h1);
     root.append(wrap);
+    // The storm over the word (Edgar, 2026-10-19): stopped with the stage.
+    const storm = startStorm(root, h1, stormSlots, (i) => performance.now() >= t1 + inAt[i], reduced);
+    signal.addEventListener('abort', () => storm.stop(), { once: true });
     ctx.announce('Simple Products presents prntr');
 
     // Beat 4: INSERT COIN, half a second after the last letter lands. Input does nothing.
@@ -169,6 +178,7 @@ export const opening: Stage = {
     ctx.announce('Credit 1. Press start button.');
 
     await nextInput(root, signal);
+    storm.stop();
     root.replaceChildren();
     return { kind: 'start' };
   },
