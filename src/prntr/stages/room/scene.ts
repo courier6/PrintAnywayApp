@@ -133,6 +133,12 @@ export interface SceneState {
   windowOpen: boolean;
 }
 
+/** Where the clock hangs (16×15) and where the post-it board does (20×18): swapped on Edgar's
+ * review (2026-10-20), the board lower than the clock and next to the window. liminal.py had the
+ * board at 66,40 and the clock at 112,36. */
+export const CLOCK_AT = { x: 68, y: 41 };
+export const BOARD_AT = { x: 136, y: 46 };
+
 /** A cheap hash to 0..1, so a flame column flickers on its own without random state. */
 function hash(n: number): number {
   let x = Math.imul(n ^ 0x9e3779b9, 0x85ebca6b);
@@ -286,8 +292,9 @@ export function drawRoom(p: Pix, s: SceneState): void {
   const sign = s.exit;
   if (sign.state === 'down') p.blit(Math.round(sign.x), Math.round(sign.y), SPR.EXIT_BROKEN);
   else p.blit(Math.round(sign.x), Math.round(sign.y), SPR.EXIT, 1, { remap: { n: sign.lit ? 'R' : 'G' }, tilt: sign.tilt });
-  p.blit(66, 40, s.broken.poster ? SPR.POSTER_TORN : SPR.POSTER);
-  p.blit(112, 36, s.broken.clock ? SPR.CLOCK_BROKEN : SPR.CLOCK);
+  // the clock where the board was, the post-it board lower and by the window (Edgar, 2026-10-20)
+  p.blit(CLOCK_AT.x, CLOCK_AT.y, s.broken.clock ? SPR.CLOCK_BROKEN : SPR.CLOCK);
+  p.blit(BOARD_AT.x, BOARD_AT.y, s.broken.poster ? SPR.POSTER_TORN : SPR.POSTER);
   // the window: light, blinds, nothing outside; shot open, the black the red light fills
   p.rect(160, 36, 224, 90, 'e');
   if (s.windowOpen) {

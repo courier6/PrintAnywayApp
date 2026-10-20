@@ -190,12 +190,15 @@ const PAGE_ORIGINS_X = [94, 107, 120, 133, 146];
 const USB = { x: 176, y: 141 };
 const USB_CAPTION = 'YOU FOUND A USB. YOU PLUG IT INTO THE PRINTER.';
 const USB_PLUG_MS = 2200;
-/** What the gun can break and where (virtual px, half-open rects): the clock and poster as
- * their hotspots; the cooler's bottle (COOLER rows 0–7 at 2×), the plant's leaves (PLANT rows
- * 0–9 at 2×) and its pot (rows 10–15), each with a 2 px margin. Not the door, not the machine. */
+/** The clock's and the post-it board's hotspots: their sprites (CLOCK_AT, BOARD_AT in scene.ts) plus 4 px. */
+const CLOCK_HIT = { x0: 64, y0: 37, x1: 88, y1: 60 };
+const BOARD_HIT = { x0: 132, y0: 42, x1: 160, y1: 68 };
+/** What the gun can break and where (virtual px, half-open rects): the clock and the board (the
+ * poster) as their hotspots; the cooler's bottle (COOLER rows 0–7 at 2×), the plant's leaves (PLANT
+ * rows 0–9 at 2×) and its pot (rows 10–15), each with a 2 px margin. Not the door, not the machine. */
 const BREAKABLES: { id: keyof Broken; x0: number; y0: number; x1: number; y1: number; sound: 'shatter' | 'tear' | 'rustle' }[] = [
-  { id: 'clock', x0: 108, y0: 32, x1: 132, y1: 55, sound: 'shatter' },
-  { id: 'poster', x0: 62, y0: 36, x1: 90, y1: 62, sound: 'tear' },
+  { id: 'clock', ...CLOCK_HIT, sound: 'shatter' },
+  { id: 'poster', ...BOARD_HIT, sound: 'tear' },
   { id: 'tank', x0: 48, y0: 90, x1: 76, y1: 108, sound: 'shatter' },
   { id: 'plant', x0: 198, y0: 101, x1: 230, y1: 123, sound: 'rustle' },
   { id: 'vase', x0: 204, y0: 123, x1: 224, y1: 137, sound: 'shatter' },
@@ -219,15 +222,15 @@ const HOTSPOTS: Hotspot[] = [
   { id: 'printer', x0: 84, y0: 96, x1: 156, y1: 148, captions: ["A PRINTER. IT'S ON.", "IT'S WARM."] },
   // Too frightening to go through (Edgar, 2026-10-19; the handoff had LOCKED. / STILL LOCKED.).
   { id: 'door', x0: 6, y0: 27, x1: 48, y1: 112, captions: ['NOT IN THERE.', "IT KNOWS YOU'RE HERE."] },
-  { id: 'poster', x0: 62, y0: 36, x1: 90, y1: 62, captions: ['SIMPLE PRODUCTS. WE PRINT.', 'SIMPLE PRODUCTS. WE PRINT.'] },
-  { id: 'clock', x0: 108, y0: 32, x1: 132, y1: 55, captions: ['1:37.', '1:37.'] },
+  { id: 'poster', ...BOARD_HIT, captions: ['SIMPLE PRODUCTS. WE PRINT.', 'SIMPLE PRODUCTS. WE PRINT.'] },
+  { id: 'clock', ...CLOCK_HIT, captions: ['1:37.', '1:37.'] },
   { id: 'window', x0: 156, y0: 32, x1: 228, y1: 94, captions: ["IT'S BRIGHT OUT.", "IT'S BRIGHT OUT."] },
   { id: 'cooler', x0: 46, y0: 88, x1: 78, y1: 140, captions: ['WATER COOLER. FULL.', 'STILL FULL.'] },
   { id: 'plant', x0: 196, y0: 99, x1: 232, y1: 139, captions: ["A PLANT. IT'S REAL.", "A PLANT. IT'S REAL."] },
 ];
 
 const ROOM_ALT =
-  'A quiet office: drop ceiling with two fluorescent panels, a door ajar on black with an EXIT sign, a Simple Products poster, a clock, a bright window with nothing outside, a water cooler, a plant, one large copier in the middle, and a USB stick on the carpet beside it';
+  'A quiet office: drop ceiling with two fluorescent panels, a door ajar on black with an EXIT sign, a clock, a Simple Products board with notes on it by a bright window with nothing outside, a water cooler, a plant, one large copier in the middle, and a USB stick on the carpet beside it';
 
 type Phase = 'look' | 'sticker' | 'fight' | 'continue' | 'over' | 'end';
 
