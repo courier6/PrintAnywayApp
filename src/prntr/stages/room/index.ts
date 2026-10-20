@@ -586,6 +586,8 @@ export const room: Stage = {
     /** The bloom over the base gap at `heatAt`; it cools from there. */
     let heat = 0;
     let heatAt = 0;
+    /** The gun held steady (no kick, no bloom): the harness's, for checks that are not about the gun. */
+    let steady = false;
     /** On touch, the last tap and its moment: the cross shows there for TOUCH_CROSS_MS. */
     let tap: { x: number; y: number; at: number } | null = null;
     let flashFrames = 0;
@@ -1105,7 +1107,7 @@ export const room: Stage = {
       shots--;
       drawShots();
       sounds.shot();
-      recoil(now);
+      if (!steady) recoil(now);
       // The first shot: a woman screams somewhere off and people run out. Nobody is seen,
       // and nothing else changes.
       if (!panicked) {
@@ -1552,6 +1554,10 @@ export const room: Stage = {
         /** The cross's gap and its offset from the mouse now (the bloom and the kick). `spread` is taken by the fire. */
         gap: () => spreadNow(performance.now()),
         kick: () => kickNow(performance.now()),
+        /** Hold the gun steady (no kick, no bloom) so clicks land where they are aimed. */
+        steady: (on: boolean) => {
+          steady = on;
+        },
         /** A shot at a virtual point through the gun (the kick, the bloom, the recoil): where it went
          * and the shots left, or null outside the fight. */
         shoot: (x: number, y: number) => {
