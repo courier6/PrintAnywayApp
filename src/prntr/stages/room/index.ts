@@ -2,7 +2,8 @@ import { reducedMotion, wait } from '../../anim';
 import type { Handoff, Stage } from '../../types';
 import { H, Pix, W, rotateSprite } from './pixels';
 import { CLOCK_AT, KIT_AT, MACHINE_PIECES, SPR, drawFireFront, drawFlame, drawRoom, drawWindowWreck, fireRect, inDoorway, type Broken, type ExitSign, type Hole, type SceneState } from './scene';
-import type { PalKey } from './palette';
+import { ART_AT, ART_SUB, renderVictory } from './art';
+import { PAL, type PalKey } from './palette';
 import { createRoomSounds, type FireSound, type Hum } from './sounds';
 
 // ---------------------------------------------------------------------------
@@ -284,6 +285,8 @@ const HOTSPOTS: Hotspot[] = [
   { id: 'clock', ...CLOCK_HIT, captions: ['1:37.', '1:37.'] },
   // The blind is down over it (Edgar, 2026-10-20; the handoff had IT'S BRIGHT OUT.).
   { id: 'kit', ...KIT_HIT, captions: ['A FIRST AID KIT. GREEN.', 'A FIRST AID KIT. GREEN.'] },
+  // The print between the clock and the board (Edgar, 2026-10-20).
+  { id: 'art', x0: ART_AT.x - 4, y0: ART_AT.y - 4, x1: ART_AT.x + ART_AT.w + 4, y1: ART_AT.y + ART_AT.h + 4, captions: ['THE WINGED VICTORY. A PRINT.', 'SHE HAS NO HEAD.'] },
   { id: 'window', x0: 156, y0: 32, x1: 228, y1: 94, captions: ['UNABLE TO OPEN.', 'STILL UNABLE TO OPEN.'] },
   { id: 'cooler', x0: 46, y0: 88, x1: 78, y1: 140, captions: ['WATER COOLER. FULL.', 'STILL FULL.'] },
   { id: 'plant', x0: 196, y0: 99, x1: 232, y1: 139, captions: ["A PLANT. IT'S REAL.", "A PLANT. IT'S REAL."] },
@@ -410,6 +413,16 @@ export const room: Stage = {
     front.setAttribute('aria-hidden', 'true');
     const fg = front.getContext('2d', { willReadFrequently: true });
     if (!fg) throw new Error('prntr: no 2d context');
+    // The print on the wall (Edgar, 2026-10-20): its own canvas over the frame's inside, at
+    // ART_SUB cells to the room's pixel, so it is finer than anything around it.
+    const art = document.createElement('canvas');
+    art.className = 'prntr-room-art';
+    art.width = ART_AT.w * ART_SUB;
+    art.height = ART_AT.h * ART_SUB;
+    art.setAttribute('aria-hidden', 'true');
+    const ag = art.getContext('2d');
+    if (!ag) throw new Error('prntr: no 2d context');
+    ag.drawImage(renderVictory(), 0, 0);
     const light = el('div', 'prntr-room-light');
     const spill = el('div', 'prntr-room-spill');
     // The fire's light: an unpixelated orange glow sized to the flames each frame.
@@ -490,7 +503,7 @@ export const room: Stage = {
     const deathEl = el('div', 'prntr-room-death');
     deathEl.setAttribute('aria-hidden', 'true');
     deathEl.hidden = true;
-    frame.append(canvas, light, spill, fireLight, slotLight, holeLights, windowLight, front, dread, dreadWindow, wash, glows, hud, cursor, hurtEl, deathEl, continueEl, overEl);
+    frame.append(canvas, art, light, spill, fireLight, slotLight, holeLights, windowLight, front, dread, dreadWindow, wash, glows, hud, cursor, hurtEl, deathEl, continueEl, overEl);
     wrap.append(frame);
     root.append(wrap);
 
@@ -1157,7 +1170,19 @@ export const room: Stage = {
         holeLightOf.get(old)?.remove();
         holeLightOf.delete(old);
       }
-      if (kind === 'wall') return;
+      if (kind === 'wall') {
+        // through the print: a dark cross on the art canvas too, in its finer cells
+        if (hole.x >= ART_AT.x && hole.x < ART_AT.x + ART_AT.w && hole.y >= ART_AT.y && hole.y < ART_AT.y + ART_AT.h) {
+          const ax = (hole.x - ART_AT.x) * ART_SUB;
+          const ay = (hole.y - ART_AT.y) * ART_SUB;
+          ag.fillStyle = PAL.X;
+          ag.fillRect(ax - ART_SUB, ay, 3 * ART_SUB, ART_SUB);
+          ag.fillRect(ax, ay - ART_SUB, ART_SUB, 3 * ART_SUB);
+          ag.fillStyle = PAL.K;
+          ag.fillRect(ax, ay, ART_SUB, ART_SUB);
+        }
+        return;
+      }
       const box = el('div', 'prntr-room-hole-light');
       box.style.left = `calc(${hole.x - 1}px * var(--s))`;
       box.style.top = `calc(${hole.y - 1}px * var(--s))`;
@@ -1897,6 +1922,7 @@ export const room: Stage = {
       cpix.present(cg);
       drawGlows(now);
       canvas.classList.toggle('is-inverted', invertFrame);
+      art.classList.toggle('is-inverted', invertFrame);
       front.classList.toggle('is-inverted', invertFrame);
       invertFrame = false;
     };

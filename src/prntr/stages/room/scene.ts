@@ -1,3 +1,4 @@
+import { ART_AT } from './art';
 import { SPRITES, type PalKey } from './palette';
 import { H, Pix, W, parseSprite, rotateSprite, sliceRect, sliceRows, type Sprite } from './pixels';
 
@@ -382,6 +383,11 @@ export function drawRoom(p: Pix, s: SceneState): void {
   const sign = s.exit;
   if (sign.state === 'down') p.blit(Math.round(sign.x), Math.round(sign.y), SPR.EXIT_BROKEN);
   else p.blit(Math.round(sign.x), Math.round(sign.y), SPR.EXIT, 1, { remap: { n: sign.lit ? 'R' : 'G' }, tilt: sign.tilt });
+  // the wall art between the clock and the board (Edgar, 2026-10-20): a wooden frame with a pale
+  // mat; the print itself is the stage's art canvas over the rect inside (a plum fallback under it)
+  p.rect(ART_AT.x - 2, ART_AT.y - 2, ART_AT.x + ART_AT.w + 2, ART_AT.y + ART_AT.h + 2, 'K');
+  p.rect(ART_AT.x - 1, ART_AT.y - 1, ART_AT.x + ART_AT.w + 1, ART_AT.y + ART_AT.h + 1, 'D');
+  p.rect(ART_AT.x, ART_AT.y, ART_AT.x + ART_AT.w, ART_AT.y + ART_AT.h, 'K');
   // the clock where the board was, the post-it board lower and by the window (Edgar, 2026-10-20)
   if (s.clock.state === 'up') p.blit(CLOCK_AT.x, CLOCK_AT.y, SPR.CLOCK);
   p.blit(BOARD_AT.x, BOARD_AT.y, s.broken.poster ? SPR.POSTER_TORN : SPR.POSTER);

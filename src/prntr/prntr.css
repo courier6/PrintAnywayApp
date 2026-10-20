@@ -373,8 +373,21 @@
 
 /* The scan's one inverted frame. */
 .prntr-room-canvas.is-inverted,
+.prntr-room-art.is-inverted,
 .prntr-room-front.is-inverted {
   filter: invert(1);
+}
+
+/* The print on the wall (Edgar, 2026-10-20): a canvas at four cells to the room's pixel over the
+   frame's inside (ART_AT in art.ts), under the light and the washes like the wall it hangs on. */
+.prntr-room-art {
+  position: absolute;
+  left: calc(88px * var(--s));
+  top: calc(36px * var(--s));
+  width: calc(44px * var(--s));
+  height: calc(32px * var(--s));
+  image-rendering: pixelated;
+  pointer-events: none;
 }
 
 /* What the machine throws (pages, staples, ink): a transparent canvas over the slot's red
