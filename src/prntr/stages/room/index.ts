@@ -1100,7 +1100,7 @@ export const room: Stage = {
       for (const s of staples) if (now >= s.at && !s.hit && !s.shot) rects.push(staplePose(s, now));
       for (const p of pages) if (now >= p.at && !p.shot && p.landedAt === null) rects.push(pagePose(p, now));
       for (const s of sprays) if (spraying(s, now)) rects.push({ x: s.nx - 3, y: NOZZLE_Y + NOZZLE_ROOT.dy - 2, w: 6, h: 6 });
-      if (scene.buttonBright) rects.push(BUTTON);
+      if (scene.buttonBright) rects.push({ ...BUTTON, x: BUTTON.x + scene.shake.x, y: BUTTON.y + scene.shake.y });
       while (glows.children.length < rects.length) glows.append(el('div', 'prntr-room-glow'));
       Array.from(glows.children).forEach((n, i) => {
         const r = rects[i];
@@ -1170,6 +1170,8 @@ export const room: Stage = {
       } else {
         scene.shake = { x: 0, y: 0 };
       }
+      // The slot's red light is a DOM box over the canvas: it trembles with the machine (Edgar, 2026-10-20).
+      slotLight.style.transform = scene.shake.x || scene.shake.y ? `translate(${scene.shake.x * scale}px, ${scene.shake.y * scale}px)` : '';
       // The ink on the far half of its flight goes behind the machine: it is sprayed from behind it.
       scene.inkBehind = [];
       for (const s of sprays) {
