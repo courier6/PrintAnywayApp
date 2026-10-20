@@ -49,6 +49,9 @@ const CONTINUE_MS = 10_000;
 const CONTINUE_ARM_MS = 300;
 /** The frozen, dimmed room before Prntr ends on a game over. */
 const OVER_HOLD_MS = 500;
+/** PROTECT YOURSELF. and the binding under it stay this long, then fade (HINT_FADE_MS, as in prntr.css). */
+const HINT_MS = 2000;
+const HINT_FADE_MS = 500;
 /** The quiet room after 1337, before Prntr ends: 0.5 s of lights coming back, then a full second of nothing. */
 const HOLD_END_MS = 1500;
 
@@ -165,7 +168,13 @@ export const room: Stage = {
     shotsBtn.className = 'prntr-room-shots prntr-room-fight-ui';
     for (let i = 0; i < SHOTS; i++) shotsBtn.append(el('span', ''));
     for (const n of [healthEl, pipsEl, shotsBtn]) n.hidden = true;
-    hud.append(scoreEl, hiEl, creditEl, captionEl, healthEl, pipsEl, shotsBtn);
+    // When the fight starts: what to do, and the one binding that matters (Edgar, 2026-10-19).
+    const hintEl = el('div', 'prntr-room-hint');
+    hintEl.setAttribute('aria-hidden', 'true');
+    const touch = window.matchMedia('(hover: none)').matches;
+    hintEl.append(el('div', 'prntr-room-hint-title', 'PROTECT YOURSELF.'), el('div', 'prntr-room-hint-keys', touch ? 'TAP TO SHOOT' : 'CLICK TO SHOOT'));
+    hintEl.hidden = true;
+    hud.append(scoreEl, hiEl, creditEl, captionEl, healthEl, pipsEl, shotsBtn, hintEl);
     const continueEl = el('div', 'prntr-room-continue');
     const countEl = el('div', 'prntr-room-continue-count', '9');
     continueEl.append(el('div', 'prntr-room-continue-label', 'CONTINUE?'), countEl);
@@ -231,6 +240,8 @@ export const room: Stage = {
     /** The one continue has been used: the next death is the end. */
     let continued = false;
     let outcome: 'cleared' | 'over' = 'cleared';
+    let hintFadeAt = 0;
+    let hintHideAt = 0;
     const clicks = new Map<string, number>();
     const hum: Hum = sounds.hum();
     /** Set inside the promise at the bottom: stops the loop and resolves `outcome`. */
@@ -278,8 +289,13 @@ export const room: Stage = {
       phase = 'fight';
       phaseAt = now;
       showFightUi(true);
+      hintEl.hidden = false;
+      void hintEl.offsetWidth;
+      hintEl.classList.add('is-in');
+      hintFadeAt = now + HINT_MS;
+      hintHideAt = now + HINT_MS + HINT_FADE_MS;
       nextAttackAt = now + FIRST_ATTACK_MS;
-      ctx.announce('The printer is open.');
+      ctx.announce(`The printer is open. Protect yourself. ${touch ? 'Tap' : 'Click'} to shoot.`);
     };
     const startContinue = (now: number) => {
       phase = 'continue';
@@ -319,6 +335,11 @@ export const room: Stage = {
       nextAttackAt = now + ATTACK_GAP_MS;
       ctx.announce('Credit 1. Last life.');
     };
+    const hideHint = () => {
+      hintEl.hidden = true;
+      hintEl.classList.remove('is-in');
+      hintFadeAt = hintHideAt = 0;
+    };
     // A click in the first moments after death is the shot that died, not an answer.
     const answerContinue = (now: number) => {
       if (phase === 'continue' && now - phaseAt >= CONTINUE_ARM_MS) continueYes(now);
@@ -329,6 +350,7 @@ export const room: Stage = {
       phaseAt = now;
       frozenAt ??= now;
       outcome = 'over';
+      hideHint();
       continueEl.hidden = true;
       overEl.hidden = false;
       ctx.announce('Game over.');
@@ -337,6 +359,7 @@ export const room: Stage = {
       phase = 'end';
       phaseAt = now;
       endStep = 0;
+      hideHint();
       staples = [];
       pages = [];
       scanAt = null;
@@ -609,6 +632,11 @@ export const room: Stage = {
     // ---- update -----------------------------------------------------------
     const update = (now: number) => {
       const t = now - phaseAt;
+      if (hintFadeAt && now >= hintFadeAt) {
+        hintEl.classList.remove('is-in');
+        hintFadeAt = 0;
+      }
+      if (hintHideAt && now >= hintHideAt) hideHint();
       if (phase === 'look') {
         if (now - lastTickAt >= TICK_MS) {
           lastTickAt = now;

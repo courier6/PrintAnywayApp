@@ -350,6 +350,35 @@
   pointer-events: none;
 }
 
+/* PROTECT YOURSELF. on the wall between the clock and the machine, the binding under it; in over 300 ms with the
+   fight HUD, out over 500 ms two seconds later (HINT_MS / HINT_FADE_MS in the stage). */
+.prntr-room-hint {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(58px * var(--s));
+  text-align: center;
+  opacity: 0;
+  transition: opacity 500ms linear;
+}
+
+.prntr-room-hint.is-in {
+  opacity: 1;
+  transition-duration: 300ms;
+}
+
+.prntr-room-hint-title {
+  font-size: 28px;
+  letter-spacing: 0.08em;
+  color: #FFD91A;
+}
+
+.prntr-room-hint-keys {
+  margin-top: calc(4px * var(--s));
+  font-size: 13px;
+  color: #EDEDED;
+}
+
 /* The scan flash's white wash (the Continue dim is .prntr-room-continue). */
 /* Everything that can be shot glows red, the door's kind of light: a transparent box
    the size of the sprite with the glow outside it, so the pixels stay crisp. */
@@ -559,5 +588,7 @@
 .prntr-room-frame.is-small .prntr-room-pips { gap: 6px; }
 .prntr-room-frame.is-small .prntr-room-pips span { width: 14px; height: 12px; }
 .prntr-room-frame.is-small .prntr-room-shots span { width: 7px; height: 16px; border-width: 2px; }
+.prntr-room-frame.is-small .prntr-room-hint-title { font-size: 16px; }
+.prntr-room-frame.is-small .prntr-room-hint-keys { font-size: 8px; }
 .prntr-room-frame.is-small .prntr-room-continue-label { font-size: 20px; }
 .prntr-room-frame.is-small .prntr-room-continue-count { font-size: 64px; }
