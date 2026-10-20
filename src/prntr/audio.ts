@@ -32,6 +32,8 @@ export interface Cue {
 
 export interface PrntrAudio {
   context: AudioContext | null;
+  /** The node every Prntr sound plays through (gain 0.5). Null without a context. */
+  master: GainNode | null;
   cues: Record<CueName, Cue>;
   /** One of the three discovery cues, never the same one twice in a row (per session). */
   pickDiscovery(): Cue;
@@ -440,6 +442,7 @@ export function createPrntrAudio(context: AudioContext | null): PrntrAudio {
 
   return {
     context,
+    master,
     cues,
     pickDiscovery() {
       const pool = DISCOVERY_NAMES.filter((n) => n !== lastDiscovery);
