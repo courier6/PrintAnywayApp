@@ -141,7 +141,10 @@ export const room: Stage = {
     const light = el('div', 'prntr-room-light');
     const spill = el('div', 'prntr-room-spill');
     const wash = el('div', 'prntr-room-wash');
-    for (const n of [light, spill, wash]) n.setAttribute('aria-hidden', 'true');
+    // The red glow on everything that can be shot: DOM boxes over the pixel layer,
+    // unpixelated like the door's light (Edgar, 2026-10-19). One per projectile, pooled.
+    const glows = el('div', 'prntr-room-glows');
+    for (const n of [light, spill, wash, glows]) n.setAttribute('aria-hidden', 'true');
     const hud = el('div', 'prntr-room-hud');
     const scoreEl = el('div', 'prntr-room-score', 'SCORE 0000');
     const hiEl = el('div', 'prntr-room-hi', 'HI 1337');
@@ -171,7 +174,7 @@ export const room: Stage = {
     const overEl = el('div', 'prntr-room-over');
     overEl.setAttribute('aria-hidden', 'true');
     overEl.hidden = true;
-    frame.append(canvas, light, spill, wash, hud, continueEl, overEl);
+    frame.append(canvas, light, spill, wash, glows, hud, continueEl, overEl);
     wrap.append(frame);
     root.append(wrap);
 
@@ -665,6 +668,24 @@ export const room: Stage = {
     };
 
     // ---- render -----------------------------------------------------------
+    // A glow box per projectile in flight (never a landed page: it cannot be shot),
+    // in screen px over the frame; spare boxes are hidden.
+    const drawGlows = (now: number) => {
+      const rects: { x: number; y: number; w: number; h: number }[] = [];
+      for (const s of staples) if (now >= s.at && !s.hit && !s.shot) rects.push(staplePose(s, now));
+      for (const p of pages) if (now >= p.at && !p.shot && p.landedAt === null) rects.push(pagePose(p, now));
+      while (glows.children.length < rects.length) glows.append(el('div', 'prntr-room-glow'));
+      Array.from(glows.children).forEach((n, i) => {
+        const r = rects[i];
+        const box = n as HTMLElement;
+        box.hidden = !r;
+        if (!r) return;
+        box.style.left = `${r.x * scale}px`;
+        box.style.top = `${r.y * scale}px`;
+        box.style.width = `${r.w * scale}px`;
+        box.style.height = `${r.h * scale}px`;
+      });
+    };
     const render = (now: number) => {
       scene.flashWhite = flashFrames > 0;
       if (flashFrames > 0) flashFrames--;
@@ -692,6 +713,7 @@ export const room: Stage = {
         else pix.blit(Math.floor(pointer.x) - 2, Math.floor(pointer.y), SPR.POINTER);
       }
       pix.present(g);
+      drawGlows(now);
       canvas.classList.toggle('is-inverted', invertFrame);
       invertFrame = false;
     };

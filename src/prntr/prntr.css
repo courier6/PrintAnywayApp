@@ -351,6 +351,22 @@
 }
 
 /* The scan flash's white wash (the Continue dim is .prntr-room-continue). */
+/* Everything that can be shot glows red, the door's kind of light: a transparent box
+   the size of the sprite with the glow outside it, so the pixels stay crisp. */
+.prntr-room-glows {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.prntr-room-glow {
+  position: absolute;
+  border-radius: 40%;
+  box-shadow:
+    0 0 calc(2px * var(--s)) calc(0.8px * var(--s)) rgba(255, 90, 60, 0.45),
+    0 0 calc(5px * var(--s)) calc(2px * var(--s)) rgba(184, 20, 10, 0.5);
+}
+
 .prntr-room-wash {
   position: absolute;
   inset: 0;
