@@ -67,6 +67,8 @@ const BLOOM_BASE = 1;
 const BLOOM_PER_SHOT = 3;
 const BLOOM_MAX = 12;
 const BLOOM_COOL = 6;
+/** On touch there is no hover cross: it shows at the tap for this long, so the kick and the bloom show. */
+const TOUCH_CROSS_MS = 500;
 /** Slowed to 2.5 / 3 / 2 s, then made a quarter faster. */
 const FIRST_ATTACK_MS = 2000;
 const ATTACK_GAP_MS = 2250;
@@ -584,6 +586,8 @@ export const room: Stage = {
     /** The bloom over the base gap at `heatAt`; it cools from there. */
     let heat = 0;
     let heatAt = 0;
+    /** On touch, the last tap and its moment: the cross shows there for TOUCH_CROSS_MS. */
+    let tap: { x: number; y: number; at: number } | null = null;
     let flashFrames = 0;
     let invertFrame = false;
     let lastTickAt = phaseAt;
@@ -1442,6 +1446,7 @@ export const room: Stage = {
         if (e.button !== 0) return;
         if (phase === 'look') clickRoom(v, now);
         else if (phase === 'fight' && frozenAt === null) {
+          if (e.pointerType === 'touch') tap = { x: v.x, y: v.y, at: now };
           const a = aim(v, now);
           fire(a.x, a.y, now);
         }
@@ -1977,9 +1982,10 @@ export const room: Stage = {
       }
       cpix.clear();
       const aiming = phase === 'fight' || phase === 'continue' || phase === 'over';
-      if (pointer && aiming) {
+      const at = pointer ?? (aiming && tap && now - tap.at < TOUCH_CROSS_MS ? tap : null);
+      if (at && aiming) {
         const k = kickNow(now);
-        drawCross(Math.floor(pointer.x + k.x), Math.floor(pointer.y + k.y), Math.round(spreadNow(now)));
+        drawCross(Math.floor(at.x + k.x), Math.floor(at.y + k.y), Math.round(spreadNow(now)));
       } else if (pointer) cpix.blit(Math.floor(pointer.x) - 2, Math.floor(pointer.y), SPR.POINTER);
       pix.present(g);
       fpix.present(fg);
