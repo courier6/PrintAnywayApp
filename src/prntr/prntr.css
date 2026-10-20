@@ -396,10 +396,6 @@
   font-size: 13px;
 }
 
-.prntr-room-credit.is-glowing {
-  animation: prntr-glow 1500ms linear forwards;
-}
-
 .prntr-room-credit.is-after {
   animation: prntr-after 600ms linear forwards;
 }
@@ -514,6 +510,14 @@
   background: rgba(0, 0, 0, 0.42);
   color: #FFFFFF;
   text-shadow: 2px 2px 0 #1E1433, -1px -1px 0 #1E1433, 1px -1px 0 #1E1433, -1px 1px 0 #1E1433;
+  pointer-events: none;
+}
+
+/* Game over: the same dim, nothing on it, half a second before the host drops in. */
+.prntr-room-over {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.42);
   pointer-events: none;
 }
 

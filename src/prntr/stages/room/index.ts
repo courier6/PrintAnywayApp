@@ -43,10 +43,12 @@ const PAGE_STAGGER_MS = 450;
 const PAGE_LANDED_MS = 1500;
 const PAGE_SLIDE_MS = 400;
 const HIT_FLASH_FRAMES = 2;
-/** CONTINUE? count at which the credit glows and flips back to 01 on its own. */
-const CONTINUE_GLOW_AT = 3;
-/** Must match prntr-glow in prntr.css. */
-const GLOW_MS = 1500;
+/** CONTINUE? counts 9 → 0, a second each; unanswered, it is a game over (Edgar, 2026-10-19). */
+const CONTINUE_MS = 10_000;
+/** Clicks this soon after death do not count as yes: the shot that died must not answer. */
+const CONTINUE_ARM_MS = 300;
+/** The frozen, dimmed room before Prntr ends on a game over. */
+const OVER_HOLD_MS = 500;
 /** The quiet room after 1337, before Prntr ends: 0.5 s of lights coming back, then a full second of nothing. */
 const HOLD_END_MS = 1500;
 
@@ -84,7 +86,7 @@ const HOTSPOTS: Hotspot[] = [
 const ROOM_ALT =
   'A quiet office: drop ceiling with two fluorescent panels, a door ajar on black with an EXIT sign, a Simple Products poster, a clock, a bright window with nothing outside, a water cooler, a plant, and one large copier in the middle with a small blue information sticker on its panel';
 
-type Phase = 'look' | 'sticker' | 'fight' | 'continue' | 'end';
+type Phase = 'look' | 'sticker' | 'fight' | 'continue' | 'over' | 'end';
 
 interface Staple {
   x: number;
@@ -111,7 +113,7 @@ function el(tag: string, className: string, text?: string): HTMLElement {
 
 /**
  * Stage 1, the room: look around, click the sticker, fight the machine to 1337, one
- * second of quiet, out. Design: prntr/design/PRNTR-HANDOFF-STAGE-1.md §2–§3 (local);
+ * second of quiet, out; or run out of hearts and it is over. Design: prntr/design/PRNTR-HANDOFF-STAGE-1.md §2–§3 (local);
  * spec: PRNTR-STAGE-1.md. The page in ctx.page is not used: the room is not about it.
  */
 export const room: Stage = {
@@ -165,7 +167,11 @@ export const room: Stage = {
     const countEl = el('div', 'prntr-room-continue-count', '9');
     continueEl.append(el('div', 'prntr-room-continue-label', 'CONTINUE?'), countEl);
     continueEl.hidden = true;
-    frame.append(canvas, light, spill, wash, hud, continueEl);
+    // The game-over dim: the same wash as CONTINUE?, with nothing written on it.
+    const overEl = el('div', 'prntr-room-over');
+    overEl.setAttribute('aria-hidden', 'true');
+    overEl.hidden = true;
+    frame.append(canvas, light, spill, wash, hud, continueEl, overEl);
     wrap.append(frame);
     root.append(wrap);
 
@@ -219,10 +225,12 @@ export const room: Stage = {
     let washUntil = 0;
     let autoReloadAt: number | null = null;
     let reloadSecondAt: number | null = null;
-    let glowAt: number | null = null;
+    /** The one continue has been used: the next death is the end. */
+    let continued = false;
+    let outcome: 'cleared' | 'over' = 'cleared';
     const clicks = new Map<string, number>();
     const hum: Hum = sounds.hum();
-    /** Set inside the promise at the bottom: stops the loop and resolves `cleared`. */
+    /** Set inside the promise at the bottom: stops the loop and resolves `outcome`. */
     let finish: () => void = () => undefined;
 
     // ---- HUD --------------------------------------------------------------
@@ -274,7 +282,6 @@ export const room: Stage = {
       phase = 'continue';
       phaseAt = now;
       frozenAt = now;
-      glowAt = null;
       health = 0;
       drawPips();
       creditEl.textContent = 'CREDIT 00';
@@ -283,13 +290,13 @@ export const room: Stage = {
       continueEl.hidden = false;
       ctx.announce('Continue?');
     };
-    // Nobody inserted anything: the credit comes back on its own, the fight resumes.
-    const resumeFight = (now: number) => {
+    // Yes: the credit comes back, the fight resumes with the last heart.
+    const continueYes = (now: number) => {
       creditEl.textContent = 'CREDIT 01';
-      creditEl.classList.remove('is-glowing');
       creditEl.classList.add('is-after');
       audio.play(audio.cues.creditA);
       continueEl.hidden = true;
+      continued = true;
       frozenAt = null;
       health = HEARTS_CONTINUE;
       hurtUntil = 0;
@@ -307,7 +314,21 @@ export const room: Stage = {
       phase = 'fight';
       phaseAt = now;
       nextAttackAt = now + ATTACK_GAP_MS;
-      ctx.announce('Credit 1.');
+      ctx.announce('Credit 1. Last life.');
+    };
+    // A click in the first moments after death is the shot that died, not an answer.
+    const answerContinue = (now: number) => {
+      if (phase === 'continue' && now - phaseAt >= CONTINUE_ARM_MS) continueYes(now);
+    };
+    // The last heart gone, or the count run out: the frozen, dimmed room, then out.
+    const startOver = (now: number) => {
+      phase = 'over';
+      phaseAt = now;
+      frozenAt ??= now;
+      outcome = 'over';
+      continueEl.hidden = true;
+      overEl.hidden = false;
+      ctx.announce('Game over.');
     };
     const startEnd = (now: number) => {
       phase = 'end';
@@ -330,7 +351,7 @@ export const room: Stage = {
       void pipsEl.offsetWidth; // flush, so the blink restarts
       pipsEl.classList.add('is-hurt');
       drawPips();
-      if (health === 0) startContinue(now);
+      if (health === 0) (continued ? startOver : startContinue)(now);
     };
     const addScore = (n: number, now: number) => {
       // The counter never passes 1337, whatever the last hit was worth.
@@ -457,14 +478,17 @@ export const room: Stage = {
         if (e.button !== 0) return;
         if (phase === 'look') clickRoom(v, now);
         else if (phase === 'fight' && frozenAt === null) fire(v.x, v.y, now);
+        else if (phase === 'continue') answerContinue(now);
       },
       { signal },
     );
-    // The arcade's off-screen reload: a press on the black around the frame.
+    // The arcade's off-screen reload: a press on the black around the frame (or yes).
     wrap.addEventListener(
       'pointerdown',
       (e) => {
-        if (e.target === wrap) reload(performance.now());
+        if (e.target !== wrap) return;
+        if (phase === 'continue') answerContinue(performance.now());
+        else reload(performance.now());
       },
       { signal },
     );
@@ -480,7 +504,10 @@ export const room: Stage = {
     window.addEventListener(
       'keydown',
       (e) => {
-        if (e.key === ' ' || e.key === 'r' || e.key === 'R') {
+        if (phase === 'continue' && (e.key === ' ' || e.key === 'Enter')) {
+          e.preventDefault();
+          answerContinue(performance.now());
+        } else if (e.key === ' ' || e.key === 'r' || e.key === 'R') {
           e.preventDefault();
           reload(performance.now());
         }
@@ -501,7 +528,7 @@ export const room: Stage = {
         setHealth: (n: number) => {
           health = Math.max(0, Math.min(HEARTS_MAX, n));
           drawPips();
-          if (health === 0 && phase === 'fight') startContinue(performance.now());
+          if (health === 0 && phase === 'fight') (continued ? startOver : startContinue)(performance.now());
         },
         sticker: () => {
           if (phase === 'look') startSticker(performance.now());
@@ -627,14 +654,11 @@ export const room: Stage = {
         }
         pages = pages.filter((p) => !p.shot && (p.landedAt === null || now - p.landedAt < PAGE_LANDED_MS + PAGE_SLIDE_MS));
       } else if (phase === 'continue') {
-        // The count never reaches zero: at 3 the credit glows and flips back on its own.
-        const count = Math.max(1, 9 - Math.floor(t / 1000));
-        countEl.textContent = String(count);
-        if (glowAt === null && count <= CONTINUE_GLOW_AT) {
-          glowAt = now;
-          creditEl.classList.add('is-glowing');
-        }
-        if (glowAt !== null && now >= glowAt + GLOW_MS) resumeFight(now);
+        // 9 → 0, a second each; 0 gets its full second, then it is over.
+        countEl.textContent = String(Math.max(0, 9 - Math.floor(t / 1000)));
+        if (t >= CONTINUE_MS) startOver(now);
+      } else if (phase === 'over') {
+        if (t >= OVER_HOLD_MS) finish();
       } else if (phase === 'end') {
         endStep = runSteps(END_STEPS, endStep, t);
       }
@@ -663,7 +687,7 @@ export const room: Stage = {
         pix.blit(Math.floor(p.x1 - 20), Math.floor(p.y1 - 26 + slide), SPR.PAGE_SMALL, 4, { skew: 10 });
       }
       if (pointer) {
-        const aim = phase === 'fight' || phase === 'continue';
+        const aim = phase === 'fight' || phase === 'continue' || phase === 'over';
         if (aim) pix.blit(Math.floor(pointer.x) - 5, Math.floor(pointer.y) - 6, SPR.CROSSHAIR);
         else pix.blit(Math.floor(pointer.x) - 2, Math.floor(pointer.y), SPR.POINTER);
       }
@@ -683,7 +707,7 @@ export const room: Stage = {
         hum.stop();
       };
       // On abort the host removes the root. On finish the frame stays painted until
-      // the host's sky drop has covered it (PRNTR-STAGE-1.md §4.10).
+      // the host's drop (sky or Tetris) has covered it (PRNTR-STAGE-1.md §4.10).
       signal.addEventListener(
         'abort',
         () => {
@@ -694,7 +718,7 @@ export const room: Stage = {
       );
       finish = () => {
         stop();
-        resolve({ kind: 'cleared', score });
+        resolve(outcome === 'over' ? { kind: 'over', score } : { kind: 'cleared', score });
       };
       const loop = (now: number) => {
         if (done) return;

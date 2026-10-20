@@ -26,8 +26,8 @@ export interface PrntrHostProps {
   stage: number;
   audioContext: AudioContext | null;
   onExit: () => void;
-  /** The chain finished (stage 1 cleared). */
-  onDone: () => void;
+  /** The chain finished: the room was cleared, or it was a game over. */
+  onDone: (outcome: 'cleared' | 'over') => void;
 }
 
 /** Whatever breaks inside Prntr, the user lands back on the preview. */

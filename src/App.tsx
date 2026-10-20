@@ -265,9 +265,10 @@ export default function App() {
 
   // The sky drop (PRNTR-STAGE-1.md §4.10): after the room is cleared, the app's UI
   // falls into place over the frozen last frame of Prntr, which stays mounted until
-  // the drop has landed. Reduced motion is a plain cut, as is any exit (Esc, ✕).
-  function finishPrntr() {
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+  // the drop has landed. Reduced motion is a plain cut, as is any exit (Esc, ✕) and,
+  // for now, a game over.
+  function finishPrntr(outcome: 'cleared' | 'over') {
+    if (outcome === 'over' || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
       exitPrntr();
       return;
     }

@@ -17,10 +17,11 @@ interface Props {
   /** Esc or ✕: the host cuts straight back. */
   onExit: () => void;
   /**
-   * The chain finished (the room was cleared): `prntr:done` with reason complete.
-   * The host drops its UI over the last frame, then unmounts Prntr.
+   * The chain finished: `prntr:done` with reason complete. `cleared` is the room won
+   * (the sky drop), `over` a game over (the Tetris drop). Either way the host drops
+   * its UI over the last frame, then unmounts Prntr.
    */
-  onDone: () => void;
+  onDone: (outcome: 'cleared' | 'over') => void;
 }
 
 export default function Prntr({ source, recolored, inkHex, stage, audioContext, onExit, onDone }: Props) {
@@ -83,10 +84,10 @@ export default function Prntr({ source, recolored, inkHex, stage, audioContext, 
     const startAt = Math.min(Math.max(0, stage), STAGES.length - 1);
     // After the last stage the frame stays painted: the host drops its UI over it
     // and unmounts us (PRNTR-STAGE-1.md §4.10).
-    void runChain(ctx, STAGES, startAt).then((result) => {
-      if (result !== 'finished') return;
+    void runChain(ctx, STAGES, startAt).then((handoff) => {
+      if (!handoff) return;
       setDone(true);
-      onDoneRef.current();
+      onDoneRef.current(handoff.kind === 'over' ? 'over' : 'cleared');
     });
     return () => {
       controller.abort();
