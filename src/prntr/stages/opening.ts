@@ -181,6 +181,8 @@ export const opening: Stage = {
     ctx.announce('Credit 1. Press start button.');
 
     await nextInput(root, signal);
+    // one last strike as the title is left; its thunder rolls on under the room's hum
+    if (!signal.aborted) await wait(storm.finale(), signal);
     storm.stop();
     root.replaceChildren();
     return { kind: 'start' };

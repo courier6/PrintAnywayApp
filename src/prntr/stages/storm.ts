@@ -34,6 +34,9 @@ export type Weather = 'calm' | 'red' | 'storm';
 
 export interface Storm {
   setWeather(w: Weather): void;
+  /** One last strike as the title is left (Edgar, 2026-10-20): the bolt, the flash and a loud
+   * thunder that rolls on into the room. Returns how many ms to hold the frame (0 if still). */
+  finale(): number;
   stop(): void;
 }
 
@@ -41,7 +44,10 @@ export interface Storm {
 export interface StormSound {
   /** Thunder `delaySec` after now: a crack and a clap when near, only a distant roll when far. */
   thunder(delaySec: number, near: boolean): void;
-  stop(): void;
+  /** The finale's thunder: louder than any strike, its roll outlasting the sound's stop. */
+  finale(): void;
+  /** Fades the rain and wind out over `fadeS`. */
+  stop(fadeS?: number): void;
 }
 
 /** The rain's and the wind's gain, and how long each takes to come in. */
@@ -147,13 +153,20 @@ export function startStormSound(ctx: AudioContext, out: AudioNode): StormSound {
         burst(when + 0.1, 4, 0, 220, 0.4, 0.5, 1);
       }
     },
-    stop() {
+    finale() {
+      if (stopped) return;
+      const when = ctx.currentTime + 0.05;
+      burst(when, 0.4, 400, 5000, 0.3, 0.004, 0.08);
+      burst(when + 0.1, 3.5, 0, 160, 2.5, 0.04, 0.9);
+      burst(when + 0.5, 8, 0, 90, 2.5, 0.4, 2.4);
+    },
+    stop(fadeS = 0.05) {
       if (stopped) return;
       stopped = true;
       const t = ctx.currentTime;
       for (const g of [rainG, windG]) {
         g.gain.cancelScheduledValues(t);
-        g.gain.setTargetAtTime(0, t, 0.05);
+        g.gain.setTargetAtTime(0, t, fadeS / 3);
       }
       window.setTimeout(() => {
         for (const n of [rain, wind, swell, gust]) {
@@ -165,7 +178,7 @@ export function startStormSound(ctx: AudioContext, out: AudioNode): StormSound {
         }
         rainG.disconnect();
         windG.disconnect();
-      }, 400);
+      }, fadeS * 1000 + 400);
     },
   };
 }
@@ -271,7 +284,7 @@ export function startStorm(root: HTMLElement, h1: HTMLElement, slots: StormSlot[
   flash.setAttribute('aria-hidden', 'true');
   root.append(canvas, flash);
   const g = canvas.getContext('2d');
-  if (!g) return { setWeather: () => undefined, stop: () => undefined };
+  if (!g) return { setWeather: () => undefined, finale: () => 0, stop: () => undefined };
 
   // ---- geometry: the word's mask, the cloud ------------------------------
   let W = 0;
@@ -415,6 +428,7 @@ export function startStorm(root: HTMLElement, h1: HTMLElement, slots: StormSlot[
   let last = performance.now();
   let raf = 0;
   let stopped = false;
+  let finaled = false;
 
   const px = (x: number, y: number, color: string, w = P, h = P) => {
     g.fillStyle = color;
@@ -532,7 +546,7 @@ export function startStorm(root: HTMLElement, h1: HTMLElement, slots: StormSlot[
     g.shadowBlur = 0;
   };
 
-  const strike = (now: number) => {
+  const strike = (now: number, quiet = false) => {
     // from a random point on the cloud's underside down to the word (or past it)
     const x0 = snap(cloudX + U + Math.random() * (cloud[0].length - 2) * U);
     const pts: [number, number][] = [];
@@ -547,7 +561,7 @@ export function startStorm(root: HTMLElement, h1: HTMLElement, slots: StormSlot[
     pts.push([x, target]);
     bolt = { pts, until: now + 60, again: now + 130 };
     // the thunder: right behind the flash
-    sound?.thunder(0.15, true);
+    if (!quiet) sound?.thunder(0.15, true);
     lastNear = now;
     if (nextFar < now + FAR_GAP_MS) nextFar = now + FAR_GAP_MS;
     flashAt = now;
@@ -719,10 +733,20 @@ export function startStorm(root: HTMLElement, h1: HTMLElement, slots: StormSlot[
         if (audio.context && audio.master && !sound) sound = startStormSound(audio.context, audio.master);
       }
     },
+    finale() {
+      if (stopped || finaled) return 0;
+      finaled = true;
+      nextStrike = Infinity;
+      nextFar = Infinity;
+      sound?.finale();
+      if (reduced || weather !== 'storm') return 0;
+      strike(performance.now(), true);
+      return 400;
+    },
     stop() {
       if (stopped) return;
       stopped = true;
-      sound?.stop();
+      sound?.stop(finaled ? 1.5 : 0.05);
       cancelAnimationFrame(raf);
       window.removeEventListener('resize', onResize);
       canvas.remove();
