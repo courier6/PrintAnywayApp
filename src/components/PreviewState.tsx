@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
-import { t, tPlural } from '../i18n';
+import { t, tPlural, useLocale } from '../i18n';
 import type { ExportFormat } from '../lib/exportFile';
 import { INKS } from '../lib/inks';
-import { PRINTER_TIPS } from '../lib/printerTips';
+import { OTHER_TIP, PRINTER_TIPS } from '../lib/printerTips';
 import { PageCanvas } from './PageCanvas';
 import { PrintReminder } from './PrintReminder';
 
@@ -24,6 +24,8 @@ interface Props {
   busy: 'print' | 'download' | null;
   showReminder: boolean;
   onDismissReminder: () => void;
+  onOpenPrntr: () => void;
+  onPrefetchPrntr: () => void;
 }
 
 export function PreviewState({
@@ -44,8 +46,11 @@ export function PreviewState({
   busy,
   showReminder,
   onDismissReminder,
+  onOpenPrntr,
+  onPrefetchPrntr,
 }: Props) {
   const pageReady = recoloredCanvas !== null;
+  const locale = useLocale();
   const inkHex = INKS[inkIndex].hex;
 
   // Transient confirmation after a swatch click; flashKey restarts the
@@ -229,6 +234,34 @@ export function PreviewState({
                 <div className="help-body">{t(tip.tipKey)}</div>
               </details>
             ))}
+            {/* Cross-brand advice, and the way into Prntr (PRNTR-TRIGGER.md). English
+                only, so not in PRINTER_TIPS (shared with the landing page) nor localized. */}
+            {locale.code === 'en' && (
+              <details
+                className="help-item"
+                onToggle={(e) => {
+                  if (e.currentTarget.open) onPrefetchPrntr();
+                }}
+              >
+                <summary>{OTHER_TIP.label}</summary>
+                <div className="help-body">
+                  <p>{OTHER_TIP.body1}</p>
+                  <p>{OTHER_TIP.body2}</p>
+                  <p>
+                    {OTHER_TIP.lead}
+                    <button
+                      type="button"
+                      className="help-link"
+                      style={{ color: inkHex }}
+                      onClick={onOpenPrntr}
+                    >
+                      {OTHER_TIP.link}
+                    </button>
+                    {OTHER_TIP.tail}
+                  </p>
+                </div>
+              </details>
+            )}
           </div>
         </aside>
       </div>
