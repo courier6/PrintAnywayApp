@@ -102,21 +102,19 @@ KWWWWWWK
 ..KWWWWK
 ..KKKKKK
 `,
-  // 11 × 13
-  CROSSHAIR: `
-....KWK....
-....KWK....
-....KWK....
-..KKKKKKK..
-.KWWK.KWWK.
-KWK.....KWK
-KWK..W..KWK
-KWK.....KWK
-.KWWK.KWWK.
-..KKKKKKK..
-....KWK....
-....KWK....
-....KWK....
+  // The cross: a dot and four lines, drawn from these two parts so the gap can open
+  // (PRNTR-FIGHT-DESIGN.md §3). 3 × 5 upright, 5 × 3 flat; the caps are plum.
+  CROSS_V: `
+KKK
+KWK
+KWK
+KWK
+KKK
+`,
+  CROSS_H: `
+KKKKK
+KWWWK
+KKKKK
 `,
   // 7 × 7: a nut, and 9 × 5: a bolt, thrown from the slot once the machine is at half health
   // (not in sprites.txt)
