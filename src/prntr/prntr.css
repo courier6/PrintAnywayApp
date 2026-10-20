@@ -857,32 +857,79 @@
   animation: prntr-heart-shard 400ms ease-out forwards;
 }
 
-.prntr-room-shots span.is-off {
-  background: transparent;
-}
-
-/* The shot pips are also the RELOAD button, at least 44 px tall for phones. */
+/* The shots (Edgar, 2026-10-20): rounds standing in a magazine lying on its side at the lower
+   right, tips up over its feed lips. Each pip is a round, a copper tip on a brass case with a
+   rim at its base; a spent slot shows the magazine's spring where the round was. The button is
+   also the RELOAD button, at least 44 px tall for phones; the magazine is drawn along its bottom. */
 .prntr-room-shots {
   position: absolute;
   right: calc(8px * var(--s));
   bottom: calc(6px * var(--s));
   display: flex;
   align-items: flex-end;
-  gap: 6px;
+  gap: 3px;
   min-height: 44px;
   margin: 0;
-  padding: 0 0 0 12px;
+  padding: 0 5px 4px;
   border: 0;
   background: none;
   cursor: pointer;
   pointer-events: auto;
 }
 
+/* the magazine body: dark steel, open along the top, a thicker baseplate along the bottom */
+.prntr-room-shots::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 26px;
+  box-sizing: border-box;
+  border: 2px solid #4A3A66;
+  border-top-width: 0;
+  border-bottom-width: 5px;
+  border-radius: 2px 2px 5px 5px;
+  background: #1E1433;
+}
+
 .prntr-room-shots span {
+  position: relative;
   width: 10px;
   height: 24px;
-  border: 3px solid #1E1433;
-  background: #FFD91A;
+  background: linear-gradient(to right, #C9A227 0 2px, #FFD91A 2px 7px, #B8860B 7px);
+  clip-path: polygon(0 24%, 20% 8%, 50% 0, 80% 8%, 100% 24%, 100% 100%, 0 100%);
+}
+
+/* the tip, and the rim */
+.prntr-room-shots span::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 30%;
+  background: linear-gradient(to right, #B86B3A 0 2px, #FF6A2B 2px 7px, #8A4A22 7px);
+}
+
+.prntr-room-shots span::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  background: #8C6A1C;
+}
+
+.prntr-room-shots span.is-off {
+  background: repeating-linear-gradient(to bottom, transparent 0 2px, #4A3A66 2px 4px);
+  clip-path: inset(6px 3px 0 3px);
+}
+
+.prntr-room-shots span.is-off::before,
+.prntr-room-shots span.is-off::after {
+  display: none;
 }
 
 .prntr-room-continue {
@@ -942,7 +989,11 @@
 .prntr-room-frame.is-small .prntr-room-life-name { left: calc(8px * var(--s)); bottom: calc(6px * var(--s) + 26px); font-size: 7px; }
 .prntr-room-frame.is-small .prntr-room-pips { gap: 6px; bottom: calc(6px * var(--s) + 24px); }
 .prntr-room-frame.is-small .prntr-room-pips span { width: 14px; height: 12px; }
-.prntr-room-frame.is-small .prntr-room-shots span { width: 7px; height: 16px; border-width: 2px; }
+.prntr-room-frame.is-small .prntr-room-shots { gap: 2px; padding: 0 4px 3px; }
+.prntr-room-frame.is-small .prntr-room-shots::before { height: 18px; border-bottom-width: 4px; }
+.prntr-room-frame.is-small .prntr-room-shots span { width: 7px; height: 16px; }
+.prntr-room-frame.is-small .prntr-room-shots span::after { height: 2px; }
+.prntr-room-frame.is-small .prntr-room-shots span.is-off { clip-path: inset(4px 2px 0 2px); }
 .prntr-room-frame.is-small .prntr-room-hint-title { font-size: 16px; }
 .prntr-room-frame.is-small .prntr-room-hint-keys { font-size: 8px; }
 .prntr-room-frame.is-small .prntr-room-continue-label { font-size: 20px; }
