@@ -261,7 +261,8 @@ const HOTSPOTS: Hotspot[] = [
   { id: 'door', x0: 6, y0: 27, x1: 48, y1: 112, captions: ['NOT IN THERE.', "IT KNOWS YOU'RE HERE."] },
   { id: 'poster', ...BOARD_HIT, captions: ['SIMPLE PRODUCTS. WE PRINT.', 'SIMPLE PRODUCTS. WE PRINT.'] },
   { id: 'clock', ...CLOCK_HIT, captions: ['1:37.', '1:37.'] },
-  { id: 'window', x0: 156, y0: 32, x1: 228, y1: 94, captions: ["IT'S BRIGHT OUT.", "IT'S BRIGHT OUT."] },
+  // The blind is down over it (Edgar, 2026-10-20; the handoff had IT'S BRIGHT OUT.).
+  { id: 'window', x0: 156, y0: 32, x1: 228, y1: 94, captions: ['UNABLE TO OPEN.', 'STILL UNABLE TO OPEN.'] },
   { id: 'cooler', x0: 46, y0: 88, x1: 78, y1: 140, captions: ['WATER COOLER. FULL.', 'STILL FULL.'] },
   { id: 'plant', x0: 196, y0: 99, x1: 232, y1: 139, captions: ["A PLANT. IT'S REAL.", "A PLANT. IT'S REAL."] },
 ];
