@@ -87,13 +87,15 @@ const SHAKE_FRAMES = 3;
 const SPREAD_HEALTH = 0.75;
 const FIRE_SPREAD_MS = 20_000;
 const DEPLETE_MS = 1500;
-/** The mad machine's fourth attack (Edgar, 2026-10-19): ink sprayed from the cartridge bay under
- * the open lid (a nozzle at one of NOZZLES_X on the lid line, NOZZLE_Y), cyan, magenta and yellow
- * in turn, never black (it cannot do that). SPRAY_COUNT jets a volley, SPRAY_STAGGER_MS apart; a
- * jet runs SPRAY_MS, a particle every SPRAY_EVERY_MS, each flying SPRAY_FLIGHT_MS along an arc
- * SPRAY_ARC px high to the jet's target, where the splat builds up as they land. Shooting the
- * nozzle (± NOZZLE_HIT_PAD) stops the jet for INK_POINTS; a splat that completes is a hit. The
- * splat stays INK_LANDED_MS, then runs down over INK_SLIDE_MS. */
+/** The mad machine's fourth attack (Edgar, 2026-10-19): ink sprayed from behind the machine (a
+ * nozzle at one of NOZZLES_X, NOZZLE_Y just inside its top edge, so each jet comes up from behind
+ * the lid and the far half of a particle's flight is drawn behind the machine: Edgar, 2026-10-20),
+ * cyan, magenta and yellow in turn, never black (it cannot do that). SPRAY_COUNT jets a volley,
+ * SPRAY_STAGGER_MS apart; a jet runs SPRAY_MS, a particle every SPRAY_EVERY_MS, each flying
+ * SPRAY_FLIGHT_MS along an arc SPRAY_ARC px high to the jet's target, where the splat builds up
+ * as they land. Shooting the jet's root over the edge (± NOZZLE_HIT_PAD) stops it for INK_POINTS;
+ * a splat that completes is a hit. The splat stays INK_LANDED_MS, then runs down over
+ * INK_SLIDE_MS. */
 const SPRAY_COUNT = 3;
 const SPRAY_STAGGER_MS = 600;
 const SPRAY_MS = 1400;
@@ -101,7 +103,9 @@ const SPRAY_EVERY_MS = 40;
 const SPRAY_FLIGHT_MS = 700;
 const SPRAY_ARC = 24;
 const NOZZLES_X = [96, 108, 120, 132, 144];
-const NOZZLE_Y = 93.5;
+const NOZZLE_Y = 84;
+/** The jet's root: this far above the nozzle, over the machine's top edge (where it is shot). */
+const NOZZLE_ROOT = { dy: -4, h: 4 };
 const NOZZLE_HIT_PAD = 4;
 const INK_POINTS = 1;
 const INK_LANDED_MS = 1500;
@@ -360,6 +364,7 @@ export const room: Stage = {
       doorGap: DOOR_AJAR,
       fire: null,
       shake: { x: 0, y: 0 },
+      inkBehind: [],
     };
     let phase: Phase = 'look';
     let phaseAt = performance.now();
@@ -690,7 +695,7 @@ export const room: Stage = {
         return;
       }
       // A spraying nozzle: the jet stops; what is already in the air still lands.
-      const jet = sprays.find((s) => spraying(s, now) && Math.abs(x - s.nx) <= 3 + NOZZLE_HIT_PAD && Math.abs(y - NOZZLE_Y) <= 2.5 + NOZZLE_HIT_PAD);
+      const jet = sprays.find((s) => spraying(s, now) && Math.abs(x - s.nx) <= 3 + NOZZLE_HIT_PAD && Math.abs(y - (NOZZLE_Y + NOZZLE_ROOT.dy)) <= NOZZLE_ROOT.h + NOZZLE_HIT_PAD);
       if (jet) {
         jet.stoppedAt = now;
         addScore(INK_POINTS, now);
@@ -1094,7 +1099,7 @@ export const room: Stage = {
       const rects: { x: number; y: number; w: number; h: number }[] = [];
       for (const s of staples) if (now >= s.at && !s.hit && !s.shot) rects.push(staplePose(s, now));
       for (const p of pages) if (now >= p.at && !p.shot && p.landedAt === null) rects.push(pagePose(p, now));
-      for (const s of sprays) if (spraying(s, now)) rects.push({ x: s.nx - 3, y: 91, w: 6, h: 5 });
+      for (const s of sprays) if (spraying(s, now)) rects.push({ x: s.nx - 3, y: NOZZLE_Y + NOZZLE_ROOT.dy - 2, w: 6, h: 6 });
       if (scene.buttonBright) rects.push(BUTTON);
       while (glows.children.length < rects.length) glows.append(el('div', 'prntr-room-glow'));
       Array.from(glows.children).forEach((n, i) => {
@@ -1165,6 +1170,17 @@ export const room: Stage = {
       } else {
         scene.shake = { x: 0, y: 0 };
       }
+      // The ink on the far half of its flight goes behind the machine: it is sprayed from behind it.
+      scene.inkBehind = [];
+      for (const s of sprays) {
+        if (now < s.at) continue;
+        const end = Math.min(now, jetEnd(s));
+        for (let tau = s.at; tau < end; tau += SPRAY_EVERY_MS) {
+          if (now - tau >= SPRAY_FLIGHT_MS / 2) continue;
+          const q = particlePose(s, tau, now);
+          scene.inkBehind.push({ x: q.x, y: q.y, size: q.size, color: s.color });
+        }
+      }
       drawRoom(pix, scene);
       // Out of the slot: only the top rows of the sprite so far, then the whole thing.
       for (const s of staples) {
@@ -1188,12 +1204,13 @@ export const room: Stage = {
         const slide = lt > PAGE_LANDED_MS ? ((lt - PAGE_LANDED_MS) / PAGE_SLIDE_MS) * 80 : 0;
         pix.blit(Math.floor(p.x1 - 20), Math.floor(p.y1 - 26 + slide), SPR.PAGE_PRINTED, 4, { skew: 10 });
       }
-      // Ink: the particles in the air, and the splat building up on the glass, then running down.
+      // Ink: the particles on the near half of their flight (the far half is behind the machine),
+      // and the splat building up on the glass, then running down.
       for (const s of sprays) {
         if (now < s.at) continue;
         const end = Math.min(now, jetEnd(s));
         for (let tau = s.at; tau < end; tau += SPRAY_EVERY_MS) {
-          if (now - tau >= SPRAY_FLIGHT_MS) continue;
+          if (now - tau >= SPRAY_FLIGHT_MS || now - tau < SPRAY_FLIGHT_MS / 2) continue;
           const q = particlePose(s, tau, now);
           pix.rect(q.x, q.y, q.x + q.size, q.y + q.size, s.color);
         }

@@ -1,4 +1,4 @@
-import { SPRITES } from './palette';
+import { SPRITES, type PalKey } from './palette';
 import { H, Pix, W, parseSprite, sliceRows } from './pixels';
 
 export const SPR = {
@@ -72,6 +72,14 @@ export interface ExitSign {
  */
 export type PrinterPose = 'idle' | 'lid' | 'between' | 'mad';
 
+/** An ink particle on the far half of its flight, drawn behind the machine (Edgar, 2026-10-20). */
+export interface InkDot {
+  x: number;
+  y: number;
+  size: number;
+  color: PalKey;
+}
+
 export interface SceneState {
   /** Left, right fluorescent panel. */
   lights: [boolean, boolean];
@@ -94,6 +102,8 @@ export interface SceneState {
   fire: Fire | null;
   /** The mad machine's tremble: the 3× pose drawn this far off its place (Edgar, 2026-10-19). */
   shake: { x: number; y: number };
+  /** The ink in the air behind the machine this frame: the jets come up from behind it. */
+  inkBehind: InkDot[];
 }
 
 /** A cheap hash to 0..1, so a flame column flickers on its own without random state. */
@@ -223,6 +233,8 @@ export function drawRoom(p: Pix, s: SceneState): void {
     p.rect(230, 133, 232, 135, 'V');
     p.rect(226, 136, 228, 138, 'v');
   }
+  // the ink sprayed from behind the machine, where it is still behind it
+  for (const d of s.inkBehind) p.rect(d.x, d.y, d.x + d.size, d.y + d.size, d.color);
   // the printer; its shadow falls the other way. Nothing points it out.
   const white = s.flashWhite;
   switch (s.printer) {
