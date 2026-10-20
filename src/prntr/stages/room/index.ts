@@ -302,6 +302,9 @@ export const room: Stage = {
     // Read out through ctx.announce instead, so it is not read twice.
     const captionEl = el('div', 'prntr-room-caption');
     captionEl.setAttribute('aria-hidden', 'true');
+    // Set like an old TV's closed captions: white letters on a black box (Edgar, 2026-10-20).
+    const captionText = el('span', 'prntr-room-caption-text');
+    captionEl.append(captionText);
     const healthEl = el('div', 'prntr-room-health prntr-room-fight-ui');
     healthEl.setAttribute('role', 'img');
     healthEl.setAttribute('aria-label', `${MODEL}, printer health`);
@@ -447,7 +450,7 @@ export const room: Stage = {
 
     // ---- HUD --------------------------------------------------------------
     const setCaption = (text: string) => {
-      captionEl.textContent = text;
+      captionText.textContent = text;
       if (text) ctx.announce(text);
     };
     const drawScore = () => {

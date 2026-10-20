@@ -558,16 +558,32 @@
   animation: prntr-after 600ms linear forwards;
 }
 
-/* At the INSERT COIN line (top 660 on the 800 frame). */
+/* At the INSERT COIN line (top 660 on the 800 frame), set like the closed captions on an old
+   TV (Edgar, 2026-10-20): white capitals on an opaque black box that hugs each row with a
+   character's width of black either side, rows stacked with no gap, no outline or shadow. */
 .prntr-room-caption {
   position: absolute;
-  left: 0;
-  right: 0;
-  top: calc(132px * var(--s));
+  left: calc(8px * var(--s));
+  right: calc(8px * var(--s));
+  /* one row's middle on the line the plain text used (132); more rows grow upwards */
+  bottom: calc(28px * var(--s) - 0.875em);
   text-align: center;
   font-size: 16px;
-  letter-spacing: 0.08em;
-  color: #EDEDED;
+  line-height: 1.75;
+  letter-spacing: 0;
+  color: #FFFFFF;
+  text-shadow: none;
+}
+
+.prntr-room-caption-text {
+  padding: 0.3em 0.5em;
+  background: #000000;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone; /* a wrapped row gets a box of its own */
+}
+
+.prntr-room-caption-text:empty {
+  display: none;
 }
 
 .prntr-room-fight-ui {
@@ -709,7 +725,7 @@
 .prntr-room-frame.is-small .prntr-room-score,
 .prntr-room-frame.is-small .prntr-room-hi { font-size: 10px; }
 .prntr-room-frame.is-small .prntr-room-credit { font-size: 8px; }
-.prntr-room-frame.is-small .prntr-room-caption { font-size: 9px; letter-spacing: 0.04em; }
+.prntr-room-frame.is-small .prntr-room-caption { font-size: 9px; }
 .prntr-room-frame.is-small .prntr-room-hud,
 .prntr-room-frame.is-small .prntr-room-continue {
   text-shadow: 1px 1px 0 #1E1433, -1px -1px 0 #1E1433, 1px -1px 0 #1E1433, -1px 1px 0 #1E1433;
