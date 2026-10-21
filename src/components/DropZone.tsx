@@ -1,4 +1,5 @@
 import { t } from '../i18n';
+import { prefetchPdfjs } from '../lib/loadDocument';
 import { useState, type DragEvent, type KeyboardEvent, type ReactNode } from 'react';
 
 interface Props {
@@ -35,6 +36,8 @@ export function DropZone({ onFile, onChoose, children }: Props) {
         setDragOver(true);
       }}
       onDragLeave={() => setDragOver(false)}
+      onPointerEnter={prefetchPdfjs}
+      onFocus={prefetchPdfjs}
       onDrop={handleDrop}
       onKeyDown={handleKeyDown}
     >

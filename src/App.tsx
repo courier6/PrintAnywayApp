@@ -9,7 +9,7 @@ import type { Certificate } from './prntr/types';
 import { ErrorState, type ErrorKind } from './components/ErrorState';
 import { t, useLocale } from './i18n';
 import { GOLD_INK, INKS } from './lib/inks';
-import { fileKind, loadDocument } from './lib/loadDocument';
+import { fileKind, loadDocument, prefetchPdfjs, type SourceDocument } from './lib/loadDocument';
 import { classifyError, logAppError, type ErrorCode } from './lib/errors';
 import { PageStore } from './lib/pageStore';
 import { exportFormat, exportRecolored, type ExportFormat } from './lib/exportFile';
@@ -71,6 +71,7 @@ export default function App() {
   const inkRef = useRef(INKS[0].hex);
   const runToken = useRef(0);
   const lastFile = useRef<File | null>(null);
+  const docRef = useRef<SourceDocument | null>(null);
   const idleHandle = useRef<number | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const handleFileRef = useRef<(file: File) => void>(() => {});
@@ -85,6 +86,7 @@ export default function App() {
       Array.from(e.dataTransfer?.types ?? []).includes('Files');
     const onDragEnter = (e: globalThis.DragEvent) => {
       if (!isFileDrag(e)) return;
+      prefetchPdfjs();
       depth.current++;
       setDragging(true);
     };
@@ -167,6 +169,7 @@ export default function App() {
   }, [appState]);
 
   function openPicker() {
+    prefetchPdfjs();
     fileInput.current?.click();
   }
 
@@ -189,9 +192,14 @@ export default function App() {
     setProcessedCount(0);
     setCurrentPage(0);
     setAppState('processing');
+    releaseDocument();
     try {
       const doc = await loadDocument(file);
-      if (token !== runToken.current) return;
+      if (token !== runToken.current) {
+        doc.destroy();
+        return;
+      }
+      docRef.current = doc;
       store.reset(doc.pageCount);
       setPageCount(doc.pageCount);
       for (let i = 0; i < doc.pageCount; i++) {
@@ -213,6 +221,12 @@ export default function App() {
       setErrorInfo({ code, kind: KIND_BY_CODE[code] });
       setAppState('error');
     }
+  }
+
+  // The pages already rendered stay in the store; only the parsed file goes.
+  function releaseDocument() {
+    docRef.current?.destroy();
+    docRef.current = null;
   }
 
   function selectInk(index: number) {
@@ -288,6 +302,7 @@ export default function App() {
   // in the chosen ink like any other. A document still processing is dropped.
   function loadCertificate({ id, page }: Certificate) {
     runToken.current++;
+    releaseDocument();
     lastFile.current = null;
     setShowPrintReminder(false);
     setPrintImages([]);
