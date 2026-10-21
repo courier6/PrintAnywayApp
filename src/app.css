@@ -192,7 +192,7 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
 
 .header-formats {
   font-size: 12.5px;
-  color: var(--ink-55);
+  color: var(--ink-70);
   flex: none;
 }
 
@@ -215,7 +215,7 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
 }
 
 .lang-nav a {
-  color: var(--ink-55);
+  color: var(--ink-70);
   text-decoration: none;
 }
 
@@ -369,7 +369,7 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
 
 .hero-formats {
   font-size: 13px;
-  color: var(--ink-55);
+  color: var(--ink-70);
 }
 
 .below-zone {
@@ -380,14 +380,14 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
 
 .privacy-line {
   font-size: 12.5px;
-  color: var(--ink-50);
+  color: var(--ink-70);
 }
 
 /* One quiet line under the privacy note; opens to the per-brand tips. */
 .printer-tips {
   padding-top: 8px;
   font-size: 12.5px;
-  color: var(--ink-50);
+  color: var(--ink-70);
   text-align: center;
 }
 
@@ -426,7 +426,7 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
 .printer-tips-list dd {
   margin: 2px 0 0;
   line-height: 1.5;
-  color: var(--ink-65);
+  color: var(--ink-70);
 }
 
 .error-card {
@@ -450,7 +450,7 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
 .error-body {
   font-size: 14px;
   line-height: 1.5;
-  color: var(--ink-65);
+  color: var(--ink-70);
 }
 
 .error-actions {
@@ -468,7 +468,7 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
 .error-code {
   margin-top: 10px;
   font-size: 12px;
-  color: var(--ink-40);
+  color: var(--ink-70);
 }
 
 /* ---------- Processing ---------- */
@@ -524,7 +524,7 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
 
 .progress-sub {
   font-size: 12.5px;
-  color: var(--ink-55);
+  color: var(--ink-70);
   text-align: center;
 }
 
@@ -575,7 +575,7 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
 
 .file-chip {
   font-size: 13px;
-  color: var(--ink-60);
+  color: var(--ink-70);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -640,7 +640,7 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
   font: 700 10.5px ui-monospace, Menlo, monospace;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--ink-60);
+  color: var(--ink-75);
 }
 
 .page-stack {
@@ -700,7 +700,7 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
   align-items: center;
   justify-content: center;
   font-size: 13px;
-  color: var(--ink-55);
+  color: var(--ink-75);
 }
 
 .pill-btn {
@@ -736,7 +736,7 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
   font: 700 11px ui-monospace, Menlo, monospace;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--ink-55);
+  color: var(--ink-70);
   margin-bottom: 12px;
 }
 
@@ -767,7 +767,7 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
   margin: 0;
   font-size: 12.5px;
   line-height: 1.55;
-  color: var(--ink-60);
+  color: var(--ink-70);
 }
 
 .help-section {
@@ -798,7 +798,7 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
 .help-body {
   font-size: 12.5px;
   line-height: 1.5;
-  color: var(--ink-65);
+  color: var(--ink-70);
   padding-top: 6px;
 }
 
@@ -857,7 +857,7 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
   display: block;
   margin-top: 4px;
   font-size: 12px;
-  color: var(--ink-65);
+  color: var(--ink-70);
 }
 
 /* ---------- Print output ---------- */
@@ -902,7 +902,7 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
 
 .drag-overlay-subline {
   font-size: 14px;
-  color: var(--ink-65);
+  color: var(--ink-70);
 }
 
 @media print {
