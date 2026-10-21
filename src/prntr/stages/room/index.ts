@@ -507,20 +507,19 @@ export const room: Stage = {
     fireLight.hidden = true;
     // The mad machine's slot, lit red like the door (.is-mad on the frame fades it in).
     const slotLight = el('div', 'prntr-room-slot-light');
-    // The red light through the holes in the door and the blind, one box per hole.
+    // The storm's light through the holes in the door and the blind, one box per hole.
     const holeLights = el('div', 'prntr-room-hole-lights');
-    // The window shot open: the red pours through it (a glow, and the fill clipped off the
-    // machine's corner), and reaches that side of the room with a multiply wash of its own.
+    // The window shot open: the storm's light pours through it (a glow, and the fill clipped off the
+    // machine's corner).
     const windowLight = el('div', 'prntr-room-window-light');
     windowLight.append(el('div', 'prntr-room-window-fill'));
-    const dreadWindow = el('div', 'prntr-room-dread-window');
-    // The red that reaches into the room once the door is open: a multiply wash, off until then.
-    const dread = el('div', 'prntr-room-dread');
+    // A near strike reaching into the room: a pale wash over everything, its opacity the storm's.
+    const stormWash = el('div', 'prntr-room-storm-wash');
     const wash = el('div', 'prntr-room-wash');
     // The red glow on everything that can be shot: DOM boxes over the pixel layer,
     // unpixelated like the door's light. One per projectile, pooled.
     const glows = el('div', 'prntr-room-glows');
-    for (const n of [light, spill, fireLight, slotLight, holeLights, windowLight, dread, dreadWindow, wash, glows]) n.setAttribute('aria-hidden', 'true');
+    for (const n of [light, spill, fireLight, slotLight, holeLights, windowLight, stormWash, wash, glows]) n.setAttribute('aria-hidden', 'true');
     const hud = el('div', 'prntr-room-hud');
     const scoreEl = el('div', 'prntr-room-score', 'SCORE 0000');
     const hiEl = el('div', 'prntr-room-hi', 'HI 1337');
@@ -580,7 +579,7 @@ export const room: Stage = {
     const deathEl = el('div', 'prntr-room-death');
     deathEl.setAttribute('aria-hidden', 'true');
     deathEl.hidden = true;
-    frame.append(art, canvas, light, spill, fireLight, slotLight, holeLights, windowLight, front, dread, dreadWindow, wash, glows, hud, cursor, hurtEl, deathEl, continueEl, overEl);
+    frame.append(art, canvas, light, spill, fireLight, slotLight, holeLights, windowLight, front, stormWash, wash, glows, hud, cursor, hurtEl, deathEl, continueEl, overEl);
     wrap.append(frame);
     root.append(wrap);
 
@@ -2153,6 +2152,23 @@ export const room: Stage = {
       const fu = (now - farAt) / FAR_MS;
       const far = reduced ? 0 : fu < 0.2 ? 1 : fu < 0.35 ? 0.4 : fu < 0.5 ? 0.9 : fu < 1 ? 1 - fu : 0;
       scene.storm = { t: reduced ? 0 : now, near, far, bolt: near > 0.25 ? bolt : null };
+      // the light into the room: the glow of the light boxes, how open each opening is, and the pale
+      // wash of a near flash by how open the room is (no flare under reduced motion)
+      const glow = reduced ? 0.06 : Math.max(near * 0.8, far * 0.18, 0.06);
+      setVar('--storm-glow', glow);
+      setVar('--storm-door', scene.doorGap >= DOOR_OPEN ? 1 : scene.doorGap > 0 ? 0.5 : 0);
+      setVar('--storm-window', scene.windowOpen ? 1 : near > 0.3 ? 0.25 : 0);
+      setVar('--storm-room', !reduced && near > 0.3 ? 0.18 * near * openness() : 0);
+    };
+    /** How open the room is to the storm, 0..1: the door's state and the window's. Its light scales with it. */
+    const openness = () => Math.min(1, (scene.doorGap >= DOOR_OPEN ? 0.6 : scene.doorGap > 0 ? 0.3 : 0) + (scene.windowOpen ? 0.4 : 0));
+    /** A CSS variable on the frame, set only when its value (to two decimals) changes. */
+    const vars = new Map<string, string>();
+    const setVar = (name: string, v: number) => {
+      const s = v.toFixed(2);
+      if (vars.get(name) === s) return;
+      vars.set(name, s);
+      frame.style.setProperty(name, s);
     };
     const render = (now: number) => {
       poseSign(now);
