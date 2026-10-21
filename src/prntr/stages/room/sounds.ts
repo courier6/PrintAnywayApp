@@ -37,8 +37,9 @@ export interface RoomSounds {
   pounce(): void;
   /** The slam's lift: a motor straining up off the carpet over `dur` s, a creak near the top. */
   slamLift(dur: number): void;
-  /** The slam's landing: a deep boom and a rattle, then a low wobble going down like water over `dur` s. */
-  slamLand(dur: number): void;
+  /** The slam's landing: a deep boom and a rattle, then a low wobble going down like water over `dur` s.
+   * stop() fades the wobble out (a death or the burst ending the slam). */
+  slamLand(dur: number): { stop(): void };
   /** The scan's whine, rising over the 1.2 s sweep. */
   scanSweep(): void;
   /** The flash: an 80 ms white burst. */
@@ -129,7 +130,7 @@ const SILENT: RoomSounds = {
   lidShut: noop,
   pounce: noop,
   slamLift: noop,
-  slamLand: noop,
+  slamLand: () => ({ stop: noop }),
   scanSweep: noop,
   scanBurst: noop,
   bulbPop: noop,
@@ -191,6 +192,8 @@ interface NoiseOpts {
   lp?: number;
   gain?: number;
   decay?: number | null;
+  /** Where it plays into: the master by default, or a gain of the cue's own, so the cue can be cut short. */
+  to?: AudioNode;
 }
 
 interface ToneOpts {
@@ -202,6 +205,8 @@ interface ToneOpts {
   attack?: number;
   decay?: number | null;
   release?: number;
+  /** Where it plays into: the master by default, or a gain of the cue's own, so the cue can be cut short. */
+  to?: AudioNode;
 }
 
 export function createRoomSounds(audio: PrntrAudio): RoomSounds {
@@ -211,7 +216,7 @@ export function createRoomSounds(audio: PrntrAudio): RoomSounds {
   const now = () => ctx.currentTime;
   const NOISE = noiseBuffer(ctx);
 
-  function noise(when: number, dur: number, { hp = 0, lp = 20000, gain = 1, decay = null }: NoiseOpts = {}) {
+  function noise(when: number, dur: number, { hp = 0, lp = 20000, gain = 1, decay = null, to = out! }: NoiseOpts = {}) {
     const src = ctx!.createBufferSource();
     src.buffer = NOISE;
     let node: AudioNode = src;
@@ -233,7 +238,7 @@ export function createRoomSounds(audio: PrntrAudio): RoomSounds {
     g.gain.setValueAtTime(gain, when);
     if (decay) g.gain.setTargetAtTime(0, when, decay);
     node.connect(g);
-    g.connect(out!);
+    g.connect(to);
     src.start(when);
     src.stop(when + dur);
   }
@@ -241,7 +246,7 @@ export function createRoomSounds(audio: PrntrAudio): RoomSounds {
   function tone(
     when: number,
     dur: number,
-    { type = 'sine', f0 = 440, f1 = null, curve = 'exp', gain = 0.5, attack = 0.002, decay = null, release = 0.01 }: ToneOpts = {},
+    { type = 'sine', f0 = 440, f1 = null, curve = 'exp', gain = 0.5, attack = 0.002, decay = null, release = 0.01, to = out! }: ToneOpts = {},
   ) {
     const o = ctx!.createOscillator();
     o.type = type;
@@ -257,7 +262,7 @@ export function createRoomSounds(audio: PrntrAudio): RoomSounds {
     else g.gain.setValueAtTime(gain, when + dur - release);
     g.gain.linearRampToValueAtTime(0, when + dur);
     o.connect(g);
-    g.connect(out!);
+    g.connect(to);
     o.start(when);
     o.stop(when + dur + 0.02);
   }
@@ -379,15 +384,27 @@ export function createRoomSounds(audio: PrntrAudio): RoomSounds {
       tone(t + dur * 0.7, 0.16, { type: 'square', f0: 320, f1: 190, gain: 0.03, release: 0.05 });
     },
     // the boom under everything, the room's rattle on top, then a wobble falling in steps under the ripple
+    // The boom and the rattle are over in half a second and stand; the wobble has a gain of its own so a slam
+    // ended early (a death, the burst) takes its sound with it.
     slamLand(dur: number) {
       const t = now();
       tone(t, 0.6, { f0: 95, f1: 26, gain: 0.9, decay: 0.14 });
       noise(t, 0.35, { lp: 700, gain: 0.6, decay: 0.08 });
       noise(t + 0.02, 0.25, { hp: 1800, gain: 0.12, decay: 0.05 });
+      const wobble = ctx!.createGain();
+      wobble.connect(out!);
       for (let i = 0; i < 6; i++) {
         const at = t + 0.12 + (i * dur) / 7;
-        tone(at, dur / 6, { f0: 150 - i * 14, f1: 95 - i * 9, curve: 'linear', gain: 0.1 * (1 - i / 7), attack: 0.03, decay: dur / 14 });
+        tone(at, dur / 6, { f0: 150 - i * 14, f1: 95 - i * 9, curve: 'linear', gain: 0.1 * (1 - i / 7), attack: 0.03, decay: dur / 14, to: wobble });
       }
+      return {
+        stop() {
+          const at = now();
+          wobble.gain.cancelScheduledValues(at);
+          wobble.gain.setTargetAtTime(0, at, 0.02);
+          window.setTimeout(() => wobble.disconnect(), 200);
+        },
+      };
     },
     // a whine rising 800 → 2400 Hz over the 1.2 s sweep
     scanSweep() {

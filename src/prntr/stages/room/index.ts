@@ -787,6 +787,8 @@ export const room: Stage = {
      * SLAM_LIFE seen, and the slam it makes the next attack. */
     let slamAt: number | null = null;
     let slamStep = 0;
+    /** The landing's sound while the slam runs: ended with it when the slam is cut short. */
+    let landSound: { stop(): void } | null = null;
     let slamShake = { x: 0, y: 0 };
     let slamSeen = false;
     let slamNow = false;
@@ -1076,8 +1078,7 @@ export const room: Stage = {
       sprays = [];
       drops = [];
       scanAt = null;
-      slamAt = null;
-      releaseTears();
+      endSlam();
       wash.classList.remove('is-on');
       washAt = 0;
       wash.style.opacity = '';
@@ -1136,8 +1137,7 @@ export const room: Stage = {
       sprays = [];
       drops = [];
       scanAt = null;
-      slamAt = null;
-      releaseTears();
+      endSlam();
       scene.shake = { x: 0, y: 0 };
       nextAttackAt = Infinity;
       frame.classList.remove('is-mad');
@@ -1187,8 +1187,7 @@ export const room: Stage = {
       sprays = [];
       drops = [];
       scanAt = null;
-      slamAt = null;
-      releaseTears();
+      endSlam();
       wash.classList.remove('is-on');
       washAt = 0;
       wash.style.opacity = '';
@@ -1812,7 +1811,7 @@ export const room: Stage = {
       [
         SLAM_IMPACT_MS,
         () => {
-          sounds.slamLand(SLAM_OPEN_MS / 1000);
+          landSound = sounds.slamLand(SLAM_OPEN_MS / 1000);
           scheduleTears(performance.now());
         },
       ],
@@ -1829,6 +1828,7 @@ export const room: Stage = {
       slamStep = runSteps(SLAM_STEPS, slamStep, st);
       if (st >= SLAM_TOTAL_MS) {
         slamAt = null;
+        landSound = null;
         m.lid = 0;
         return null;
       }
@@ -1909,6 +1909,13 @@ export const room: Stage = {
     const releaseTears = () => {
       for (const t of tears) if (t.on) tearOff(t);
       tears = [];
+    };
+    /** A death, a continue or the burst ends a slam in progress: its timing, its tears and its landing's wobble. */
+    const endSlam = () => {
+      slamAt = null;
+      releaseTears();
+      landSound?.stop();
+      landSound = null;
     };
     /** The next attack the dev hook asked for, if any. */
     let forcedKind: AttackKind | null = null;
