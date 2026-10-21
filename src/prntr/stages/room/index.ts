@@ -68,6 +68,12 @@ const BLOOM_BASE = 1;
 const BLOOM_PER_SHOT = 3;
 const BLOOM_MAX = 12;
 const BLOOM_COOL = 6;
+/** The flash dazes the player: for DAZE_MS the cross wanders about the mouse (or the tap) by up to DAZE_PX,
+ * lurching on two beats that never line up, easing back as the eyes clear; the shot goes where the cross is.
+ * Under reduced motion the cross stays still and the bloom opens all the way instead (cooling as after shots).
+ * The dev hook's steady() holds it still too. */
+const DAZE_MS = 2000;
+const DAZE_PX = 12;
 /** On touch there is no hover cross: it shows at the tap for this long, so the kick and the bloom show. */
 const TOUCH_CROSS_MS = 500;
 /** Slowed to 2.5 / 3 / 2 s, then made a quarter faster. */
@@ -79,7 +85,8 @@ const LATE_SCORE = 900;
 /** The scan: the lid rises over LID_MS, the lamp sweeps the glass for SWEEP_MS (the window:
  * PRNTR-FIGHT-DESIGN.md §5), the flash washes the screen for WASH_MS, the lid falls over LID_MS.
  * A shot on the lamp during the sweep pops the bulb (LAMP_POINTS): the sweep stops where it is,
- * dead, and there is no flash; the lid still falls on time. */
+ * dead, and there is no flash; the lid still falls on time. The bulb is not replaced: the scan leaves the
+ * rotation for the rest of the stage, deaths and continues included. */
 const LID_MS = 450;
 const SWEEP_MS = 1200;
 const WASH_MS = 300;
@@ -736,7 +743,10 @@ export const room: Stage = {
     let scanAt: number | null = null;
     /** The flash's moment (0 = no white-out); the wash fades from it over WHITEOUT_MS (half under reduced motion). */
     let washAt = 0;
-    /** The scan's sound and flash steps run so far (SCAN_STEPS), and the bulb: shot, and where the lamp was then. */
+    /** The flash's daze: when it began (null: never). */
+    let dazeAt: number | null = null;
+    /** The scan's sound and flash steps run so far (SCAN_STEPS), and the bulb: shot (for good: a dead bulb is not
+     * replaced), and where the lamp was then. */
     let scanStep = 0;
     let bulbOut = false;
     let lampStop = 0;
@@ -1274,9 +1284,23 @@ export const room: Stage = {
       const k = (1 - u) * (1 - u);
       return { x: kickDx * k, y: -KICK_UP * k };
     };
-    /** Where a shot at `v` goes: where the cross is (the kick), scattered inside its gap (the bloom). */
-    const aim = (v: { x: number; y: number }, now: number) => {
+    /** The cross's wander from the flash's daze now (none when steady, none under reduced motion). */
+    const dazeNow = (now: number) => {
+      if (dazeAt === null || steady || reduced) return { x: 0, y: 0 };
+      const u = (now - dazeAt) / DAZE_MS;
+      if (u >= 1) return { x: 0, y: 0 };
+      const a = DAZE_PX * Math.pow(1 - u, 1.2);
+      return { x: a * (0.65 * Math.sin(now / 97) + 0.35 * Math.sin(now / 41 + 1.3)), y: a * 0.7 * (0.6 * Math.sin(now / 83 + 0.7) + 0.4 * Math.sin(now / 53 + 2.1)) };
+    };
+    /** The cross's offset from the mouse now: the kick and the daze. */
+    const crossOff = (now: number) => {
       const k = kickNow(now);
+      const d = dazeNow(now);
+      return { x: k.x + d.x, y: k.y + d.y };
+    };
+    /** Where a shot at `v` goes: where the cross is (the kick, the daze), scattered inside its gap (the bloom). */
+    const aim = (v: { x: number; y: number }, now: number) => {
+      const k = crossOff(now);
       const r = (spreadNow(now) - BLOOM_BASE) * Math.sqrt(Math.random());
       const a = Math.random() * 2 * Math.PI;
       return { x: v.x + k.x + r * Math.cos(a), y: v.y + k.y + r * Math.sin(a) };
@@ -1669,7 +1693,6 @@ export const room: Stage = {
     const startScan = (now: number) => {
       scanAt = now;
       scanStep = 0;
-      bulbOut = false;
       sounds.lidOpen();
     };
     const SCAN_STEPS: [number, () => void][] = [
@@ -1681,6 +1704,12 @@ export const room: Stage = {
           if (!reduced) invertFrame = true;
           wash.classList.add('is-on');
           washAt = performance.now();
+          // the player is dazed by it: the cross wanders (or, under reduced motion, its bloom opens all the way)
+          dazeAt = washAt;
+          if (reduced && !steady) {
+            heat = BLOOM_MAX - BLOOM_BASE;
+            heatAt = washAt;
+          }
           sounds.scanBurst();
         },
       ],
@@ -1712,7 +1741,8 @@ export const room: Stage = {
     // half health or less, nuts and bolts too.
     const launchAttack = (now: number) => {
       const gap = attackGap();
-      const kinds: AttackKind[] = ['scan', 'staples', 'pages'];
+      // the bulb shot, the scan is over for good: nothing to sweep with, nothing to flash
+      const kinds: AttackKind[] = bulbOut ? ['staples', 'pages'] : ['scan', 'staples', 'pages'];
       const nozzles = NOZZLES_X.filter((x) => !scene.stubs.includes(x));
       if ((fireAt !== null || mad) && nozzles.length) kinds.push('ink');
       if (score >= HI * BOLT_HEALTH) kinds.push('bolts');
@@ -1938,6 +1968,7 @@ export const room: Stage = {
         clock: () => ({ ...scene.clock }),
         clockSpin: () => scene.clockSpin,
         lights: () => [...scene.lights],
+        daze: () => dazeNow(performance.now()),
         fig: () => ({ ...scene.fig, leaves: scene.broken.fig, pot: scene.broken.figPot }),
         wreck: () => scene.printer === 'wreck',
         pieces: () => scene.pieces.map((q) => [Math.round(q.x), Math.round(q.y)]),
@@ -2555,7 +2586,7 @@ export const room: Stage = {
       const aiming = phase === 'fight' || phase === 'continue' || phase === 'over';
       const at = pointer ?? (aiming && tap && now - tap.at < TOUCH_CROSS_MS ? tap : null);
       if (at && aiming) {
-        const k = kickNow(now);
+        const k = crossOff(now);
         drawCross(Math.floor(at.x + k.x), Math.floor(at.y + k.y), Math.round(spreadNow(now)));
       } else if (pointer) cpix.blit(Math.floor(pointer.x) - 2, Math.floor(pointer.y), SPR.POINTER);
       pix.present(g);
