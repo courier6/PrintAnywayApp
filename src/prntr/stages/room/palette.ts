@@ -39,13 +39,18 @@ ccWcc
 ccWcc
 .ccc.
 `,
-  // 10 × 5: a USB stick on the carpet, its cap to the right (not in sprites.txt)
+  // 39 × 8 at 157,138: the USB stick on the carpet at the room's own resolution (round 2 of the objects sheet, #9): a white
+  // promo stick with the SNARC printed on it, its six bars and its arc, a steel connector, its shadow, a
+  // cyan lanyard trailing off to the left
   USB: `
-.KKKKKKK..
-KdddddddK.
-KdcddddKgK
-KdddddddK.
-.KKKKKKK..
+................KKKKKKKKKKKKKKKK.......
+...............KwWWWWWKKKWWWWWWwKKKKKKK
+...............KwwKKKKKwwwwwwwwwKWWWWWK
+..............KKwwKwKwKwwwKwwKKwKgKgKgK
+...............KwwKwKwKwKwKwKKKwKgggggK
+.ccccc.........KddKKKKKKKKKKKKKdKKKKKKK
+c.....cc.....c..KKKKKKKKKKKKKKKK.......
+........ccccc...XXXXXXXXXXXXXXXXXXXXXX.
 `,
   // 8 × 11
   POINTER: `

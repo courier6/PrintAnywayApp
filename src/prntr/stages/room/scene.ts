@@ -260,6 +260,8 @@ export interface SceneState {
  * board at 66,40 and the clock at 112,36. */
 export const CLOCK_AT = { x: 50, y: 41 };
 export const BOARD_AT = { x: 136, y: 46 };
+/** The USB stick on the carpet, its lanyard and its shadow (39×8, at the room's own resolution). */
+export const USB_AT = { x: 157, y: 138 };
 /** The first aid kit (13×10), a green pouch hanging on the wall at the lower right of the window. */
 export const KIT_AT = { x: 226, y: 79 };
 
@@ -1032,8 +1034,5 @@ export function drawRoom(p: Pix, s: SceneState): void {
     if (s.machine.flash && !s.flashWhite) p.rect(ART_AT.x, ART_AT.y, ART_AT.x + ART_AT.w, ART_AT.y + ART_AT.h, 'W');
   }
   // the USB stick on the carpet, right of the machine, with its shadow
-  if (s.usb) {
-    p.rect(174, 146, 190, 148, 'X');
-    p.blit(172, 136, SPR.USB, 2);
-  }
+  if (s.usb) p.blit(USB_AT.x, USB_AT.y, SPR.USB);
 }

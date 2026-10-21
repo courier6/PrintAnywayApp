@@ -315,10 +315,10 @@ const POUNCE_MS = 350;
 const LAND_MS = 100;
 const POUNCE_SHAKE_MS = 350;
 const WAKE_AT = POUNCE_AT + POUNCE_MS + POUNCE_SHAKE_MS;
-/** The USB stick on the carpet (USB at 2× at 172,136): its centre, and what finding it says before
+/** The USB stick on the carpet (USB at USB_AT, scene.ts): its body's centre, and what finding it says before
  * the beat starts USB_PLUG_MS later (the handoff started the fight from the sticker). */
-const USB = { x: 182, y: 141 };
-const USB_CAPTION = 'YOU FOUND A USB. YOU PLUG IT INTO THE PRINTER.';
+const USB = { x: 184, y: 142 };
+const USB_CAPTION = "A SIMPLE PRODUCTS USB. IT'S STILL WARM. YOU PLUG IT INTO THE PRINTER.";
 const USB_PLUG_MS = 2200;
 /** The first aid kit's hotspot and hit box: its sprite (KIT_AT in scene.ts) plus 3 px. Shot, it gives
  * the player full health, once, and hangs open and empty after. No points. */
