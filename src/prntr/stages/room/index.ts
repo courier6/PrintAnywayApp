@@ -71,8 +71,8 @@ const BLOOM_MAX = 12;
 const BLOOM_COOL = 6;
 /** The flash dazes the player: for DAZE_MS the cross wanders about the mouse (or the tap) by up to DAZE_PX,
  * lurching on two beats that never line up, easing back as the eyes clear; the shot goes where the cross is.
- * Under reduced motion the cross stays still and the bloom opens all the way instead (cooling as after shots).
- * The dev hook's steady() holds it still too. */
+ * Under reduced motion, and on touch (no cross to show the wander before a tap), the cross stays still and the
+ * bloom opens all the way instead (cooling as after shots). The dev hook's steady() holds it still too. */
 const DAZE_MS = 2000;
 const DAZE_PX = 12;
 /** On touch there is no hover cross: it shows at the tap for this long, so the kick and the bloom show. */
@@ -1333,9 +1333,10 @@ export const room: Stage = {
       const k = (1 - u) * (1 - u);
       return { x: kickDx * k, y: -KICK_UP * k };
     };
-    /** The cross's wander from the flash's daze now (none when steady, none under reduced motion). */
+    /** The cross's wander from the flash's daze now (none when steady, none under reduced motion, none on
+     * touch: a tap would land off where it was with no cross to show why, so touch takes the open bloom instead). */
     const dazeNow = (now: number) => {
-      if (dazeAt === null || steady || reduced) return { x: 0, y: 0 };
+      if (dazeAt === null || steady || reduced || touch) return { x: 0, y: 0 };
       const u = (now - dazeAt) / DAZE_MS;
       if (u >= 1) return { x: 0, y: 0 };
       const a = DAZE_PX * Math.pow(1 - u, 1.2);
@@ -1765,9 +1766,9 @@ export const room: Stage = {
           if (!reduced) invertFrame = true;
           wash.classList.add('is-on');
           washAt = performance.now();
-          // the player is dazed by it: the cross wanders (or, under reduced motion, its bloom opens all the way)
+          // the player is dazed by it: the cross wanders (or, under reduced motion and on touch, its bloom opens all the way)
           dazeAt = washAt;
-          if (reduced && !steady) {
+          if ((reduced || touch) && !steady) {
             heat = BLOOM_MAX - BLOOM_BASE;
             heatAt = washAt;
           }
