@@ -460,14 +460,14 @@
   height: calc(22px * var(--s));
 }
 
-/* The mad machine's output slot (MFC_MAD row 11 at 3×: 84,113 69×3), lit like the door's light
-   and glowing the same way, fading in over 1.5 s once the frame has .is-mad. */
+/* The mad machine's output opening (drawMachine: 78,107 82×8; the light one px inside it), lit like
+   the door's light and glowing the same way, fading in over 1.5 s once the frame has .is-mad. */
 .prntr-room-slot-light {
   position: absolute;
-  left: calc(84px * var(--s));
-  top: calc(113px * var(--s));
-  width: calc(69px * var(--s));
-  height: calc(3px * var(--s));
+  left: calc(79px * var(--s));
+  top: calc(108px * var(--s));
+  width: calc(82px * var(--s));
+  height: calc(6px * var(--s));
   background: linear-gradient(to bottom, #8A1410 0%, #5A0A0A 55%, #2A0404 100%);
   box-shadow: 0 0 calc(4.4px * var(--s)) calc(1.6px * var(--s)) rgba(140, 16, 12, 0.5);
   opacity: 0;

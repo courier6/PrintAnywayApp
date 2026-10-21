@@ -31,8 +31,14 @@ export interface RoomSounds {
   lightTick(): void;
   lidOpen(): void;
   lidShut(): void;
-  /** The scan's whine; the flash burst is scheduled 0.6 s later by the same call. */
-  scanFlash(): void;
+  /** The machine pouncing forward: a swelling whoosh, then its landing thump at 0.35 s. */
+  pounce(): void;
+  /** The scan's whine, rising over the 1.2 s sweep. */
+  scanSweep(): void;
+  /** The flash: an 80 ms white burst. */
+  scanBurst(): void;
+  /** The lamp's bulb shot: a pop and a tinkle of glass. */
+  bulbPop(): void;
   stapleHit(): void;
   /** A nut or a bolt hitting the glass: a clang. */
   boltHit(): void;
@@ -108,7 +114,10 @@ const SILENT: RoomSounds = {
   lightTick: noop,
   lidOpen: noop,
   lidShut: noop,
-  scanFlash: noop,
+  pounce: noop,
+  scanSweep: noop,
+  scanBurst: noop,
+  bulbPop: noop,
   stapleHit: noop,
   boltHit: noop,
   boltPunch: noop,
@@ -329,11 +338,30 @@ export function createRoomSounds(audio: PrntrAudio): RoomSounds {
       tone(t, 0.22, { f0: 150, f1: 40, gain: 0.6, decay: 0.07 });
       noise(t, 0.12, { lp: 1200, gain: 0.3, decay: 0.025 });
     },
-    // a whine rising 800 → 2400 Hz over 0.6 s, then an 80 ms white burst
-    scanFlash() {
+    // a whoosh swelling over 0.35 s (two bands of low noise, the second louder and brighter), then
+    // a thump: a tone falling 120 → 35 Hz with a burst of low noise
+    pounce() {
       const t = now();
-      tone(t, 0.6, { f0: 800, f1: 2400, gain: 0.25, attack: 0.05, release: 0.02 });
-      noise(t + 0.6, 0.09, { hp: 3000, gain: 0.6, decay: 0.015 });
+      noise(t, 0.25, { lp: 500, gain: 0.15 });
+      noise(t + 0.15, 0.2, { lp: 1200, gain: 0.3 });
+      tone(t + 0.35, 0.18, { f0: 120, f1: 35, gain: 0.7, decay: 0.06 });
+      noise(t + 0.35, 0.1, { lp: 800, gain: 0.4, decay: 0.03 });
+    },
+    // a whine rising 800 → 2400 Hz over the 1.2 s sweep
+    scanSweep() {
+      tone(now(), 1.2, { f0: 800, f1: 2400, gain: 0.22, attack: 0.05, release: 0.05 });
+    },
+    // the flash: an 80 ms white burst
+    scanBurst() {
+      noise(now(), 0.09, { hp: 3000, gain: 0.6, decay: 0.015 });
+    },
+    // a pop (a short thump) and the bulb's glass: two high rings dying in 60 ms
+    bulbPop() {
+      const t = now();
+      tone(t, 0.08, { f0: 900, f1: 200, gain: 0.5, decay: 0.02 });
+      noise(t, 0.05, { hp: 2000, gain: 0.5, decay: 0.008 });
+      tone(t + 0.01, 0.06, { f0: 5200, gain: 0.2, decay: 0.012 });
+      tone(t + 0.02, 0.06, { f0: 6800, gain: 0.12, decay: 0.01 });
     },
     stapleHit() {
       const t = now();
