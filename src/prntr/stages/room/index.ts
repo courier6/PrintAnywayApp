@@ -1,7 +1,7 @@
 import { reducedMotion, wait } from '../../anim';
 import type { Handoff, RunStats, Stage } from '../../types';
 import { H, Pix, W, rotateSprite } from './pixels';
-import { CLOCK_AT, GLASS, KIT_AT, KNOB, MACHINE_AT, MACHINE_PIECES, NOZZLES, SPR, drawFireFront, drawFlame, drawMarks, drawRoom, drawWindowWreck, figLeaf, fireRect, inDoorway, knobX, lampX, markBox, tubeX, type Broken, type ExitSign, type Hole, type Mark, type SceneState, type Tube } from './scene';
+import { BADGE_AT, CLOCK_AT, GLASS, KIT_AT, KNOB, MACHINE_AT, MACHINE_PIECES, NOZZLES, SPR, drawFireFront, drawFlame, drawMarks, drawRoom, drawWindowWreck, figLeaf, fireRect, inDoorway, knobX, lampX, markBox, tubeX, type Broken, type ExitSign, type Hole, type Mark, type SceneState, type Tube } from './scene';
 import { ART_AT, ART_SUB, renderVictory } from './art';
 import { PAL, type PalKey } from './palette';
 import { createRoomSounds, type FireSound, type Hum } from './sounds';
@@ -45,7 +45,9 @@ const POP_MS = 450;
  * WORN_HEALTH or less it shivers now and then (a letter flipping for a tick every NAME_FLIP_MS or
  * so); at ROUGH_HEALTH or less it is rough: jittering, split into red and cyan, its letters
  * breaking up every NAME_GLITCH_MS or so. */
-const PLAYER_NAME = 'NEW PLAYER';
+/** The name on the fight's tag and the certificate: the badge's (PRNTR-BADGE.md) or, unset, NULL. */
+const DEFAULT_NAME = 'NULL';
+const NAME_MAX = 12;
 const WORN_HEALTH = 50;
 const ROUGH_HEALTH = 25;
 const NAME_FLIP_MS = 700;
@@ -412,6 +414,14 @@ const FLICKER_BOTH = 0.2;
 const RED_LIGHTS_FROM = 0.4;
 /** The USB stick's hit area in screen px (the handoff's 44 px for the sticker), whatever the scale. */
 const USB_HIT_PX = 44;
+/** The badge's hotspot and hit box: its sprite (BADGE_AT in scene.ts) plus about 4 px. */
+const BADGE_HIT = { x0: 5, y0: 116, x1: 28, y1: 134 };
+const inBadge = (x: number, y: number) => x >= BADGE_HIT.x0 && x < BADGE_HIT.x1 && y >= BADGE_HIT.y0 && y < BADGE_HIT.y1;
+const cleanName = (s: string) => s.toUpperCase().replace(/[^A-Z0-9 ]/g, '').replace(/ +/g, ' ').trim().slice(0, NAME_MAX);
+/** The radius of the badge's pulse, virtual px. */
+const BADGE_GLOW_R = 16;
+/** The badge's barcode, one bar a virtual px, 1 = ink. */
+const BAR = '11010010111011010011010110';
 /** How far a thrown thing's glow and the fire's light reach past the sprite, virtual px: the gradient's fade. */
 const GLOW_PAD = 7;
 const FIRE_GLOW_PAD = 12;
@@ -450,7 +460,7 @@ const HOTSPOTS: Hotspot[] = [
 const ROOM_ALT =
   'A quiet office: an exposed ceiling, a duct along it and two bare tube lights hanging on cords, a door shut under an EXIT sign, a clock, a Simple Products board with notes on it by a window with its blind down on a storm outside, a tall fig tree before it and a green first aid kit at its lower right, a water cooler, a plant, one large copier in the middle, and a USB stick on the carpet beside it';
 
-type Phase = 'look' | 'sticker' | 'fight' | 'continue' | 'over' | 'end';
+type Phase = 'look' | 'badge' | 'sticker' | 'fight' | 'continue' | 'over' | 'end';
 type AttackKind = 'scan' | 'staples' | 'pages' | 'ink' | 'bolts' | 'black' | 'slam';
 
 /** A staple, or a nut or a bolt: all thrown out of the slot at the camera. */
@@ -647,7 +657,8 @@ export const room: Stage = {
     const lifeFill = el('div', 'prntr-room-life-fill');
     lifeEl.append(lifeFill);
     // The player's name under the bar's left end, as the machine's is over its own.
-    const lifeName = el('div', 'prntr-room-life-name prntr-room-fight-ui', PLAYER_NAME);
+    let playerName = DEFAULT_NAME;
+    const lifeName = el('div', 'prntr-room-life-name prntr-room-fight-ui', playerName);
     lifeName.setAttribute('aria-hidden', 'true');
     const pipsEl = el('div', 'prntr-room-pips prntr-room-fight-ui');
     pipsEl.setAttribute('role', 'img');
@@ -668,6 +679,58 @@ export const room: Stage = {
     const countEl = el('div', 'prntr-room-continue-count', '9');
     continueEl.append(el('div', 'prntr-room-continue-label', 'CONTINUE?'), countEl);
     continueEl.hidden = true;
+    // The staff badge (PRNTR-BADGE.md): its pulse on the carpet, and the card it comes up as when looked at.
+    const badgeGlow = el('div', 'prntr-room-badge-glow');
+    badgeGlow.setAttribute('aria-hidden', 'true');
+    const badgeEl = el('div', 'prntr-room-badge');
+    badgeEl.setAttribute('role', 'dialog');
+    badgeEl.setAttribute('aria-label', 'Staff badge');
+    badgeEl.hidden = true;
+    const badgeInput = document.createElement('input');
+    badgeInput.className = 'prntr-room-badge-input';
+    badgeInput.type = 'text';
+    badgeInput.maxLength = NAME_MAX;
+    badgeInput.autocomplete = 'off';
+    badgeInput.spellcheck = false;
+    badgeInput.setAttribute('autocapitalize', 'characters');
+    badgeInput.setAttribute('enterkeyhint', 'done');
+    badgeInput.setAttribute('aria-label', 'Your name');
+    const sheet = (cls: string, w: number, h: number, paint: (g: CanvasRenderingContext2D) => void) => {
+      const c = document.createElement('canvas');
+      c.className = cls;
+      c.width = w;
+      c.height = h;
+      paint(c.getContext('2d')!);
+      return c;
+    };
+    const photo = sheet('prntr-room-badge-photo', SPR.PHOTO.w, SPR.PHOTO.h, (g) => {
+      SPR.PHOTO.rows.forEach((row, y) => [...row].forEach((k, x) => {
+        g.fillStyle = PAL[k as PalKey];
+        g.fillRect(x, y, 1, 1);
+      }));
+    });
+    const barcode = sheet('prntr-room-badge-barcode', BAR.length, 8, (g) => {
+      g.fillStyle = PAL.K;
+      [...BAR].forEach((b, x) => b === '1' && g.fillRect(x, 0, 1, 8));
+    });
+    const badgeBand = el('div', 'prntr-room-badge-band');
+    badgeBand.append(el('span', 'prntr-room-badge-band-name', 'SIMPLE PRODUCTS'), el('span', 'prntr-room-badge-band-staff', 'STAFF'));
+    const badgeCard = el('div', 'prntr-room-badge-card');
+    badgeCard.append(
+      badgeBand,
+      el('div', 'prntr-room-badge-rule'),
+      photo,
+      el('div', 'prntr-room-badge-label', 'NAME'),
+      badgeInput,
+      el('div', 'prntr-room-badge-hint', touch ? 'TYPE IT. DONE SETS IT.' : 'TYPE IT. ENTER SETS IT.'),
+      el('div', 'prntr-room-badge-id', 'ID  SP-7331-0042'),
+      el('div', 'prntr-room-badge-dept', 'DEPT  RITES & INFERENCE   LVL 99'),
+      barcode,
+      el('div', 'prntr-room-badge-foot'),
+    );
+    const badgeHang = el('div', 'prntr-room-badge-hang');
+    badgeHang.append(el('div', 'prntr-room-badge-lanyard'), el('div', 'prntr-room-badge-clip'), badgeCard);
+    badgeEl.append(badgeHang);
     // The game-over dim: the same wash as CONTINUE?, with nothing written on it.
     const overEl = el('div', 'prntr-room-over');
     overEl.setAttribute('aria-hidden', 'true');
@@ -684,7 +747,7 @@ export const room: Stage = {
     const deathEl = el('div', 'prntr-room-death');
     deathEl.setAttribute('aria-hidden', 'true');
     deathEl.hidden = true;
-    frame.append(art, canvas, ...(rippleBack ? [rippleBack.canvas] : []), light, spill, fireLight, slotLight, holeLights, windowLight, glowFills, redLight, front, ...(rippleFront ? [rippleFront.canvas] : []), stormWash, wash, glows, hud, cursor, hurtEl, deathEl, continueEl, overEl);
+    frame.append(art, canvas, ...(rippleBack ? [rippleBack.canvas] : []), light, spill, fireLight, slotLight, holeLights, windowLight, glowFills, redLight, front, ...(rippleFront ? [rippleFront.canvas] : []), stormWash, wash, glows, badgeGlow, hud, cursor, hurtEl, deathEl, continueEl, badgeEl, overEl);
     wrap.append(frame);
     root.append(wrap);
 
@@ -716,6 +779,7 @@ export const room: Stage = {
       ledRed: false,
       trayPage: true,
       usb: true,
+      badge: 'floor',
       machine: { lid: 0, lamp: null, lampOut: false, flash: false, power: true, angry: false, back: 1, t: 0, error: null, lift: 0 },
       flashWhite: false,
       buttonBright: false,
@@ -920,7 +984,7 @@ export const room: Stage = {
     };
     const drawHealth = () => {
       lifeFill.style.width = `${health}%`;
-      lifeEl.setAttribute('aria-label', `${PLAYER_NAME}, health ${health} of ${PLAYER_HEALTH}`);
+      lifeEl.setAttribute('aria-label', `${playerName}, health ${health} of ${PLAYER_HEALTH}`);
       // the name wears with the bar: worn at half, rough near the end
       lifeName.classList.toggle('is-worn', health <= WORN_HEALTH && health > ROUGH_HEALTH);
       lifeName.classList.toggle('is-rough', health <= ROUGH_HEALTH);
@@ -930,7 +994,7 @@ export const room: Stage = {
     let nameAt = 0;
     let nameBackAt = 0;
     /** The name (or another text) with `n` of its letters broken (a glitch character or a gap). */
-    const brokenName = (n: number, text = PLAYER_NAME) => {
+    const brokenName = (n: number, text = playerName) => {
       const chars = text.split('');
       for (let k = 0; k < n; k++) {
         const i = Math.floor(Math.random() * chars.length);
@@ -948,24 +1012,24 @@ export const room: Stage = {
       const rough = lifeName.classList.contains('is-rough');
       const worn = lifeName.classList.contains('is-worn');
       if (!rough && !worn) {
-        if (lifeName.textContent !== PLAYER_NAME) lifeName.textContent = PLAYER_NAME;
+        if (lifeName.textContent !== playerName) lifeName.textContent = playerName;
         return;
       }
       if (reduced) {
         if (nameAt === 0) {
           nameAt = now;
-          lifeName.textContent = rough ? brokenName(2) : PLAYER_NAME;
+          lifeName.textContent = rough ? brokenName(2) : playerName;
         }
         return;
       }
       if (nameBackAt && now >= nameBackAt) {
         nameBackAt = 0;
-        lifeName.textContent = PLAYER_NAME;
+        lifeName.textContent = playerName;
       }
       if (now < nameAt) return;
       if (rough) {
         nameAt = now + NAME_GLITCH_MS * (0.6 + Math.random() * 0.8);
-        lifeName.textContent = Math.random() < 0.2 ? PLAYER_NAME : brokenName(1 + Math.floor(Math.random() * 3));
+        lifeName.textContent = Math.random() < 0.2 ? playerName : brokenName(1 + Math.floor(Math.random() * 3));
       } else {
         nameAt = now + NAME_FLIP_MS * (0.7 + Math.random() * 0.8);
         lifeName.textContent = brokenName(1);
@@ -1575,6 +1639,13 @@ export const room: Stage = {
         ctx.announce('First aid. Health full.');
         return;
       }
+      // The badge never picked up: in the fight it is a breakable and nothing more.
+      if (scene.badge === 'floor' && inBadge(x, y)) {
+        scene.badge = 'shot';
+        sounds.shatter();
+        addScore(BREAK_POINTS, now);
+        return;
+      }
       const thing = BREAKABLES.find((b) => !scene.broken[b.id] && !(b.id === 'fig' && (scene.broken.figPot || !figLeaf(x, y))) && x >= b.x0 && x < b.x1 && y >= b.y0 && y < b.y1);
       if (thing) {
         scene.broken[thing.id] = true;
@@ -2056,6 +2127,50 @@ export const room: Stage = {
     };
 
     // ---- looking ----------------------------------------------------------
+    // The badge looked at: the card comes up and takes the keys until the name is set or it is put down.
+    const openBadge = () => {
+      phase = 'badge';
+      badgeEl.hidden = false;
+      badgeInput.value = '';
+      pointer = null;
+      setCaption('');
+      // inside the pointerdown, so it is a user gesture and a phone raises its keyboard
+      badgeInput.focus();
+      ctx.announce('A staff badge. Type your name and press Enter.');
+    };
+    // Set (Enter, or a press off the card): a name clips the badge on for good; nothing typed leaves it on the carpet.
+    const closeBadge = (set: boolean) => {
+      const name = cleanName(badgeInput.value);
+      if (set && name) {
+        playerName = name;
+        scene.badge = 'taken';
+        lifeName.textContent = playerName;
+        setCaption('YOU CLIP IT ON.');
+        sounds.uiClick();
+        ctx.announce(`Name set: ${name}.`);
+      }
+      badgeEl.hidden = true;
+      badgeInput.blur();
+      phase = 'look';
+    };
+    // only what the certificate's face can print, as it is typed: A to Z, 0 to 9, single spaces
+    badgeInput.addEventListener(
+      'input',
+      () => {
+        const v = badgeInput.value.toUpperCase().replace(/[^A-Z0-9 ]/g, '').replace(/ +/g, ' ').replace(/^ /, '');
+        if (v !== badgeInput.value) badgeInput.value = v;
+      },
+      { signal },
+    );
+    badgeInput.addEventListener(
+      'keydown',
+      (e) => {
+        if (e.key !== 'Enter') return;
+        e.preventDefault();
+        closeBadge(true);
+      },
+      { signal },
+    );
     const clickRoom = (v: { x: number; y: number }, now: number) => {
       sounds.uiClick();
       if (plugAt !== null) return;
@@ -2064,6 +2179,10 @@ export const room: Stage = {
         scene.usb = false;
         plugAt = now + USB_PLUG_MS;
         setCaption(USB_CAPTION);
+        return;
+      }
+      if (scene.badge === 'floor' && inBadge(v.x, v.y)) {
+        openBadge();
         return;
       }
       // The ceiling, wall, carpet and the light: nothing, and the caption stays.
@@ -2079,7 +2198,7 @@ export const room: Stage = {
     frame.addEventListener(
       'pointermove',
       (e) => {
-        if (e.pointerType !== 'touch') pointer = toVirtual(e);
+        if (e.pointerType !== 'touch' && phase !== 'badge') pointer = toVirtual(e);
       },
       { signal },
     );
@@ -2089,6 +2208,11 @@ export const room: Stage = {
       'pointerdown',
       (e) => {
         const now = performance.now();
+        // the card up: a press on the dim sets the name (or puts the badge down); the card and the input do their own work
+        if (phase === 'badge') {
+          if (e.target === badgeEl) closeBadge(true);
+          return;
+        }
         const v = toVirtual(e);
         pointer = e.pointerType === 'touch' ? null : v;
         if (e.button === 2) {
@@ -2106,6 +2230,14 @@ export const room: Stage = {
           fire(a.x, a.y, now);
         }
         else if (phase === 'continue') answerContinue(now);
+      },
+      { signal },
+    );
+    // The card up: the press's mousedown would move the focus off the name to the game's root; it stays.
+    frame.addEventListener(
+      'mousedown',
+      (e) => {
+        if (phase === 'badge' && e.target !== badgeInput) e.preventDefault();
       },
       { signal },
     );
@@ -2131,6 +2263,7 @@ export const room: Stage = {
     window.addEventListener(
       'keydown',
       (e) => {
+        if (phase === 'badge') return;
         if (phase === 'continue' && (e.key === ' ' || e.key === 'Enter')) {
           e.preventDefault();
           answerContinue(performance.now());
@@ -2148,6 +2281,12 @@ export const room: Stage = {
       console.info('prntr-dev-room');
       (window as unknown as { __prntrRoom?: unknown }).__prntrRoom = {
         phase: () => phase,
+        badge: () => scene.badge,
+        playerName: () => playerName,
+        setName: (n: string) => {
+          playerName = cleanName(n) || DEFAULT_NAME;
+          lifeName.textContent = playerName;
+        },
         stats: () => ({ shotsFired, misses, pagesShot, staplesShot, deaths, fireEver, wonBy, fightAt }),
         setScore: (n: number) => {
           score = Math.min(HI - 1, Math.max(0, n));
@@ -2300,7 +2439,7 @@ export const room: Stage = {
      * LAND_MS and shaking for POUNCE_SHAKE_MS. Null shake = none from the pounce. */
     const poseBack = (now: number): { x: number; y: number } | null => {
       const m = scene.machine;
-      if (phase !== 'look' && phase !== 'sticker') {
+      if (phase !== 'look' && phase !== 'badge' && phase !== 'sticker') {
         m.back = 0;
         return null;
       }
@@ -2382,7 +2521,7 @@ export const room: Stage = {
         }
         if (ck.state === 'burning' && ck.x + SPR.CLOCK.w < 0) ck.state = 'gone';
       }
-      if (phase === 'look') {
+      if (phase === 'look' || phase === 'badge') {
         if (now - lastTickAt >= TICK_MS) {
           lastTickAt = now;
           sounds.printerTick();
@@ -2514,6 +2653,14 @@ export const room: Stage = {
       if (scene.buttonBright) rects.push({ ...BUTTON, x: BUTTON.x + scene.shake.x, y: BUTTON.y + scene.shake.y });
       placeGlows(glows, 'prntr-room-glow', rects);
       placeGlows(glowFills, 'prntr-room-glow-fill', thrown.map((r) => ({ x: r.x - GLOW_PAD, y: r.y - GLOW_PAD, w: r.w + 2 * GLOW_PAD, h: r.h + 2 * GLOW_PAD })));
+      // the badge's pulse: only while it can still be picked up, out for good once the USB is clicked
+      badgeGlow.hidden = !(scene.badge === 'floor' && (phase === 'look' || phase === 'badge') && plugAt === null);
+      if (!badgeGlow.hidden) {
+        // a circle of BADGE_GLOW_R on the card (columns 8 to 20 of the sprite, rows 1 to 9), as on the sheet
+        badgeGlow.style.left = `${(BADGE_AT.x + 14 - BADGE_GLOW_R) * scale}px`;
+        badgeGlow.style.top = `${(BADGE_AT.y + 5 - BADGE_GLOW_R) * scale}px`;
+        badgeGlow.style.width = badgeGlow.style.height = `${2 * BADGE_GLOW_R * scale}px`;
+      }
     };
     const placeGlows = (layer: HTMLElement, cls: string, rects: { x: number; y: number; w: number; h: number }[]) => {
       while (layer.children.length < rects.length) layer.append(el('div', cls));
@@ -2872,7 +3019,7 @@ export const room: Stage = {
       if (at && aiming) {
         const k = crossOff(now);
         drawCross(Math.floor(at.x + k.x), Math.floor(at.y + k.y), Math.round(spreadNow(now)));
-      } else if (pointer) cpix.blit(Math.floor(pointer.x) - 2, Math.floor(pointer.y), SPR.POINTER);
+      } else if (pointer && phase !== 'badge') cpix.blit(Math.floor(pointer.x) - 2, Math.floor(pointer.y), SPR.POINTER);
       pix.present(g);
       fpix.present(fg);
       cpix.present(cg);
@@ -2941,7 +3088,7 @@ export const room: Stage = {
           staples: staplesShot,
           seconds: fightAt === null ? 0 : Math.max(0, Math.round((burstAt - fightAt) / 1000)),
         };
-        resolve(outcome === 'over' ? { kind: 'over', score } : { kind: 'cleared', score, player: PLAYER_NAME, stats });
+        resolve(outcome === 'over' ? { kind: 'over', score } : { kind: 'cleared', score, player: playerName, stats });
       };
       const loop = (now: number) => {
         if (done) return;

@@ -5,6 +5,9 @@ import { H, Pix, W, parseSprite, rotateSprite, sliceRect, type Sprite } from './
 export const SPR = {
   INFO: parseSprite(SPRITES.INFO),
   USB: parseSprite(SPRITES.USB),
+  BADGE: parseSprite(SPRITES.BADGE),
+  BADGE_SHOT: parseSprite(SPRITES.BADGE_SHOT),
+  PHOTO: parseSprite(SPRITES.PHOTO),
   POINTER: parseSprite(SPRITES.POINTER),
   CROSS_V: parseSprite(SPRITES.CROSS_V),
   CROSS_H: parseSprite(SPRITES.CROSS_H),
@@ -234,6 +237,8 @@ export interface SceneState {
   trayPage: boolean;
   /** The USB stick still on the carpet (it starts the fight). */
   usb: boolean;
+  /** The badge: on the carpet, clipped on (the name set), or shot to pieces. */
+  badge: 'floor' | 'taken' | 'shot';
   /** The machine's lid, lamp and panel this frame (`printer === 'up'`). */
   machine: Machine;
   /** The machine drawn all white (the hit flash). */
@@ -323,6 +328,8 @@ export function blitLeaning(p: Pix, x0: number, y0: number, s: Sprite, pivot: { 
 export const MONSTERA_AT = { whole: { x: 191, y: 94 }, bare: { x: 194, y: 101 }, down: { x: 183, y: 125 } };
 /** The USB stick on the carpet, its lanyard and its shadow (39×8, at the room's own resolution). */
 export const USB_AT = { x: 157, y: 138 };
+/** The staff badge on the carpet by the door (PRNTR-BADGE.md). */
+export const BADGE_AT = { x: 8, y: 120 };
 /** The first aid kit (13×10), a green pouch hanging on the wall at the lower right of the window. */
 export const KIT_AT = { x: 226, y: 79 };
 
@@ -1117,6 +1124,9 @@ export function drawRoom(p: Pix, s: SceneState): void {
     // the flash whites the print too: a white rect over the hole, in the room's grid
     if (s.machine.flash && !s.flashWhite) p.rect(ART_AT.x, ART_AT.y, ART_AT.x + ART_AT.w, ART_AT.y + ART_AT.h, 'W');
   }
+  // the staff badge by the door, or its pieces
+  if (s.badge === 'floor') p.blit(BADGE_AT.x, BADGE_AT.y, SPR.BADGE);
+  else if (s.badge === 'shot') p.blit(BADGE_AT.x, BADGE_AT.y + 1, SPR.BADGE_SHOT);
   // the USB stick on the carpet, right of the machine, with its shadow
   if (s.usb) p.blit(USB_AT.x, USB_AT.y, SPR.USB);
 }
