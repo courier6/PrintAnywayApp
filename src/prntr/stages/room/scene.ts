@@ -165,6 +165,10 @@ export interface Mark {
   y: number;
 }
 
+/** The blind's slats: one every BLIND_PITCH rows from BLIND_TOP, three rows of slat and a 2 px gap on the storm. */
+export const BLIND_TOP = 39;
+export const BLIND_PITCH = 5;
+
 /** The door's knob, 2×2: near the door's free (left) edge, moving with it as the door swings in on its right hinge. */
 export const KNOB = { y: 76, w: 2, h: 2 };
 export const knobX = (doorGap: number): number => 16 + Math.min(doorGap, 22);
@@ -883,9 +887,18 @@ export function drawRoom(p: Pix, s: SceneState): void {
     p.rect(188, 109, 196, 110, 's');
     p.rect(176, 113, 181, 114, 's');
   } else {
-    p.rect(163, 39, 221, 87, 's');
-    const gapK: PalKey = s.storm.near > 0.3 ? 'H' : s.storm.near > 0 || s.storm.far > 0.3 ? 'L' : 'a';
-    for (let y = 41; y < 87; y += 4) p.rect(163, y, 221, y + 1, gapK);
+    // the blind half open: the storm behind it, and over it ten slats tilted toward the room, each a
+    // lit top, its face and the shadowed underside the tilt shows, with a 2 px gap under each where the
+    // storm is seen (its rain, its clouds, its lightning); a near strike lights the undersides. Two
+    // ladder cords run down through them.
+    drawStorm(p, { x0: 163, y0: 39, x1: 221, y1: 87 }, s.storm);
+    const under: PalKey = s.storm.near > 0.3 ? 'l' : 'a';
+    for (let y = BLIND_TOP; y < 87; y += BLIND_PITCH) {
+      p.rect(163, y, 221, y + 1, 'W');
+      p.rect(163, y + 1, 221, y + 2, 's');
+      p.rect(163, y + 2, 221, y + 3, under);
+    }
+    for (const cx of [176, 208]) for (let y = 39; y < 87; y++) if ((y - BLIND_TOP) % BLIND_PITCH >= 3) p.set(cx, y, 'e');
   }
   // the first aid kit by the window's lower right corner, green where a kit is red
   p.blit(KIT_AT.x, KIT_AT.y, s.broken.kit ? SPR.KIT_OPEN : SPR.KIT);
