@@ -171,7 +171,8 @@ const FIRE_STOKE_SHOTS = 3;
 const STOKE_STEP = 0.8;
 const STOKE_MAX = 3;
 const STOKE_FLARE_MS = 400;
-/** The mad machine's fourth attack: ink sprayed from behind the machine,
+/** The burning machine's fourth attack, from the moment it catches fire at any health (a volley at once,
+ * then in the rotation, on after the fire is out): ink sprayed from behind the machine,
  * cyan, magenta or yellow, never black (it cannot do that). Each jet comes out of a tube that
  * rises from behind the machine's top edge out of one of the three ink caps (NOZZLES, scene.ts),
  * in that cap's colour: its head
@@ -192,7 +193,8 @@ const SPRAY_FLIGHT_MS = 700;
 const SPRAY_ARC = 24;
 /** The colour nozzles; the black one is a dud (BLACK_X). */
 const NOZZLES_X = NOZZLES.filter((n) => n.color !== 'z').map((n) => n.x);
-/** The black cartridge, the fourth cap: it is empty. The first ink attack the machine picks tries it,
+/** The black cartridge, the fourth cap: it is empty. The first ink attack the rotation picks (after the
+ * fire's own volley, which is always in colour) tries it,
  * and then one in BLACK_CHANCE of them: its tube comes up and hunts like the others, coughs out a few
  * specks that fall back onto the machine (DUD_COUGHS_MS from the jet's start), and the display reads
  * NO BLACK INK until DUD_ERROR_TAIL_MS after the tube starts to sink. Nothing reaches the glass. It can
@@ -555,7 +557,10 @@ export const room: Stage = {
     // The red glow on everything that can be shot: DOM boxes over the pixel layer,
     // unpixelated like the door's light. One per projectile, pooled.
     const glows = el('div', 'prntr-room-glows');
-    for (const n of [light, spill, fireLight, slotLight, holeLights, windowLight, stormWash, wash, glows]) n.setAttribute('aria-hidden', 'true');
+    // The inside of the glows of what the machine throws, under the front layer, so its sprites stay crisp
+    // over it and the glow has no hollow where a sprite is open (a staple's loop, a burning page's edges).
+    const glowFills = el('div', 'prntr-room-glow-fills');
+    for (const n of [light, spill, fireLight, slotLight, holeLights, windowLight, stormWash, wash, glows, glowFills]) n.setAttribute('aria-hidden', 'true');
     const hud = el('div', 'prntr-room-hud');
     const scoreEl = el('div', 'prntr-room-score', 'SCORE 0000');
     const hiEl = el('div', 'prntr-room-hi', 'HI 1337');
@@ -615,7 +620,7 @@ export const room: Stage = {
     const deathEl = el('div', 'prntr-room-death');
     deathEl.setAttribute('aria-hidden', 'true');
     deathEl.hidden = true;
-    frame.append(art, canvas, light, spill, fireLight, slotLight, holeLights, windowLight, front, stormWash, wash, glows, hud, cursor, hurtEl, deathEl, continueEl, overEl);
+    frame.append(art, canvas, light, spill, fireLight, slotLight, holeLights, windowLight, glowFills, front, stormWash, wash, glows, hud, cursor, hurtEl, deathEl, continueEl, overEl);
     wrap.append(frame);
     root.append(wrap);
 
@@ -769,6 +774,8 @@ export const room: Stage = {
     let stokeAt = -Infinity;
     /** The machine is mad (MAD_AFTER_MS into the fire): the cues above, and the ink to come. */
     let mad = false;
+    /** The fire has just caught: the next attack is a colour volley, whatever the rotation says. */
+    let inkNow = false;
     let frameCount = 0;
     /** When the door starts to open (set as the sign lands), and when it did. */
     let doorAt: number | null = null;
@@ -1581,6 +1588,9 @@ export const room: Stage = {
     const startFire = (now: number) => {
       shortAt = null;
       fireAt = now;
+      // the machine sprays its ink the moment it catches fire, whatever its health: a volley now, ink in the rotation after
+      inkNow = true;
+      nextAttackAt = Math.min(nextAttackAt, now);
       flashFrames = HIT_FLASH_FRAMES * 2;
       fireSound = sounds.fire();
     };
@@ -1680,13 +1690,13 @@ export const room: Stage = {
     };
     /** The next attack the dev hook asked for, if any. */
     let forcedKind: AttackKind | null = null;
-    // The machine does not move. Scan, staples, pages, in rotation; once it is mad, ink too; at
+    // The machine does not move. Scan, staples, pages, in rotation; once it has caught fire, ink too; at
     // half health or less, nuts and bolts too.
     const launchAttack = (now: number) => {
       const gap = attackGap();
       const kinds: AttackKind[] = ['scan', 'staples', 'pages'];
       const nozzles = NOZZLES_X.filter((x) => !scene.stubs.includes(x));
-      if (mad && nozzles.length) kinds.push('ink');
+      if ((fireAt !== null || mad) && nozzles.length) kinds.push('ink');
       if (score >= HI * BOLT_HEALTH) kinds.push('bolts');
       // Nothing while the lid is up (a scan is on), and no scan while a tube is up: the lid would
       // cover it. The attack waits; a forced one keeps.
@@ -1695,9 +1705,12 @@ export const room: Stage = {
         nextAttackAt = now + 100;
         return;
       }
-      let kind = forcedKind ?? kinds[attackIndex++ % kinds.length];
+      // the fire's volley comes first, unless an attack was forced (it waits for the next)
+      const fireVolley = forcedKind === null && inkNow && nozzles.length > 0;
+      if (fireVolley) inkNow = false;
+      let kind = forcedKind ?? (fireVolley ? 'ink' : kinds[attackIndex++ % kinds.length]);
       // the rotation's ink tries the black cartridge first, then now and then (a forced 'ink' never does)
-      if (kind === 'ink' && forcedKind === null && !scene.stubs.includes(BLACK_X) && (inkTries++ === 0 || Math.random() < BLACK_CHANCE)) kind = 'black';
+      if (kind === 'ink' && forcedKind === null && !fireVolley && !scene.stubs.includes(BLACK_X) && (inkTries++ === 0 || Math.random() < BLACK_CHANCE)) kind = 'black';
       forcedKind = null;
       if (kind === 'black') {
         if (scene.stubs.includes(BLACK_X)) {
@@ -1719,8 +1732,9 @@ export const room: Stage = {
           return;
         }
         for (let i = 0; i < SPRAY_COUNT; i++) {
-          // the last jet goes at the fire while it burns: into the middle of the main flame
-          const atFire = fireAt !== null && i === SPRAY_COUNT - 1;
+          // the last jet goes at the fire while it burns: into the middle of the main flame (not the fire's
+          // own first volley: just caught, the fire would go out for good under it)
+          const atFire = fireAt !== null && i === SPRAY_COUNT - 1 && !fireVolley;
           let x = 16 + Math.random() * 208;
           let y = 24 + Math.random() * 112;
           if (atFire) {
@@ -2177,9 +2191,15 @@ export const room: Stage = {
         const hx = tubeX(tb, tb.top);
         rects.push({ x: Math.min(s.nx, hx) - 3 + scene.shake.x, y: tb.top + scene.shake.y, w: Math.abs(hx - s.nx) + 6, h: TUBE_BASE - tb.top });
       }
+      // the thrown things (the staples, nuts and bolts, then the pages) get a filled inside too
+      const thrown = rects.slice(0, staples.filter((s) => now >= s.at && !s.hit && !s.shot).length + pages.filter((p) => now >= p.at && !p.shot && p.landedAt === null).length);
       if (scene.buttonBright) rects.push({ ...BUTTON, x: BUTTON.x + scene.shake.x, y: BUTTON.y + scene.shake.y });
-      while (glows.children.length < rects.length) glows.append(el('div', 'prntr-room-glow'));
-      Array.from(glows.children).forEach((n, i) => {
+      placeGlows(glows, 'prntr-room-glow', rects);
+      placeGlows(glowFills, 'prntr-room-glow-fill', thrown);
+    };
+    const placeGlows = (layer: HTMLElement, cls: string, rects: { x: number; y: number; w: number; h: number }[]) => {
+      while (layer.children.length < rects.length) layer.append(el('div', cls));
+      Array.from(layer.children).forEach((n, i) => {
         const r = rects[i];
         const box = n as HTMLElement;
         box.hidden = !r;
