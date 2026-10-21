@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ChangeEvent, type CSSProperties } from 'react';
+import { flushSync } from 'react-dom';
 import { Header } from './components/Header';
 import { EmptyState } from './components/EmptyState';
 import { ProcessingState } from './components/ProcessingState';
@@ -76,6 +77,7 @@ export default function App() {
   const docRef = useRef<SourceDocument | null>(null);
   const idleHandle = useRef<number | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
+  const printRoot = useRef<HTMLDivElement>(null);
   const handleFileRef = useRef<(file: File) => void>(() => {});
   handleFileRef.current = (file) => void handleFile(file);
 
@@ -378,9 +380,10 @@ export default function App() {
     setBusy('print');
     try {
       const canvases = await collectAllRecolored(token);
-      setPrintImages(canvases.map((c) => c.toDataURL('image/png')));
-      // Let React commit the print pages before opening the dialog.
-      await new Promise((r) => setTimeout(r, 60));
+      flushSync(() => setPrintImages(canvases.map((c) => c.toDataURL('image/png'))));
+      // The dialog snapshots the page: every image must be decoded by then, or it prints blank.
+      const images = Array.from(printRoot.current?.querySelectorAll('img') ?? []);
+      await Promise.all(images.map((img) => img.decode().catch(() => undefined)));
       if (token !== runToken.current) return;
       window.print();
     } catch (err) {
@@ -511,7 +514,7 @@ export default function App() {
         style={{ display: 'none' }}
         onChange={onInputChange}
       />
-      <div className="print-root" aria-hidden="true">
+      <div className="print-root" ref={printRoot} aria-hidden="true">
         {printImages.map((src, i) => (
           <img key={i} src={src} alt="" />
         ))}
