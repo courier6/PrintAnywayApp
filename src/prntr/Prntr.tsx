@@ -35,6 +35,10 @@ export default function Prntr({ source, recolored, inkHex, stage, audioContext, 
   onExitRef.current = onExit;
   const onDoneRef = useRef(onDone);
   onDoneRef.current = onDone;
+  // Read once when a run starts: the host changes them during the drop (the certificate
+  // comes up in gold), and a change must not restart the chain under it.
+  const startRef = useRef({ source, recolored, inkHex });
+  startRef.current = { source, recolored, inkHex };
 
   // Esc leaves from any stage. Added on mount, removed on unmount: nothing leaks
   // into the host app after Prntr closes.
@@ -74,10 +78,11 @@ export default function Prntr({ source, recolored, inkHex, stage, audioContext, 
       () => undefined,
       () => undefined,
     );
+    const start = startRef.current;
     const ctx: StageContext = {
       root,
-      page: capturePage(source, recolored),
-      inkHex,
+      page: capturePage(start.source, start.recolored),
+      inkHex: start.inkHex,
       audio: createPrntrAudio(audioContext),
       fontsReady,
       signal: controller.signal,
@@ -97,7 +102,7 @@ export default function Prntr({ source, recolored, inkHex, stage, audioContext, 
       root.remove();
       document.body.style.overflow = prevOverflow;
     };
-  }, [source, recolored, inkHex, stage, audioContext]);
+  }, [stage, audioContext]);
 
   return (
     <div className="prntr" ref={rootRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="Prntr">
