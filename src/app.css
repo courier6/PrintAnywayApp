@@ -914,10 +914,19 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
     display: block;
   }
 
+  /* One sheet per page: as wide as the sheet allows, never taller than it (an A4
+     page on Letter, a phone screenshot), scaled to fit rather than split. */
   .print-root img {
     display: block;
     width: 100%;
-    break-after: page;
+    height: auto;
+    max-height: 100vh;
+    object-fit: contain;
+    break-inside: avoid;
+  }
+
+  .print-root img + img {
+    break-before: page;
   }
 }
 
