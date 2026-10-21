@@ -1,4 +1,4 @@
-import { HeicDecodeError, ImageDecodeError, UnsupportedFileError } from './errors';
+import { EmptyPdfError, HeicDecodeError, ImageDecodeError, UnsupportedFileError } from './errors';
 
 // pdf.js's modern build calls built-ins only the newest browsers have
 // (Map#getOrInsertComputed, Math.sumPrecise, Uint8Array#toHex, …) without
@@ -114,6 +114,10 @@ async function loadPdf(file: File): Promise<SourceDocument> {
     standardFontDataUrl: `${assets}standard_fonts/`,
     iccUrl: `${assets}iccs/`,
   }).promise;
+  if (pdf.numPages === 0) {
+    void pdf.destroy();
+    throw new EmptyPdfError();
+  }
   return {
     pageCount: pdf.numPages,
     async renderPage(index: number): Promise<HTMLCanvasElement> {
