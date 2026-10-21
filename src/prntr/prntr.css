@@ -325,8 +325,8 @@
   .prntr-card-brand { gap: 14px; }
   .prntr-card-logo { width: 90px; height: 54px; }
   .prntr-card-logo path { stroke-width: 2; }
-  .prntr-card-name { font-size: 18px; letter-spacing: 0.3em; padding-left: 0.3em; }
-  .prntr-card-presents { font-size: 15px; }
+  .prntr-card-name { font-size: 18px; padding-bottom: 6px; }
+  .prntr-card-presents { font-size: 11px; }
   .prntr-title { gap: 2px; font-size: min(112px, 23.4vw); }
   .prntr-prompt { font-size: 16px; letter-spacing: 0.06em; }
   .prntr-footer { font-size: 9px; }
