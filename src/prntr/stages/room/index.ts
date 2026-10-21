@@ -563,7 +563,7 @@ export const room: Stage = {
       ledRed: false,
       trayPage: true,
       usb: true,
-      machine: { lid: 0, lamp: null, lampOut: false, flash: false, power: true, angry: false, back: 1 },
+      machine: { lid: 0, lamp: null, lampOut: false, flash: false, power: true, angry: false, back: 1, t: 0 },
       flashWhite: false,
       buttonBright: false,
       broken: { clock: false, poster: false, tank: false, plant: false, vase: false, kit: false },
@@ -1984,6 +1984,8 @@ export const room: Stage = {
       poseFire(now);
       scene.flashWhite = flashFrames > 0;
       scene.damage = score / HI;
+      // the angry display's flicker runs on the frame's time (still under reduced motion)
+      scene.machine.t = reduced ? 0 : now;
       if (flashFrames > 0) flashFrames--;
       scene.buttonBright = phase === 'fight' && scene.printer === 'up' && (mad || buttonBright(now));
       if (scene.printer === 'wreck') posePieces(now);

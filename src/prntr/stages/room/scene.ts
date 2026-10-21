@@ -118,6 +118,8 @@ export interface Machine {
   /** How far back it stands: 0 in its place, 1 at the back of the room (two thirds the size, its
    * feet on 134). The beat brings it forward: the pounce. */
   back: number;
+  /** The frame's time in ms, for the angry display's flicker (0 = still). */
+  t: number;
 }
 
 /** The machine's size and foot line at `back`. */
@@ -357,7 +359,75 @@ function drawWear(p: Pix, x: number, y: number, damage: number, wall: PalKey): v
 }
 
 /** What `drawMachine` reads of the scene. */
-export type MachineScene = Pick<SceneState, 'machine' | 'shake' | 'flashWhite' | 'ledRed' | 'buttonBright' | 'trayPage'>;
+export type MachineScene = Pick<SceneState, 'machine' | 'shake' | 'flashWhite' | 'ledRed' | 'buttonBright' | 'trayPage' | 'damage'>;
+
+/** 3×5 warning glyphs for the display: !, ?, a triangle, a box, an X, bars. */
+const GLYPHS: string[][] = [
+  ['.#.', '.#.', '.#.', '...', '.#.'],
+  ['##.', '..#', '.#.', '...', '.#.'],
+  ['.#.', '.#.', '#.#', '#.#', '###'],
+  ['###', '#.#', '#.#', '#.#', '###'],
+  ['#.#', '#.#', '.#.', '#.#', '#.#'],
+  ['###', '...', '###', '...', '###'],
+];
+const INK_WHITE: PalKey[] = ['c', 'm', 'y', 'W'];
+const STRAY: PalKey[] = ['c', 'm', 'y', 'W', 'z'];
+
+/**
+ * The display's text, 26×9 inside 79–105 × 93–102 (PRNTR-FIGHT-DESIGN.md §9.8, the sheet's C1–C4).
+ * Quiet: three green lines. Angry: three red lines each a new length every 80 ms, jumping about,
+ * one flashing white now and then, a cursor blinking. From 30% damage the middle line gives way
+ * to three warning glyphs, a new set every 220 ms, in yellow and red: it wants to scare you off
+ * and does not know with what. From 50% the glyphs come every 100 ms, some in the inks and white,
+ * with stray pixels, a noise bar sliding through, the lines doubled, and the screen black about
+ * one tick in ten; past 80% twice the noise, black one tick in five. At t 0 (reduced motion) it
+ * holds one frame, never black.
+ */
+function drawScreen(set: (x: number, y: number, k: PalKey) => void, rect: (x0: number, y0: number, x1: number, y1: number, k: PalKey) => void, m: Machine, damage: number): void {
+  if (!m.angry) {
+    rect(80, 94, 96, 95, 'n');
+    rect(80, 97, 102, 98, 'n');
+    rect(80, 100, 90, 101, 'n');
+    return;
+  }
+  const t = m.t;
+  const tick = Math.floor(t / 80);
+  const warn = damage >= 0.3;
+  const dying = damage >= 0.5;
+  const bad = damage >= 0.8 ? 3 : dying ? 2 : warn ? 1 : 0;
+  if (dying && t > 0 && hash(tick * 3 + 1) < (bad === 3 ? 0.22 : 0.1)) {
+    rect(79, 93, 105, 102, 'z');
+    return;
+  }
+  [94, 97, 100].forEach((y, i) => {
+    const seed = tick * 7 + i * 13;
+    const len = 6 + Math.floor(hash(seed) * 18);
+    const x0 = 80 + (hash(seed + 1) < 0.25 ? Math.floor(hash(seed + 2) * 4) : 0);
+    rect(x0, y, Math.min(104, x0 + len), y + 1, hash(seed + 3) < 0.08 ? 'W' : 'Q');
+    if (bad >= 2 && hash(seed + 4) < 0.3) rect(x0, y + 1, Math.min(104, x0 + len), y + 2, 'R');
+  });
+  if (tick % 4 < 2) rect(101, 100, 103, 101, 'Q');
+  if (warn) {
+    const gs = Math.floor(t / (bad >= 2 ? 100 : 220));
+    rect(80, 96, 104, 101, 'i');
+    for (let i = 0; i < 3; i++) {
+      const g = GLYPHS[Math.floor(hash(gs * 5 + i * 11) * GLYPHS.length)];
+      const k: PalKey = bad >= 2 && hash(gs * 9 + i) < 0.4 ? INK_WHITE[Math.floor(hash(gs + i * 3) * 4)] : hash(gs + i) < 0.5 ? 'y' : 'Q';
+      g.forEach((row, ry) => {
+        for (let rx = 0; rx < 3; rx++) if (row[rx] === '#') set(88 + i * 6 + rx, 96 + ry, k);
+      });
+    }
+    if (bad === 1) rect(80, 94, 88 + Math.floor(hash(tick) * 12), 95, 'Q');
+  }
+  if (dying) {
+    const n = bad === 3 ? 22 : 10;
+    for (let i = 0; i < n; i++) set(80 + Math.floor(hash(tick * 31 + i * 7) * 25), 94 + Math.floor(hash(tick * 17 + i * 5) * 8), STRAY[Math.floor(hash(tick + i * 13) * 5)]);
+    if (hash(tick * 5 + 2) < 0.35) {
+      const by = 94 + Math.floor(hash(tick * 11) * 8);
+      rect(80, by, 104, by + 1, hash(tick) < 0.5 ? 'W' : 'c');
+    }
+  }
+}
 
 /**
  * The machine at the room's resolution (the sheet's pick, PRNTR-FIGHT-DESIGN.md §9.8): a top
@@ -396,12 +466,7 @@ export function drawMachine(p: Painter, s: MachineScene): void {
   // the panel: a bar across the top of the face with the display, the keys, the power light, the button
   rect(73, 104, 167, 105, 'K');
   panel(78, 92, 106, 103, m.power ? 'i' : 'G');
-  if (m.power) {
-    const k: PalKey = m.angry ? 'Q' : 'n';
-    rect(80, 94, 96, 95, k);
-    rect(80, 97, 102, 98, k);
-    rect(80, 100, 90, 101, k);
-  }
+  if (m.power) drawScreen(set, rect, m, s.damage);
   for (let i = 0; i < 4; i++) panel(112 + i * 6, 95, 116 + i * 6, 99, m.power ? 'w' : 'T');
   rect(112, 101, 114, 103, s.ledRed ? 'R' : 'K');
   // the button: green while the room is quiet, red once the machine is angry, bright for a blink
@@ -539,12 +604,13 @@ function drawMachineBack(p: Pix, s: MachineScene): void {
 const MACHINE_SPRITE: Sprite = (() => {
   const lp = new LetterPix(MACHINE_AT.x0, MACHINE_AT.y0, MACHINE_AT.x1 - MACHINE_AT.x0, MACHINE_AT.y1 - MACHINE_AT.y0);
   drawMachine(lp, {
-    machine: { lid: 0, lamp: null, lampOut: false, flash: false, power: true, angry: true, back: 0 },
+    machine: { lid: 0, lamp: null, lampOut: false, flash: false, power: true, angry: true, back: 0, t: 0 },
     shake: { x: 0, y: 0 },
     flashWhite: false,
     ledRed: true,
     buttonBright: false,
     trayPage: false,
+    damage: 0,
   });
   return lp.sprite();
 })();
