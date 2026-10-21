@@ -56,6 +56,8 @@ export default function App() {
   const [showPrintReminder, setShowPrintReminder] = useState(false);
   const [printImages, setPrintImages] = useState<string[]>([]);
   const [busy, setBusy] = useState<'print' | 'download' | null>(null);
+  // A print or download that failed (not one stopped by a new document).
+  const [exportError, setExportError] = useState<ErrorCode | null>(null);
   const [dragging, setDragging] = useState(false);
   const [, setPagesVersion] = useState(0);
   const [prntrStage, setPrntrStage] = useState(0);
@@ -192,6 +194,7 @@ export default function App() {
     setPrintImages([]);
     setHolding(false);
     setBusy(null);
+    setExportError(null);
     setFileName(name);
     if (exportAs) setFormat(exportAs);
     setCurrentPage(0);
@@ -353,6 +356,7 @@ export default function App() {
     if (busy) return;
     const token = runToken.current;
     setShowPrintReminder(true);
+    setExportError(null);
     setBusy('print');
     try {
       const canvases = await collectAllRecolored(token);
@@ -362,7 +366,9 @@ export default function App() {
       if (token !== runToken.current) return;
       window.print();
     } catch (err) {
-      if (!(err instanceof DocumentReplacedError)) throw err;
+      if (token !== runToken.current || err instanceof DocumentReplacedError) return;
+      setShowPrintReminder(false);
+      reportExportError(err);
     } finally {
       // A new document has already reset busy, and may be exporting itself.
       if (token === runToken.current) setBusy(null);
@@ -372,15 +378,24 @@ export default function App() {
   async function handleDownload() {
     if (busy) return;
     const token = runToken.current;
+    setExportError(null);
     setBusy('download');
     try {
       const canvases = await collectAllRecolored(token);
       await exportRecolored(canvases, fileName || 'document', format);
     } catch (err) {
-      if (!(err instanceof DocumentReplacedError)) throw err;
+      if (token !== runToken.current || err instanceof DocumentReplacedError) return;
+      reportExportError(err);
     } finally {
       if (token === runToken.current) setBusy(null);
     }
+  }
+
+  // An encoder out of memory, a canvas too large to export, a chunk that would not load.
+  function reportExportError(err: unknown) {
+    const code = classifyError(err);
+    logAppError(code, err, lastFile.current);
+    setExportError(code);
   }
 
   function handleRetry() {
@@ -431,6 +446,8 @@ export default function App() {
             onPrint={() => void handlePrint()}
             onDownload={() => void handleDownload()}
             busy={busy}
+            exportError={exportError && { code: exportError, kind: KIND_BY_CODE[exportError] }}
+            onDismissExportError={() => setExportError(null)}
             showReminder={showPrintReminder}
             onDismissReminder={() => setShowPrintReminder(false)}
             onOpenPrntr={() => enterPrntr(0)}

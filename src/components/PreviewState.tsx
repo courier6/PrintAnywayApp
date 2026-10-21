@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { t, tPlural, useLocale } from '../i18n';
+import type { ErrorCode } from '../lib/errors';
 import type { ExportFormat } from '../lib/exportFile';
 import type { Ink } from '../lib/inks';
 import { OTHER_TIP, PRINTER_TIPS } from '../lib/printerTips';
 import { PageCanvas } from './PageCanvas';
+import type { ErrorKind } from './ErrorState';
 import { PrintReminder } from './PrintReminder';
 
 interface Props {
@@ -24,6 +26,9 @@ interface Props {
   onPrint: () => void;
   onDownload: () => void;
   busy: 'print' | 'download' | null;
+  /** A failed print or download, shown over the page until dismissed or retried. */
+  exportError: { code: ErrorCode; kind: ErrorKind } | null;
+  onDismissExportError: () => void;
   showReminder: boolean;
   onDismissReminder: () => void;
   onOpenPrntr: () => void;
@@ -47,6 +52,8 @@ export function PreviewState({
   onPrint,
   onDownload,
   busy,
+  exportError,
+  onDismissExportError,
   showReminder,
   onDismissReminder,
   onOpenPrntr,
@@ -134,6 +141,17 @@ export function PreviewState({
       <div className="preview-grid">
         <div className="preview-stage">
           {showReminder && <PrintReminder onDismiss={onDismissReminder} />}
+          {exportError && (
+            <div className="print-reminder export-error" role="alert">
+              <div className="print-reminder-text">
+                <strong>{t(`error.${exportError.kind}.title`)}</strong> {t(`error.${exportError.kind}.body`)}
+                <span className="export-error-code">{t('error.code', { code: exportError.code })}</span>
+              </div>
+              <button className="btn-outline-small" onClick={onDismissExportError}>
+                {t('printReminder.dismiss')}
+              </button>
+            </div>
+          )}
           <span
             className="compare-caption"
             aria-live="polite"
