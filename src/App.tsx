@@ -179,20 +179,31 @@ export default function App() {
     if (file) void handleFile(file);
   }
 
-  async function handleFile(file: File) {
+  // What every new document replaces, a file or the certificate: work still running
+  // for the old one (the token tells it to stop), its parsed file, its print pages.
+  function startDocument(name: string, exportAs: ExportFormat | null): number {
     const token = ++runToken.current;
-    lastFile.current = file;
+    if (idleHandle.current !== null) {
+      cancelIdle(idleHandle.current);
+      idleHandle.current = null;
+    }
+    releaseDocument();
     setShowPrintReminder(false);
     setPrintImages([]);
     setHolding(false);
-    setFileName(file.name);
+    setFileName(name);
+    if (exportAs) setFormat(exportAs);
+    setCurrentPage(0);
+    return token;
+  }
+
+  async function handleFile(file: File) {
+    lastFile.current = file;
     const kind = fileKind(file);
-    if (kind) setFormat(exportFormat(kind));
+    const token = startDocument(file.name, kind && exportFormat(kind));
     setPageCount(0);
     setProcessedCount(0);
-    setCurrentPage(0);
     setAppState('processing');
-    releaseDocument();
     try {
       const doc = await loadDocument(file);
       if (token !== runToken.current) {
@@ -301,14 +312,8 @@ export default function App() {
   // The certificate becomes the loaded document: one page, a PDF to download, recoloured
   // in the chosen ink like any other. A document still processing is dropped.
   function loadCertificate({ id, page }: Certificate) {
-    runToken.current++;
-    releaseDocument();
     lastFile.current = null;
-    setShowPrintReminder(false);
-    setPrintImages([]);
-    setHolding(false);
-    setFileName(`prntr-certificate-${id.slice(-9).replace('-', '')}.pdf`);
-    setFormat('pdf');
+    startDocument(`prntr-certificate-${id.slice(-9).replace('-', '')}.pdf`, 'pdf');
     // the certificate comes up in gold, the secret ink, which stays on offer from here on
     setGoldUnlocked(true);
     setInkIndex(INKS.length);
@@ -318,7 +323,6 @@ export default function App() {
     store.ensureRecolored(0, inkRef.current);
     setPageCount(1);
     setProcessedCount(1);
-    setCurrentPage(0);
     setPagesVersion((v) => v + 1);
     prntrReturn.current = 'preview';
   }
