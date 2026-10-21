@@ -582,7 +582,9 @@ const BACK_PIX = new LetterPix(MACHINE_AT.x0, 40, 104, 112);
 /**
  * The machine standing back: drawn full size into BACK_PIX, then every pixel of that put down
  * at `sc` about the foot line's centre (120, `foot`), each covering the cell it maps onto (at
- * least one px, so the outlines never drop out). Nearest neighbour; the shake applies after.
+ * least one px). Where two source pixels land on one cell a plum outline already there stays
+ * (the outline wins), so the one-pixel lines never drop out. Nearest neighbour; the shake
+ * applies after.
  */
 function drawMachineBack(p: Pix, s: MachineScene): void {
   const { sc, foot } = machineBack(s.machine.back);
@@ -590,6 +592,8 @@ function drawMachineBack(p: Pix, s: MachineScene): void {
   drawMachine(BACK_PIX, { ...s, shake: { x: 0, y: 0 } });
   const cx = 120;
   const { x: ox, y: oy } = s.shake;
+  // which cells this machine has put down so far, and whether with plum (2) or anything else (1)
+  const mine = new Uint8Array(W * H);
   for (let y = 0; y < BACK_PIX.h; y++) {
     const row = BACK_PIX.rows[y];
     const sy = y + 40;
@@ -601,7 +605,15 @@ function drawMachineBack(p: Pix, s: MachineScene): void {
       const sx = x + MACHINE_AT.x0;
       const dx = Math.round(cx + (sx - cx) * sc);
       const w = Math.max(1, Math.round(cx + (sx + 1 - cx) * sc) - dx);
-      p.rect(dx + ox, dy + oy, dx + w + ox, dy + h + oy, k as PalKey);
+      for (let yy = dy + oy; yy < dy + h + oy; yy++) {
+        for (let xx = dx + ox; xx < dx + w + ox; xx++) {
+          if (xx < 0 || yy < 0 || xx >= W || yy >= H) continue;
+          const i = yy * W + xx;
+          if (mine[i] === 2 && k !== 'K') continue;
+          p.set(xx, yy, k as PalKey);
+          mine[i] = k === 'K' ? 2 : 1;
+        }
+      }
     }
   }
 }
