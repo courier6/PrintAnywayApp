@@ -1,7 +1,7 @@
 import { reducedMotion, wait } from '../../anim';
 import type { Handoff, Stage } from '../../types';
 import { H, Pix, W, rotateSprite } from './pixels';
-import { CLOCK_AT, KIT_AT, MACHINE_PIECES, SPR, drawFireFront, drawFlame, drawRoom, drawWindowWreck, fireRect, inDoorway, type Broken, type ExitSign, type Hole, type SceneState } from './scene';
+import { CLOCK_AT, KIT_AT, MACHINE_AT, MACHINE_PIECES, NOZZLES, SPR, drawFireFront, drawFlame, drawRoom, drawWindowWreck, fireRect, inDoorway, lidTop, type Broken, type ExitSign, type Hole, type SceneState } from './scene';
 import { ART_AT, ART_SUB, renderVictory } from './art';
 import { PAL, type PalKey } from './palette';
 import { createRoomSounds, type FireSound, type Hum } from './sounds';
@@ -113,8 +113,8 @@ const HINT_FADE_MS = 500;
 const BLINK_MIN_MS = 4000;
 const BLINK_MAX_MS = 9000;
 const BLINK_FIRST_MS = 1500;
-/** Virtual px of the button on the 3× pose (MFC_MAD row 7, columns 24–26). */
-const BUTTON = { x: 144, y: 101, w: 9, h: 3 };
+/** Virtual px of the button on the panel (scene.ts drawMachine). */
+const BUTTON = { x: 146, y: 93, w: 16, h: 9 };
 /** A hit on the button (± BUTTON_HIT_PAD): more damage than the machine (15, then a quarter more: 19),
  * and the attacks come sooner, the gap × RAGE_STEP per hit, at most RAGE_MAX times. */
 const BUTTON_POINTS = 19;
@@ -151,8 +151,9 @@ const STOKE_STEP = 0.8;
 const STOKE_MAX = 3;
 const STOKE_FLARE_MS = 400;
 /** The mad machine's fourth attack: ink sprayed from behind the machine,
- * cyan, magenta and yellow in turn, never black (it cannot do that). Each jet comes out of a tube
- * that rises from behind the machine's top edge at one of NOZZLES_X: its head
+ * cyan, magenta or yellow, never black (it cannot do that). Each jet comes out of a tube that
+ * rises from behind the machine's top edge out of one of the three ink caps (NOZZLES, scene.ts),
+ * in that cap's colour: its head
  * comes up to TUBE_TOP over TUBE_RISE_MS before the jet starts and sinks back as long after it
  * ends; the tube is drawn behind the machine and the ink, and the first half of a particle's
  * flight behind the machine too. SPRAY_COUNT jets a volley, SPRAY_STAGGER_MS apart; a jet runs
@@ -168,8 +169,8 @@ const SPRAY_MS = 1400;
 const SPRAY_EVERY_MS = 40;
 const SPRAY_FLIGHT_MS = 700;
 const SPRAY_ARC = 24;
-const NOZZLES_X = [96, 108, 120, 132, 144];
-/** The machine's top edge on the 3× pose (MACHINE.y0), the tube's head when it is up, and its mouth. */
+const NOZZLES_X = NOZZLES.map((n) => n.x);
+/** The machine's top edge (MACHINE.y0), the tube's head when it is up, and its mouth. */
 const TUBE_BASE = 80;
 const TUBE_TOP = 72;
 const TUBE_MOUTH = TUBE_TOP + 2;
@@ -181,7 +182,6 @@ const TUBE_POINTS = 5;
 const INK_LANDED_MS = 1500;
 const INK_SLIDE_MS = 1800;
 const INK_DRIPS = 4;
-const INK_COLORS = ['c', 'm', 'y'] as const;
 /** While the fire burns, the last jet of a volley goes at it instead of the player: where it
  * lands the flames go out. The fire loses SNUFF_U of its growth and grows back from there; left
  * with less than SNUFF_OUT, it is out for good. A jet that is stopped does nothing to it. */
@@ -228,9 +228,9 @@ const RAGE_MORE = 0.25;
 const FANFARE_AFTER_MS = 500;
 const WIN_END_MS = 4300;
 
-/** The machine at 3×: the gun's target. */
-const MACHINE = { x0: 72, y0: 80, x1: 168, y1: 146 };
-/** The machine's output slot on the 3× pose (MFC_MAD row 11): pages and staples come out of it. */
+/** The machine: the gun's target. */
+const MACHINE = MACHINE_AT;
+/** The machine's output slot (inside the opening drawMachine draws at 78,107–162,115): pages and staples come out of it. */
 const SLOT = { x0: 84, x1: 153, y: 113 };
 /** The first part of a page's flight is spent rising out of the slot, row by row. */
 const PAGE_EJECT = 0.2;
@@ -239,9 +239,9 @@ const STAPLE_EJECT = 0.15;
 const PAGE_TARGETS_X = [30, 75, 120, 165, 210];
 /** Where each of the five pages comes out, left to right along the slot. */
 const PAGE_ORIGINS_X = [94, 107, 120, 133, 146];
-/** The USB stick on the carpet (USB at 2× at 166,136): its centre, and what finding it says before
+/** The USB stick on the carpet (USB at 2× at 172,136): its centre, and what finding it says before
  * the beat starts USB_PLUG_MS later (the handoff started the fight from the sticker). */
-const USB = { x: 176, y: 141 };
+const USB = { x: 182, y: 141 };
 const USB_CAPTION = 'YOU FOUND A USB. YOU PLUG IT INTO THE PRINTER.';
 const USB_PLUG_MS = 2200;
 /** The first aid kit's hotspot and hit box: its sprite (KIT_AT in scene.ts) plus 3 px. Shot, it gives
@@ -289,8 +289,8 @@ interface Hotspot {
 
 /** Sprite bounds plus 4 virtual px; tested in this order (the tray page before the printer). */
 const HOTSPOTS: Hotspot[] = [
-  { id: 'page', x0: 94, y0: 114, x1: 112, y1: 135, captions: ['A PAGE. BLANK.', 'A PAGE. BLANK.'] },
-  { id: 'printer', x0: 84, y0: 96, x1: 156, y1: 148, captions: ["A PRINTER. IT'S ON.", "IT'S WARM."] },
+  { id: 'page', x0: 84, y0: 108, x1: 156, y1: 116, captions: ['A PAGE. BLANK.', 'A PAGE. BLANK.'] },
+  { id: 'printer', x0: 70, y0: 78, x1: 170, y1: 148, captions: ["A PRINTER. IT'S ON.", "IT'S WARM."] },
   // Too frightening to go through (the handoff had LOCKED. / STILL LOCKED.).
   { id: 'door', x0: 6, y0: 27, x1: 48, y1: 112, captions: ['NOT IN THERE.', "IT KNOWS YOU'RE HERE."] },
   { id: 'poster', ...BOARD_HIT, captions: ['SIMPLE PRODUCTS. WE PRINT.', 'SIMPLE PRODUCTS. WE PRINT.'] },
@@ -335,7 +335,7 @@ interface Spray {
   x: number;
   y: number;
   at: number;
-  color: (typeof INK_COLORS)[number];
+  color: (typeof NOZZLES)[number]['color'];
   /** Aimed at the fire, not the player: landing, it puts out what it touches. */
   fire: boolean;
   /** The nozzle was shot at this moment: the jet stops, what is in the air still lands. */
@@ -541,11 +541,11 @@ export const room: Stage = {
     const cpix = new Pix();
     const scene: SceneState = {
       lights: [true, true],
-      printer: 'idle',
+      printer: 'up',
       ledRed: false,
       trayPage: true,
       usb: true,
-      scanRow: 0,
+      machine: { lid: 0, lamp: null, lampOut: false, flash: false, power: true, angry: false },
       flashWhite: false,
       buttonBright: false,
       broken: { clock: false, poster: false, tank: false, plant: false, vase: false, kit: false },
@@ -854,7 +854,6 @@ export const room: Stage = {
       pages = [];
       sprays = [];
       scanAt = null;
-      scene.scanRow = 0;
       wash.classList.remove('is-on');
       washUntil = 0;
       drawPips();
@@ -894,20 +893,19 @@ export const room: Stage = {
       burstAt = now;
       thrown = MACHINE_PIECES.map((pc, i) => {
         const cx = pc.hx + pc.spr.w / 2;
-        const vx = (cx - 16) * (2.5 + Math.random() * 2) + (Math.random() - 0.5) * 20;
+        const vx = ((cx - 48) / 3) * (2.5 + Math.random() * 2) + (Math.random() - 0.5) * 20;
         const vy = -(50 + Math.random() * 110) - (pc.hy === 0 ? 60 : 0);
         const floor = 146 + 2 + ((i * 5) % 9);
-        const hy = MACHINE.y0 + pc.hy * 3;
-        const h = pc.spr.h * 3;
+        const hy = MACHINE.y0 + pc.hy;
+        const h = pc.spr.h;
         // when its bottom reaches its floor: ½g t² + vy t + (hy + h − floor) = 0
         const land = (-vy + Math.sqrt(vy * vy - 2 * PIECE_GRAVITY * (hy + h - floor))) / PIECE_GRAVITY;
-        return { hx: MACHINE.x0 + pc.hx * 3, hy, vx, vy, floor, land };
+        return { hx: MACHINE.x0 + pc.hx, hy, vx, vy, floor, land };
       });
       staples = [];
       pages = [];
       sprays = [];
       scanAt = null;
-      scene.scanRow = 0;
       scene.shake = { x: 0, y: 0 };
       nextAttackAt = Infinity;
       frame.classList.remove('is-mad');
@@ -926,7 +924,7 @@ export const room: Stage = {
       scene.pieces = thrown.map((q, i) => {
         const pc = MACHINE_PIECES[i];
         const tt = Math.min(t, q.land);
-        return { spr: pc.spr, x: q.hx + q.vx * tt, y: tt >= q.land ? q.floor - pc.spr.h * 3 : q.hy + q.vy * tt + 0.5 * PIECE_GRAVITY * tt * tt };
+        return { spr: pc.spr, x: q.hx + q.vx * tt, y: tt >= q.land ? q.floor - pc.spr.h : q.hy + q.vy * tt + 0.5 * PIECE_GRAVITY * tt * tt };
       });
     };
     // 1337: the machine is beaten. By the gun it bursts apart now; by the fire it already has.
@@ -955,7 +953,6 @@ export const room: Stage = {
       pages = [];
       sprays = [];
       scanAt = null;
-      scene.scanRow = 0;
       wash.classList.remove('is-on');
       washUntil = 0;
       if (lives === 0) {
@@ -1375,7 +1372,6 @@ export const room: Stage = {
           nextAttackAt = now + gap;
           return;
         }
-        const first = Math.floor(Math.random() * INK_COLORS.length);
         for (let i = 0; i < SPRAY_COUNT; i++) {
           // the last jet goes at the fire while it burns: into the middle of the main flame
           const atFire = fireAt !== null && i === SPRAY_COUNT - 1;
@@ -1386,7 +1382,8 @@ export const room: Stage = {
             x = (r.x0 + r.x1) / 2 + (Math.random() - 0.5) * 6;
             y = r.y0 + (r.y1 - r.y0) * 0.6 + (Math.random() - 0.5) * 8;
           }
-          sprays.push({ nx: nozzles[Math.floor(Math.random() * nozzles.length)], x, y, at: now + TUBE_RISE_MS + i * SPRAY_STAGGER_MS, color: INK_COLORS[(first + i) % INK_COLORS.length], fire: atFire, stoppedAt: null, done: false, fed: false });
+          const nx = nozzles[Math.floor(Math.random() * nozzles.length)];
+          sprays.push({ nx, x, y, at: now + TUBE_RISE_MS + i * SPRAY_STAGGER_MS, color: NOZZLES.find((n) => n.x === nx)!.color, fire: atFire, stoppedAt: null, done: false, fed: false });
         }
         nextAttackAt = now + TUBE_RISE_MS + (SPRAY_COUNT - 1) * SPRAY_STAGGER_MS + SPRAY_MS + SPRAY_FLIGHT_MS + gap;
       } else if (kind === 'scan') {
@@ -1593,14 +1590,25 @@ export const room: Stage = {
       [
         1100,
         () => {
-          scene.printer = 'lid';
+          scene.machine.lid = 1;
           sounds.lidOpen();
         },
       ],
-      // The machine comes forward: 2× one step closer, then 3× (a cut under reduced motion).
-      [1300, () => (scene.printer = reduced ? 'mad' : 'between')],
-      [1600, () => (scene.printer = 'mad')],
-      [1900, () => startFight(performance.now())],
+      [
+        1600,
+        () => {
+          scene.machine.lid = 0;
+          sounds.lidShut();
+        },
+      ],
+      [
+        1900,
+        () => {
+          scene.machine.angry = true;
+          scene.trayPage = false;
+          startFight(performance.now());
+        },
+      ],
     ];
     // The end: the machine in pieces, the fire (if there is one) raging on in
     // the dark room, the HUD gone, the tune; then out, WIN_END_MS after the burst. The lights stay
@@ -1721,11 +1729,13 @@ export const room: Stage = {
           scheduleBlink(now, BLINK_MIN_MS);
         }
         if (scanAt !== null) {
-          // The bar sweeps the lid in 4 steps, then one inverted frame and the white wash.
+          // The lid up, the lamp across the glass, then one inverted frame and the white wash.
           const st = now - scanAt;
-          scene.scanRow = st < 150 ? 0 : st < 300 ? 5 : st < 450 ? 6 : st < SCAN_MS ? 7 : 0;
+          scene.machine.lid = 1;
+          scene.machine.lamp = st < SCAN_MS ? st / SCAN_MS : null;
           if (st >= SCAN_MS) {
             scanAt = null;
+            scene.machine.lid = 0;
             if (!reduced) invertFrame = true;
             wash.classList.add('is-on');
             washUntil = now + WASH_MS;
@@ -1882,11 +1892,11 @@ export const room: Stage = {
       scene.flashWhite = flashFrames > 0;
       scene.damage = score / HI;
       if (flashFrames > 0) flashFrames--;
-      scene.buttonBright = phase === 'fight' && scene.printer === 'mad' && (mad || buttonBright(now));
+      scene.buttonBright = phase === 'fight' && scene.printer === 'up' && (mad || buttonBright(now));
       if (scene.printer === 'wreck') posePieces(now);
       // The tremble: a new offset of ±1 px every few frames while the mad machine fights.
       frameCount++;
-      if (mad && phase === 'fight' && scene.printer === 'mad' && frozenAt === null && !reduced) {
+      if (mad && phase === 'fight' && scene.printer === 'up' && frozenAt === null && !reduced) {
         if (frameCount % SHAKE_FRAMES === 0) scene.shake = { x: Math.floor(Math.random() * 3) - 1, y: -Math.floor(Math.random() * 2) };
       } else {
         scene.shake = { x: 0, y: 0 };
@@ -2001,6 +2011,11 @@ export const room: Stage = {
       art.classList.toggle('is-inverted', invertFrame);
       front.classList.toggle('is-inverted', invertFrame);
       invertFrame = false;
+      // The print's canvas sits over the room: the standing lid rises in front of it, so the print
+      // is clipped to the rows above the lid's top, and the flash whites it over.
+      const m = scene.machine;
+      const covered = m.lid < 0.05 ? 0 : m.flash ? ART_AT.h : Math.max(0, ART_AT.y + ART_AT.h - (lidTop(m.lid) + scene.shake.y));
+      art.style.clipPath = covered > 0 ? `inset(0 0 ${covered * scale}px 0)` : '';
     };
 
     // ---- loop and exit ----------------------------------------------------

@@ -3,8 +3,6 @@ import { SPRITES, type PalKey } from './palette';
 import { H, Pix, W, parseSprite, rotateSprite, sliceRect, sliceRows, type Sprite } from './pixels';
 
 export const SPR = {
-  MFC: parseSprite(SPRITES.MFC),
-  MFC_MAD: parseSprite(SPRITES.MFC_MAD),
   INFO: parseSprite(SPRITES.INFO),
   USB: parseSprite(SPRITES.USB),
   POINTER: parseSprite(SPRITES.POINTER),
@@ -87,34 +85,53 @@ export interface ExitSign {
   lit: boolean;
 }
 
-/**
- * idle: closed, 2× at 88,100. lid: lid up, still 2× at 88,100 (1.1 s into the sticker
- * beat). between: lid up, 2× at 80,90 (the first of the two steps forward).
- * mad: 3× at 72,80. wreck: burst into `pieces`, engulfed.
- */
-export type PrinterPose = 'idle' | 'lid' | 'between' | 'mad' | 'wreck';
+/** `up`: standing where it stands, drawn by `drawMachine`. `wreck`: burst into `pieces`. */
+export type PrinterPose = 'up' | 'wreck';
 
-/** A piece of the burst machine: its part of MFC_MAD and where it is now, drawn at 3×. */
+/** A piece of the burst machine: its part of the machine's drawing and where it is now. */
 export interface Piece {
   spr: Sprite;
   x: number;
   y: number;
 }
 
-/** MFC_MAD cut into eight: the lid, the panel in two, the body in three above and two below, with
- * each part's home offset in sprite px (the machine's 3× pose puts the sprite at 72,80). */
-export const MACHINE_PIECES: { spr: Sprite; hx: number; hy: number }[] = (
-  [
-    [0, 0, 32, 3],
-    [0, 3, 16, 9],
-    [16, 3, 32, 9],
-    [0, 9, 11, 16],
-    [11, 9, 22, 16],
-    [22, 9, 32, 16],
-    [0, 16, 16, 22],
-    [16, 16, 32, 22],
-  ] as const
-).map(([x0, y0, x1, y1]) => ({ spr: sliceRect(SPR.MFC_MAD, x0, y0, x1, y1), hx: x0, hy: y0 }));
+/** Where a machine is drawn: the frame buffer, or a letter buffer for the pieces. */
+export interface Painter {
+  set(x: number, y: number, key: PalKey): void;
+  rect(x0: number, y0: number, x1: number, y1: number, key: PalKey): void;
+}
+
+/** The machine this frame: its lid, its lamp, its panel. */
+export interface Machine {
+  /** The lid on its back hinge: 0 shut … 1 standing. */
+  lid: number;
+  /** The lamp's place along the glass, 0 (left) … 1 (right); null = off. */
+  lamp: number | null;
+  /** The bulb has been shot: the lamp is dead where it stopped. */
+  lampOut: boolean;
+  /** The flash: the glass and the lid white, light over the lid onto the wall. */
+  flash: boolean;
+  /** The panel is on: the display dark with text, the keys white (off: grey, blank). */
+  power: boolean;
+  /** The display's text red (from the wake-up on) instead of green. */
+  angry: boolean;
+}
+
+/** The machine: 96 wide at x 72, its top edge (the lid's hinge) at y 80, its feet on 146. */
+export const MACHINE_AT = { x0: 72, y0: 80, x1: 168, y1: 146 };
+/** The glass under the lid, and the standing lid's height. */
+export const GLASS = { x0: 80, y0: 82, x1: 160, y1: 88 };
+const LID_H = 24;
+/** The top row of the standing lid at `lid` open (its hinge is the top edge, 80): it rises in front of the print. */
+export const lidTop = (lid: number): number => MACHINE_AT.y0 - Math.round(LID_H * Math.sin((lid * Math.PI) / 2));
+/** The lamp's left edge at u along the glass: 82 to 156, 3 px wide with a 2 px halo each side. */
+export const lampX = (u: number): number => Math.round(82 + 74 * u);
+/** The ink reservoirs on the back ledge, by their nozzle's x: the tubes rise from them, in their colour. */
+export const NOZZLES: { x: number; color: 'c' | 'm' | 'y' }[] = [
+  { x: 108, color: 'c' },
+  { x: 120, color: 'm' },
+  { x: 132, color: 'y' },
+];
 
 /** An ink particle on the far half of its flight, drawn behind the machine. */
 export interface InkDot {
@@ -153,11 +170,11 @@ export interface SceneState {
   trayPage: boolean;
   /** The USB stick still on the carpet (it starts the fight). */
   usb: boolean;
-  /** 0 = at rest; 5, 6, 7 = the scan bar's sprite row during the sweep (mad only). */
-  scanRow: 0 | 5 | 6 | 7;
+  /** The machine's lid, lamp and panel this frame (`printer === 'up'`). */
+  machine: Machine;
   /** The machine drawn all white (the hit flash). */
   flashWhite: boolean;
-  /** The red button on the open machine's panel, lit bright for a blink (mad only). */
+  /** The red button on the panel, lit bright for a blink. */
   buttonBright: boolean;
   broken: Broken;
   clock: Clock;
@@ -165,7 +182,7 @@ export interface SceneState {
   /** How wide the door stands open on black, in px: ajar at 6; once the sign is down it swings in. */
   doorGap: number;
   fire: Fire | null;
-  /** The mad machine's tremble: the 3× pose drawn this far off its place. */
+  /** The mad machine's tremble: it is drawn this far off its place. */
   shake: { x: number; y: number };
   /** The ink in the air behind the machine this frame: the jets come up from behind it. */
   inkBehind: InkDot[];
@@ -333,6 +350,180 @@ function drawWear(p: Pix, x: number, y: number, damage: number, wall: PalKey): v
   }
 }
 
+/** What `drawMachine` reads of the scene. */
+export type MachineScene = Pick<SceneState, 'machine' | 'shake' | 'flashWhite' | 'ledRed' | 'buttonBright' | 'trayPage'>;
+
+/**
+ * The machine at the room's resolution (the sheet's pick, PRNTR-FIGHT-DESIGN.md §9.8): a top
+ * surface with the glass under a lid on its back hinge, the panel with the display, the keys,
+ * the power light and the button, the output opening, two drawers, three ink caps on the back
+ * ledge. The lid stands up for a scan; the lamp sweeps the glass and lights the lid's
+ * underside; the flash whites the top and throws light over the lid. Shifted by `shake`; all
+ * white for the hit flash.
+ */
+export function drawMachine(p: Painter, s: MachineScene): void {
+  const { x: ox, y: oy } = s.shake;
+  const m = s.machine;
+  const q: Painter = s.flashWhite ? { set: (x, y) => p.set(x, y, 'W'), rect: (x0, y0, x1, y1) => p.rect(x0, y0, x1, y1, 'W') } : p;
+  const set = (x: number, y: number, k: PalKey) => q.set(x + ox, y + oy, k);
+  const rect = (x0: number, y0: number, x1: number, y1: number, k: PalKey) => q.rect(x0 + ox, y0 + oy, x1 + ox, y1 + oy, k);
+  const box = (x0: number, y0: number, x1: number, y1: number, k: PalKey) => {
+    rect(x0, y0, x1, y0 + 1, k);
+    rect(x0, y1 - 1, x1, y1, k);
+    rect(x0, y0, x0 + 1, y1, k);
+    rect(x1 - 1, y0, x1, y1, k);
+  };
+  const panel = (x0: number, y0: number, x1: number, y1: number, fill: PalKey) => {
+    rect(x0, y0, x1, y1, fill);
+    box(x0, y0, x1, y1, 'K');
+  };
+  const dither = (x0: number, y0: number, x1: number, y1: number, k: PalKey, phase: number) => {
+    for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) if (((x + y + phase) & 1) === 0) set(x, y, k);
+  };
+  // the shadow on the carpet (the window is the light), the feet
+  p.rect(84 + ox, 146 + oy, 176 + ox, 152 + oy, 'X');
+  rect(74, 143, 82, 146, 'K');
+  rect(158, 143, 166, 146, 'K');
+  // the front face, and the top surface we look slightly down on
+  panel(72, 89, 168, 143, 'b');
+  panel(72, 80, 168, 90, 'd');
+  // the panel: a bar across the top of the face with the display, the keys, the power light, the button
+  rect(73, 104, 167, 105, 'K');
+  panel(78, 92, 106, 103, m.power ? 'i' : 'G');
+  if (m.power) {
+    const k: PalKey = m.angry ? 'Q' : 'n';
+    rect(80, 94, 96, 95, k);
+    rect(80, 97, 102, 98, k);
+    rect(80, 100, 90, 101, k);
+  }
+  for (let i = 0; i < 4; i++) panel(112 + i * 6, 95, 116 + i * 6, 99, m.power ? 'w' : 'T');
+  rect(112, 101, 114, 103, s.ledRed ? 'R' : 'K');
+  panel(146, 93, 162, 102, s.buttonBright ? 'Q' : 'R');
+  if (s.buttonBright) rect(148, 94, 160, 95, 'W');
+  // the output: a dark opening under the panel, the page in it while there is one
+  panel(78, 107, 162, 115, 'G');
+  if (s.trayPage) rect(86, 110, 154, 114, 'w');
+  // two drawers with handles, and the side seams
+  for (const dy of [119, 129]) {
+    panel(76, dy, 164, dy + 8, 'b');
+    rect(78, dy + 1, 162, dy + 2, 'w');
+    rect(110, dy + 4, 130, dy + 6, 'K');
+  }
+  rect(73, 90, 74, 143, 'd');
+  rect(166, 90, 167, 143, 'g');
+  // the ink caps on the back ledge; the shut lid covers their lower rows
+  for (const n of NOZZLES) panel(n.x - 3, 77, n.x + 3, 81, n.color);
+  if (m.lid < 0.05) {
+    // shut: a lighter slab on the top with a rim and the handle on its front edge
+    panel(76, 80, 164, 90, 'T');
+    rect(78, 81, 162, 82, 'w');
+    rect(114, 87, 126, 89, 'K');
+    rect(115, 87, 125, 88, 'g');
+    return;
+  }
+  // open: the glass, lit while the lamp is on; the lid standing up behind it, its pad showing
+  const lit = m.lamp !== null && !m.lampOut;
+  rect(GLASS.x0, GLASS.y0, GLASS.x1, GLASS.y1, m.flash ? 'W' : lit ? 'L' : 'l');
+  box(79, 81, 161, 89, 'K');
+  const ly0 = lidTop(m.lid);
+  const h = 80 - ly0;
+  if (h > 2) {
+    panel(76, ly0, 164, 81, m.flash ? 'W' : 'T');
+    rect(79, ly0 + 2, 161, 79, m.flash ? 'W' : 'd');
+    // the handle, now on the standing lid's top edge; the hinges at its foot
+    rect(114, ly0 - 2, 126, ly0 + 1, 'K');
+    rect(115, ly0 - 2, 125, ly0 - 1, 'g');
+    rect(78, 80, 82, 82, 'K');
+    rect(158, 80, 162, 82, 'K');
+  }
+  if (m.lamp !== null && !m.flash) {
+    const hx = lampX(m.lamp);
+    if (m.lampOut) rect(hx, GLASS.y0, hx + 3, GLASS.y1, 'G');
+    else {
+      // the lamp: a white band with a cyan halo, its light in a cone up the lid's pad
+      rect(hx, GLASS.y0, hx + 3, GLASS.y1, 'W');
+      rect(Math.max(GLASS.x0, hx - 2), GLASS.y0, hx, GLASS.y1, 'c');
+      rect(hx + 3, GLASS.y0, Math.min(GLASS.x1, hx + 5), GLASS.y1, 'c');
+      if (h > 2) {
+        for (let y = 79; y > ly0 + 1; y--) {
+          const sp = Math.round((81 - y) * 0.9) + 2;
+          dither(Math.max(79, hx - sp), y, Math.min(161, hx + 3 + sp), y + 1, 'L', y);
+          rect(Math.max(79, hx - Math.round(sp / 3)), y, Math.min(161, hx + 3 + Math.round(sp / 3)), y + 1, 'L');
+        }
+        rect(hx, ly0 + 2, hx + 3, 79, 'W');
+      }
+      // the light leaking out to the sides, onto the top's corners
+      dither(73, 81, 79, 89, 'L', 0);
+      dither(161, 81, 167, 89, 'L', 1);
+    }
+  }
+  if (m.flash) {
+    // the flash: the whole top white, light over the top of the lid onto the wall and the ceiling
+    rect(73, 81, 167, 89, 'W');
+    for (let y = ly0 - 1; y > ly0 - 26; y--) {
+      const sp = Math.round((ly0 - y) * 1.2);
+      dither(80 - sp, y, 160 + sp, y + 1, 'W', y);
+    }
+    for (let y = ly0 - 1; y > ly0 - 12; y--) {
+      const sp = Math.round((ly0 - y) * 0.5);
+      rect(88 - sp, y, 152 + sp, y + 1, 'W');
+    }
+  }
+}
+
+/** A letter buffer the machine is drawn into once, for its pieces: the body's 96×66 at 72,80. */
+class LetterPix implements Painter {
+  readonly rows: string[][];
+  constructor(
+    private readonly ox: number,
+    private readonly oy: number,
+    readonly w: number,
+    readonly h: number,
+  ) {
+    this.rows = Array.from({ length: h }, () => new Array<string>(w).fill('.'));
+  }
+  set(x: number, y: number, key: PalKey): void {
+    const px = x - this.ox;
+    const py = y - this.oy;
+    if (px >= 0 && py >= 0 && px < this.w && py < this.h) this.rows[py][px] = key;
+  }
+  rect(x0: number, y0: number, x1: number, y1: number, key: PalKey): void {
+    for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) this.set(x, y, key);
+  }
+  sprite(): Sprite {
+    return { w: this.w, h: this.h, rows: this.rows.map((r) => r.join('')) };
+  }
+}
+
+/** The machine as it is drawn in the fight, shut and angry, as a sprite: what bursts. */
+const MACHINE_SPRITE: Sprite = (() => {
+  const lp = new LetterPix(MACHINE_AT.x0, MACHINE_AT.y0, MACHINE_AT.x1 - MACHINE_AT.x0, MACHINE_AT.y1 - MACHINE_AT.y0);
+  drawMachine(lp, {
+    machine: { lid: 0, lamp: null, lampOut: false, flash: false, power: true, angry: true },
+    shake: { x: 0, y: 0 },
+    flashWhite: false,
+    ledRed: true,
+    buttonBright: false,
+    trayPage: false,
+  });
+  return lp.sprite();
+})();
+
+/** The machine cut into eight: the top with the lid, the panel in two, the body in three above
+ * and two below, with each part's home offset in px from the machine's corner (72,80). */
+export const MACHINE_PIECES: { spr: Sprite; hx: number; hy: number }[] = (
+  [
+    [0, 0, 96, 10],
+    [0, 10, 48, 27],
+    [48, 10, 96, 27],
+    [0, 27, 33, 48],
+    [33, 27, 66, 48],
+    [66, 27, 96, 48],
+    [0, 48, 48, 66],
+    [48, 48, 96, 66],
+  ] as const
+).map(([x0, y0, x1, y1]) => ({ spr: sliceRect(MACHINE_SPRITE, x0, y0, x1, y1), hx: x0, hy: y0 }));
+
 /** A wall hole is a dark cross; a door or blind hole goes through to the black behind. */
 function drawHoles(p: Pix, s: SceneState): void {
   for (const h of s.holes) {
@@ -460,37 +651,16 @@ export function drawRoom(p: Pix, s: SceneState): void {
   // the ink sprayed from behind the machine, where it is still behind it
   for (const d of s.inkBehind) p.rect(d.x, d.y, d.x + d.size, d.y + d.size, d.color);
   // the printer; its shadow falls the other way. Nothing points it out.
-  const white = s.flashWhite;
-  switch (s.printer) {
-    case 'wreck':
-      // the burst machine: its pieces in the air and on the floor, the fire raging where it stood
-      for (const pc of s.pieces) p.blit(Math.round(pc.x), Math.round(pc.y), pc.spr, 3);
-      break;
-    case 'mad': {
-      const { x, y } = s.shake;
-      p.rect(84 + x, 146 + y, 176 + x, 152 + y, 'X');
-      p.blit(72 + x, 80 + y, SPR.MFC_MAD, 3, { white, remap: s.buttonBright ? { R: 'Q' } : undefined });
-      if (s.scanRow && !white) p.rect(72 + x + 3 * 2, 80 + y + 3 * s.scanRow, 72 + x + 3 * 23, 80 + y + 3 * (s.scanRow + 1), 'c');
-      if (!white) drawWear(p, 72 + x, 80 + y, s.damage, s.lights[1] ? 'A' : 'a');
-      break;
-    }
-    case 'between':
-      p.rect(90, 144, 168, 149, 'X');
-      p.blit(80, 90, SPR.MFC_MAD, 2, { white });
-      break;
-    case 'lid':
-      p.rect(96, 142, 160, 146, 'X');
-      p.blit(88, 100, SPR.MFC_MAD, 2);
-      break;
-    default:
-      p.rect(96, 142, 160, 146, 'X');
-      p.blit(88, 100, SPR.MFC, 2, s.ledRed ? { remap: { n: 'R' } } : {});
+  if (s.printer === 'wreck') {
+    // the burst machine: its pieces in the air and on the floor, the fire raging where it stood
+    for (const pc of s.pieces) p.blit(Math.round(pc.x), Math.round(pc.y), pc.spr);
+  } else {
+    drawMachine(p, s);
+    if (!s.flashWhite) drawWear(p, MACHINE_AT.x0 + s.shake.x, MACHINE_AT.y0 + s.shake.y, s.damage, s.lights[1] ? 'A' : 'a');
   }
-  // the tray page exists only while the machine is at 2× in place
-  if ((s.printer === 'idle' || s.printer === 'lid') && s.trayPage) p.blit(98, 118, SPR.PAGE_SMALL);
   // the USB stick on the carpet, right of the machine, with its shadow
   if (s.usb) {
-    p.rect(168, 146, 184, 148, 'X');
-    p.blit(166, 136, SPR.USB, 2);
+    p.rect(174, 146, 190, 148, 'X');
+    p.blit(172, 136, SPR.USB, 2);
   }
 }

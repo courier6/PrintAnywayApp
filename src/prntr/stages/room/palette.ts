@@ -19,59 +19,9 @@ export type PalKey = keyof typeof PAL;
  * Verbatim from prntr/design/stage1/art/sprites.txt, except PAGE_PRINTED and the
  * broken things (CLOCK_BROKEN, POSTER_TORN, TANK_BROKEN, PLANT_BARE, POT_BROKEN,
  * EXIT_BROKEN), SPLAT, the ink on the glass (drawn in c, remapped to m or y), and TUBE_HEAD.
- * Scale by whole numbers only.
+ * The machine is drawn, not a sprite (scene.ts drawMachine). Scale by whole numbers only.
  */
 export const SPRITES = {
-  // 32 × 22
-  MFC: `
-..KKKKKKKKKKKKKKKKKKKKKKKKKKKK..
-..KddddddddddddddddddddddddddK..
-..KKKKKKKKKKKKKKKKKKKKKKKKKKKK..
-.KbbbbbbbbbbbbbbbbbbbbbbbbbbbbK.
-.KbbbbbbbbbbbbbbbbbbbbbbbbbbbbK.
-.KbbbbbbbbbbbbbbbbbbbbbbbbbbbbK.
-.KbbbbbbbbbbbbbbbbbbbbbKKKKKbbK.
-.KbbbbbbbbbbbbbbbbbbbbbKnKKKbbK.
-.KKKKKKKKKKKKKKKKKKKKKKKKKKKKKK.
-.KggggggggggggggggggggggggggggK.
-.KgKKKKKKKKKKKKKKKKKKKKKKKKKgK..
-.KgKwwwwwwwwwwwwwwwwwwwwwwwKgK..
-.KggKKKKKKKKKKKKKKKKKKKKKKggggK.
-.KggKddddddddddddddddddddKggggK.
-.KggKKKKKKKKKKKKKKKKKKKKKKggggK.
-.KggggggggggggggggggggggggggggK.
-.KggKKKKKKKKKKKKKKKKKKKKKKggggK.
-.KggKddddddddddddddddddddKggggK.
-.KggKKKKKKKKKKKKKKKKKKKKKKggggK.
-.KggggggggggggggggggggggggggggK.
-.KKKKKKKKKKKKKKKKKKKKKKKKKKKKKK.
-..KKK......................KKK..
-`,
-  // 32 × 22
-  MFC_MAD: `
-..KKKKKKKKKKKKKKKKKKKKKKKKKKKK..
-.KddddddddddddddddddddddddddddK.
-.KKKKKKKKKKKKKKKKKKKKKKKKKKKKKK.
-.KWWWWWWWWWWWWWWWWWWWWWWWWWWWWK.
-.KccccccccccccccccccccccccccccK.
-.KbbbbbbbbbbbbbbbbbbbbbbbbbbbbK.
-.KbbbbbbbbbbbbbbbbbbbbbKKKKKbbK.
-.KbbbbbbbbbbbbbbbbbbbbbKRRRKbbK.
-.KKKKKKKKKKKKKKKKKKKKKKKKKKKKKK.
-.KggggggggggggggggggggggggggggK.
-.KgKKKKKKKKKKKKKKKKKKKKKKKKKgK..
-.KgKzzzzzzzzzzzzzzzzzzzzzzzKgK..
-.KggKKKKKKKKKKKKKKKKKKKKKKggggK.
-.KggKddddddddddddddddddddKggggK.
-.KggKKKKKKKKKKKKKKKKKKKKKKggggK.
-.KggggggggggggggggggggggggggggK.
-.KggKKKKKKKKKKKKKKKKKKKKKKggggK.
-.KggKddddddddddddddddddddKggggK.
-.KggKKKKKKKKKKKKKKKKKKKKKKggggK.
-.KggggggggggggggggggggggggggggK.
-.KKKKKKKKKKKKKKKKKKKKKKKKKKKKKK.
-..KKK......................KKK..
-`,
   // 5 × 5 (the handoff's sticker; no longer drawn: the fight starts from the USB stick)
   INFO: `
 .ccc.
