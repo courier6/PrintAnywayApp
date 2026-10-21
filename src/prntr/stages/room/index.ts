@@ -918,6 +918,8 @@ export const room: Stage = {
     // Under reduced motion the rough name is broken once and stays so, and the worn one is plain.
     const poseName = (now: number) => {
       if (lifeName.hidden) return;
+      // Torn by the slam's ripple (PRNTR-SLAM.md §4.4): its broken letters stand until the tear lets go.
+      if (lifeName.classList.contains('is-torn') || lifeName.classList.contains('is-dropped')) return;
       const rough = lifeName.classList.contains('is-rough');
       const worn = lifeName.classList.contains('is-worn');
       if (!rough && !worn) {
