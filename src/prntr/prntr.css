@@ -628,6 +628,22 @@
   background: radial-gradient(ellipse closest-side, rgba(255, 90, 60, 0.5) 0%, rgba(255, 90, 60, 0.46) 40%, rgba(184, 20, 10, 0.42) 60%, rgba(184, 20, 10, 0) 100%);
 }
 
+/* The red lights (RED_LIGHTS_FROM in the stage): the panels the mad machine's shaking has brought back, red, throw
+   their light over the room from the ceiling down, in and out with .is-red-lit on the frame. Over the room's
+   layers and under the front one, so what the machine throws keeps its colours. */
+.prntr-room-red-light {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to bottom, rgba(255, 42, 26, 0.34) 0%, rgba(255, 42, 26, 0.14) 40%, rgba(184, 20, 10, 0.2) 100%);
+  opacity: 0;
+  transition: opacity 400ms ease-out;
+  pointer-events: none;
+}
+
+.prntr-room-frame.is-red-lit .prntr-room-red-light {
+  opacity: 1;
+}
+
 /* The flash's white-out: a flat white wash over the room (the Continue dim is .prntr-room-continue);
    the stage sets its opacity each frame, 1 at the flash and fading over 1.2 s, and .is-on marks it on.
    Under the HUD and the cross: the player's side. */

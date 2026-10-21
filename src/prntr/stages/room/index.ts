@@ -406,6 +406,10 @@ const FLICKER_ON_MAX = 220;
 const FLICKER_GAP_MIN = 350;
 const FLICKER_GAP_MAX = 1600;
 const FLICKER_BOTH = 0.2;
+/** From RED_LIGHTS_FROM of the machine's damage (60% of its health or less), while it is mad (its tremble is the
+ * shaking) and the fight is on, the lights come back on red and the room glows red (.is-red-lit, the wash
+ * .prntr-room-red-light); out again when the shaking stops (a freeze, the burst). No flicker meanwhile. */
+const RED_LIGHTS_FROM = 0.4;
 /** The USB stick's hit area in screen px (the handoff's 44 px for the sticker), whatever the scale. */
 const USB_HIT_PX = 44;
 /** How far a thrown thing's glow and the fire's light reach past the sprite, virtual px: the gradient's fade. */
@@ -618,6 +622,8 @@ export const room: Stage = {
     // The inside of the glows of what the machine throws, under the front layer, so its sprites stay crisp
     // over it and the glow has no hollow where a sprite is open (a staple's loop, a burning page's edges).
     const glowFills = el('div', 'prntr-room-glow-fills');
+    // The red lights' wash over the room (under the front layer), faded in by .is-red-lit on the frame.
+    const redLight = el('div', 'prntr-room-red-light');
     for (const n of [light, spill, fireLight, slotLight, holeLights, windowLight, stormWash, wash, glows, glowFills]) n.setAttribute('aria-hidden', 'true');
     const hud = el('div', 'prntr-room-hud');
     const scoreEl = el('div', 'prntr-room-score', 'SCORE 0000');
@@ -678,7 +684,7 @@ export const room: Stage = {
     const deathEl = el('div', 'prntr-room-death');
     deathEl.setAttribute('aria-hidden', 'true');
     deathEl.hidden = true;
-    frame.append(art, canvas, ...(rippleBack ? [rippleBack.canvas] : []), light, spill, fireLight, slotLight, holeLights, windowLight, glowFills, front, ...(rippleFront ? [rippleFront.canvas] : []), stormWash, wash, glows, hud, cursor, hurtEl, deathEl, continueEl, overEl);
+    frame.append(art, canvas, ...(rippleBack ? [rippleBack.canvas] : []), light, spill, fireLight, slotLight, holeLights, windowLight, glowFills, redLight, front, ...(rippleFront ? [rippleFront.canvas] : []), stormWash, wash, glows, hud, cursor, hurtEl, deathEl, continueEl, overEl);
     wrap.append(frame);
     root.append(wrap);
 
@@ -705,6 +711,7 @@ export const room: Stage = {
     const cpix = new Pix();
     const scene: SceneState = {
       lights: [true, true],
+      lightsRed: false,
       printer: 'up',
       ledRed: false,
       trayPage: true,
@@ -2184,6 +2191,7 @@ export const room: Stage = {
         clock: () => ({ ...scene.clock }),
         clockSpin: () => scene.clockSpin,
         lights: () => [...scene.lights],
+        lightsRed: () => scene.lightsRed,
         daze: () => dazeNow(performance.now()),
         fig: () => ({ ...scene.fig, leaves: scene.broken.fig, pot: scene.broken.figPot }),
         wreck: () => scene.printer === 'wreck',
@@ -2668,8 +2676,18 @@ export const room: Stage = {
         spinUntil = now + CLOCK_SPIN_TAIL_MS;
       }
       scene.clockSpin = now < spinUntil ? now - spinFrom : null;
+      // The mad machine's shaking at RED_LIGHTS_FROM of its damage brings the lights back on, red, and the room
+      // with them; they go out again when it stops (a freeze, the burst). The flicker rests meanwhile.
+      const redLit = phase === 'fight' && scene.printer === 'up' && frozenAt === null && mad && scene.damage >= RED_LIGHTS_FROM;
+      if (redLit !== scene.lightsRed) {
+        scene.lightsRed = redLit;
+        scene.lights = [redLit, redLit];
+        flickerOff[0] = flickerOff[1] = null;
+        frame.classList.toggle('is-red-lit', redLit);
+        sounds.lightTick();
+      }
       // The lights flicker back on now and then while the machine is nearly dead.
-      const flickering = phase === 'fight' && scene.printer === 'up' && scene.damage >= FLICKER_FROM && !reduced;
+      const flickering = phase === 'fight' && scene.printer === 'up' && scene.damage >= FLICKER_FROM && !reduced && !redLit;
       // A lit panel goes out on its time, and at once when the flicker is over (the fight phase ended, the machine
       // burst) or the room freezes (a death): a 60–220 ms flash is not held through a freeze.
       for (let i = 0; i < 2; i++) {
