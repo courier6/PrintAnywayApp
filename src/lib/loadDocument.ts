@@ -32,6 +32,21 @@ async function getPdfjs() {
   return pdfjsLib;
 }
 
+// One worker thread for every PDF of the session. Without it each getDocument
+// starts its own worker, which only that document's destroy() would stop.
+type Pdfjs = Awaited<ReturnType<typeof getPdfjs>>;
+let pdfWorker: Promise<{ pdfjsLib: Pdfjs; worker: InstanceType<Pdfjs['PDFWorker']> }> | null = null;
+function getPdfWorker() {
+  if (!pdfWorker) {
+    pdfWorker = getPdfjs().then((pdfjsLib) => ({ pdfjsLib, worker: new pdfjsLib.PDFWorker() }));
+    // A failed chunk load may succeed on the next file.
+    pdfWorker.catch(() => {
+      pdfWorker = null;
+    });
+  }
+  return pdfWorker;
+}
+
 // ~150 DPI: readable in print, fast enough for per-pixel recoloring.
 const RENDER_DPI = 150;
 const MAX_IMAGE_DIM = 3500;
@@ -39,6 +54,8 @@ const MAX_IMAGE_DIM = 3500;
 export interface SourceDocument {
   pageCount: number;
   renderPage(index: number): Promise<HTMLCanvasElement>;
+  /** Frees the parsed document; a render still running rejects. Call when it is replaced. */
+  destroy(): void;
 }
 
 export type FileKind = 'pdf' | 'png' | 'jpg' | 'heic';
@@ -74,11 +91,12 @@ async function decodeHeic(file: File): Promise<Blob> {
 }
 
 async function loadPdf(file: File): Promise<SourceDocument> {
-  const pdfjsLib = await getPdfjs();
+  const { pdfjsLib, worker } = await getPdfWorker();
   const data = await file.arrayBuffer();
   const assets = `${import.meta.env.BASE_URL}${__PDFJS_PATH__}`;
   const pdf = await pdfjsLib.getDocument({
     data,
+    worker,
     // Fetched only when a page needs them: the decoders for scanned images
     // (JBIG2, CCITT, JPEG 2000), CMaps for CJK text, the 14 standard fonts.
     wasmUrl: `${assets}wasm/`,
@@ -100,9 +118,15 @@ async function loadPdf(file: File): Promise<SourceDocument> {
       // PDF pages may not paint their own background; force paper white.
       ctx.fillStyle = '#ffffff';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
-      await page.render({ canvas, canvasContext: ctx, viewport }).promise;
+      try {
+        await page.render({ canvas, canvasContext: ctx, viewport }).promise;
+      } finally {
+        // The canvas holds the result; drop pdf.js's operator list and decoded images.
+        page.cleanup();
+      }
       return canvas;
     },
+    destroy: () => void pdf.destroy(),
   };
 }
 
@@ -126,5 +150,6 @@ async function loadImage(file: Blob): Promise<SourceDocument> {
   return {
     pageCount: 1,
     renderPage: () => Promise.resolve(canvas),
+    destroy: () => undefined,
   };
 }
