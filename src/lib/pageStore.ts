@@ -1,3 +1,4 @@
+import type { PageSize } from './loadDocument';
 import { luminanceMap, recolorToCanvas } from './recolor';
 
 /** What a wait on a page gets when its document is replaced before the page renders. */
@@ -13,6 +14,7 @@ interface PageEntry {
   lum?: Uint8Array;
   width: number;
   height: number;
+  sizePt: PageSize | null;
   recolored?: HTMLCanvasElement;
   recoloredInk?: string;
 }
@@ -31,7 +33,7 @@ export class PageStore {
   /** Starts a new document; anything still waiting on the old one's pages rejects. */
   reset(count: number): void {
     for (const reject of this.readyRejecters) reject(new DocumentReplacedError());
-    this.pages = Array.from({ length: count }, () => ({ width: 0, height: 0 }));
+    this.pages = Array.from({ length: count }, () => ({ width: 0, height: 0, sizePt: null }));
     this.readyResolvers = new Array<() => void>(count);
     this.readyRejecters = new Array<(err: Error) => void>(count);
     this.readyPromises = Array.from({ length: count }, (_, i) => {
@@ -49,10 +51,11 @@ export class PageStore {
     return this.pages.length;
   }
 
-  setSource(index: number, canvas: HTMLCanvasElement): void {
+  setSource(index: number, canvas: HTMLCanvasElement, sizePt: PageSize | null): void {
     const page = this.pages[index];
     if (!page) return;
     page.source = canvas;
+    page.sizePt = sizePt;
     page.width = canvas.width;
     page.height = canvas.height;
     page.lum = luminanceMap(canvas);
@@ -65,6 +68,11 @@ export class PageStore {
 
   getSource(index: number): HTMLCanvasElement | null {
     return this.pages[index]?.source ?? null;
+  }
+
+  /** The page's size in points, when its source had one (a PDF page, the certificate). */
+  getSizePt(index: number): PageSize | null {
+    return this.pages[index]?.sizePt ?? null;
   }
 
   /** Resolves once the page's source render (and luminance cache) exists. */

@@ -13,7 +13,7 @@ import { GOLD_INK, INKS } from './lib/inks';
 import { fileKind, loadDocument, prefetchPdfjs, type SourceDocument } from './lib/loadDocument';
 import { classifyError, logAppError, type ErrorCode } from './lib/errors';
 import { DocumentReplacedError, PageStore } from './lib/pageStore';
-import { exportFormat, exportRecolored, type ExportFormat } from './lib/exportFile';
+import { exportFormat, exportRecolored, type ExportFormat, type ExportPage } from './lib/exportFile';
 
 type AppState = 'empty' | 'processing' | 'preview' | 'error' | 'prntr';
 
@@ -236,9 +236,9 @@ export default function App() {
       store.reset(doc.pageCount);
       setPageCount(doc.pageCount);
       for (let i = 0; i < doc.pageCount; i++) {
-        const source = await doc.renderPage(i);
+        const { canvas, sizePt } = await doc.renderPage(i);
         if (token !== runToken.current) return;
-        store.setSource(i, source);
+        store.setSource(i, canvas, sizePt);
         store.ensureRecolored(i, inkRef.current);
         setProcessedCount(i + 1);
         setPagesVersion((v) => v + 1);
@@ -345,7 +345,7 @@ export default function App() {
     setInkIndex(INKS.length);
     inkRef.current = GOLD_INK.hex;
     store.reset(1);
-    store.setSource(0, page);
+    store.setSource(0, page, { width: 612, height: 792 }); // US Letter
     store.ensureRecolored(0, inkRef.current);
     setPageCount(1);
     setProcessedCount(1);
@@ -361,13 +361,13 @@ export default function App() {
   }, [prntrDrop]);
 
   // Throws DocumentReplacedError once the document it started on is replaced.
-  async function collectAllRecolored(token: number): Promise<HTMLCanvasElement[]> {
-    const out: HTMLCanvasElement[] = [];
+  async function collectAllRecolored(token: number): Promise<ExportPage[]> {
+    const out: ExportPage[] = [];
     for (let i = 0; i < store.pageCount; i++) {
       await store.whenSourceReady(i);
       if (token !== runToken.current) throw new DocumentReplacedError();
       const canvas = store.ensureRecolored(i, inkRef.current);
-      if (canvas) out.push(canvas);
+      if (canvas) out.push({ canvas, sizePt: store.getSizePt(i) });
     }
     return out;
   }
@@ -379,8 +379,8 @@ export default function App() {
     setExportError(null);
     setBusy('print');
     try {
-      const canvases = await collectAllRecolored(token);
-      flushSync(() => setPrintImages(canvases.map((c) => c.toDataURL('image/png'))));
+      const pages = await collectAllRecolored(token);
+      flushSync(() => setPrintImages(pages.map((p) => p.canvas.toDataURL('image/png'))));
       // The dialog snapshots the page: every image must be decoded by then, or it prints blank.
       const images = Array.from(printRoot.current?.querySelectorAll('img') ?? []);
       await Promise.all(images.map((img) => img.decode().catch(() => undefined)));
@@ -402,8 +402,8 @@ export default function App() {
     setExportError(null);
     setBusy('download');
     try {
-      const canvases = await collectAllRecolored(token);
-      await exportRecolored(canvases, fileName || 'document', format);
+      const pages = await collectAllRecolored(token);
+      await exportRecolored(pages, fileName || 'document', format);
     } catch (err) {
       if (token !== runToken.current || err instanceof DocumentReplacedError) return;
       reportExportError(err);

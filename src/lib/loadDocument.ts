@@ -69,9 +69,21 @@ function fitScale(width: number, height: number, want: number): number {
   return Math.min(want, MAX_DIM / Math.max(width, height), Math.sqrt(MAX_PIXELS / (width * height)));
 }
 
+/** A page's size in PDF points (1/72 in). */
+export interface PageSize {
+  width: number;
+  height: number;
+}
+
+export interface RenderedPage {
+  canvas: HTMLCanvasElement;
+  /** The page's own size, for a PDF; null for an image, which has none. */
+  sizePt: PageSize | null;
+}
+
 export interface SourceDocument {
   pageCount: number;
-  renderPage(index: number): Promise<HTMLCanvasElement>;
+  renderPage(index: number): Promise<RenderedPage>;
   /** Frees the parsed document; a render still running rejects. Call when it is replaced. */
   destroy(): void;
 }
@@ -131,7 +143,7 @@ async function loadPdf(file: File): Promise<SourceDocument> {
   }
   return {
     pageCount: pdf.numPages,
-    async renderPage(index: number): Promise<HTMLCanvasElement> {
+    async renderPage(index: number): Promise<RenderedPage> {
       const page = await pdf.getPage(index + 1);
       const natural = page.getViewport({ scale: 1 });
       const viewport = page.getViewport({ scale: fitScale(natural.width, natural.height, RENDER_DPI / 72) });
@@ -149,7 +161,7 @@ async function loadPdf(file: File): Promise<SourceDocument> {
         // The canvas holds the result; drop pdf.js's operator list and decoded images.
         page.cleanup();
       }
-      return canvas;
+      return { canvas, sizePt: { width: natural.width, height: natural.height } };
     },
     destroy: () => void pdf.destroy(),
   };
@@ -174,7 +186,7 @@ async function loadImage(file: Blob): Promise<SourceDocument> {
   bitmap.close();
   return {
     pageCount: 1,
-    renderPage: () => Promise.resolve(canvas),
+    renderPage: () => Promise.resolve({ canvas, sizePt: null }),
     destroy: () => undefined,
   };
 }
