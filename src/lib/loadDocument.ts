@@ -54,7 +54,17 @@ async function decodeHeic(file: File): Promise<Blob> {
 async function loadPdf(file: File): Promise<SourceDocument> {
   const pdfjsLib = await getPdfjs();
   const data = await file.arrayBuffer();
-  const pdf = await pdfjsLib.getDocument({ data }).promise;
+  const assets = `${import.meta.env.BASE_URL}${__PDFJS_PATH__}`;
+  const pdf = await pdfjsLib.getDocument({
+    data,
+    // Fetched only when a page needs them: the decoders for scanned images
+    // (JBIG2, CCITT, JPEG 2000), CMaps for CJK text, the 14 standard fonts.
+    wasmUrl: `${assets}wasm/`,
+    cMapUrl: `${assets}cmaps/`,
+    cMapPacked: true,
+    standardFontDataUrl: `${assets}standard_fonts/`,
+    iccUrl: `${assets}iccs/`,
+  }).promise;
   return {
     pageCount: pdf.numPages,
     async renderPage(index: number): Promise<HTMLCanvasElement> {

@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { cpSync, createReadStream, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { basename, extname, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
@@ -240,6 +240,50 @@ function i18nPlugin(): Plugin {
   };
 }
 
+const PDFJS_DIR = fileURLToPath(new URL('./node_modules/pdfjs-dist/', import.meta.url));
+const PDFJS_VERSION: string = JSON.parse(readFileSync(resolve(PDFJS_DIR, 'package.json'), 'utf8')).version;
+/** Where pdf.js's data is served, versioned so an upgrade never meets a stale cached file. */
+const PDFJS_PATH = `pdfjs/${PDFJS_VERSION}/`;
+/** pdf.js's on-demand data: image decoders (JBIG2, JPEG 2000, ICC), CMaps, standard fonts. */
+const PDFJS_DATA = ['wasm', 'cmaps', 'standard_fonts', 'iccs'];
+/** QuickJS only runs a PDF's own scripts, which the app never enables. */
+const pdfjsFileWanted = (path: string) => !basename(path).startsWith('quickjs-eval');
+const PDFJS_TYPES: Record<string, string> = { '.wasm': 'application/wasm', '.js': 'text/javascript', '.icc': 'application/vnd.iccprofile' };
+
+/**
+ * Serves (dev) and copies (build) pdf.js's data folders to /pdfjs/<version>/, and
+ * tells the app where they are (__PDFJS_PATH__). pdf.js fetches a file only when a
+ * document needs it: a scanned page's JBIG2 or JPEG 2000 image, a CJK font's CMap.
+ */
+function pdfjsData(): Plugin {
+  let outDir = '';
+  let isBuild = false;
+  return {
+    name: 'pdfjs-data',
+    config: () => ({ define: { __PDFJS_PATH__: JSON.stringify(PDFJS_PATH) } }),
+    configResolved(config) {
+      outDir = resolve(config.root, config.build.outDir);
+      isBuild = config.command === 'build';
+    },
+    configureServer(server) {
+      server.middlewares.use(`/${PDFJS_PATH}`, (req, res, next) => {
+        const rel = decodeURIComponent((req.url ?? '').split('?')[0]).replace(/^\/+/, '');
+        const file = resolve(PDFJS_DIR, rel);
+        const top = rel.split('/')[0];
+        if (!PDFJS_DATA.includes(top) || !file.startsWith(PDFJS_DIR + top + sep) || !pdfjsFileWanted(file) || !existsSync(file) || !statSync(file).isFile()) return next();
+        res.setHeader('Content-Type', PDFJS_TYPES[extname(file)] ?? 'application/octet-stream');
+        createReadStream(file).pipe(res);
+      });
+    },
+    closeBundle(error?: Error) {
+      if (!isBuild || error) return;
+      for (const dir of PDFJS_DATA) {
+        cpSync(resolve(PDFJS_DIR, dir), resolve(outDir, PDFJS_PATH, dir), { recursive: true, filter: pdfjsFileWanted });
+      }
+    },
+  };
+}
+
 /** Prntr ships as its own lazy chunk; its dev-only code (entrance, harness hooks) must not ship at all. */
 function prntrGuard(): Plugin {
   let outDir = '';
@@ -271,5 +315,5 @@ function prntrGuard(): Plugin {
 export default defineConfig({
   // Served from https://printanyway.app/
   base: '/',
-  plugins: [i18nPlugin(), prntrGuard(), react()],
+  plugins: [i18nPlugin(), pdfjsData(), prntrGuard(), react()],
 });
