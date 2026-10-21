@@ -29,6 +29,8 @@ export interface RoomSounds {
   uiClick(): void;
   /** A fluorescent tube going off or on. */
   lightTick(): void;
+  /** A tube flickering on for `dur` s: its tick and a 120 Hz buzz. */
+  lightBuzz(dur: number): void;
   lidOpen(): void;
   lidShut(): void;
   /** The machine pouncing forward: a swelling whoosh, then its landing thump at 0.35 s. */
@@ -118,6 +120,7 @@ const SILENT: RoomSounds = {
   printerTick: noop,
   uiClick: noop,
   lightTick: noop,
+  lightBuzz: noop,
   lidOpen: noop,
   lidShut: noop,
   pounce: noop,
@@ -333,6 +336,13 @@ export function createRoomSounds(audio: PrntrAudio): RoomSounds {
       const t = now();
       tone(t, 0.09, { f0: 3200, gain: 0.35, decay: 0.012 });
       noise(t, 0.03, { hp: 2500, gain: 0.3, decay: 0.004 });
+    },
+    // the tick, then a square 120 Hz buzz under high noise for as long as the tube is lit
+    lightBuzz(dur) {
+      const t = now();
+      tone(t, 0.09, { f0: 3200, gain: 0.35, decay: 0.012 });
+      tone(t, dur, { type: 'square', f0: 120, gain: 0.06, attack: 0.01, release: 0.02 });
+      noise(t, dur, { hp: 4000, gain: 0.06 });
     },
     // a rising creak, 0.45 s
     lidOpen() {

@@ -351,6 +351,17 @@ const CLOCK_BURN_SPEED = 28;
 /** While the machine shakes (the pounce and its landing, the mad tremble) the clock's hands spin out of
  * control, and for CLOCK_SPIN_TAIL_MS after; then they are back at 1:37. Still under reduced motion. */
 const CLOCK_SPIN_TAIL_MS = 600;
+/** The lights, out since the pounce, flicker back on at random once the machine has FLICKER_FROM of its
+ * damage (20% of its health or less): one panel at a time (now and then both), on for FLICKER_ON_MIN–
+ * FLICKER_ON_MAX ms with a buzz, then out with a click, the next coming FLICKER_GAP_MIN–FLICKER_GAP_MAX ms
+ * later. Never closer than FLICKER_GAP_MIN, so under three flashes a second. Off under reduced motion,
+ * and off for good once the machine has burst. */
+const FLICKER_FROM = 0.8;
+const FLICKER_ON_MIN = 60;
+const FLICKER_ON_MAX = 220;
+const FLICKER_GAP_MIN = 350;
+const FLICKER_GAP_MAX = 1600;
+const FLICKER_BOTH = 0.2;
 /** The USB stick's hit area in screen px (the handoff's 44 px for the sticker), whatever the scale. */
 const USB_HIT_PX = 44;
 
@@ -733,6 +744,9 @@ export const room: Stage = {
     /** The clock's hands: spinning since spinFrom, until spinUntil. */
     let spinFrom = 0;
     let spinUntil = -Infinity;
+    /** The flicker: when the next panel comes on, and when each lit one goes out (null: out). */
+    let flickerNext = 0;
+    const flickerOff: (number | null)[] = [null, null];
     /** The machine is shorting out from this moment (the water jug broke); the fire takes SHORT_MS later. */
     let shortAt: number | null = null;
     let shortZaps = 0;
@@ -1887,6 +1901,7 @@ export const room: Stage = {
         name: () => lifeName.textContent,
         clock: () => ({ ...scene.clock }),
         clockSpin: () => scene.clockSpin,
+        lights: () => [...scene.lights],
         wreck: () => scene.printer === 'wreck',
         pieces: () => scene.pieces.map((q) => [Math.round(q.x), Math.round(q.y)]),
         windowOpen: () => scene.windowOpen,
@@ -2321,6 +2336,28 @@ export const room: Stage = {
         spinUntil = now + CLOCK_SPIN_TAIL_MS;
       }
       scene.clockSpin = now < spinUntil ? now - spinFrom : null;
+      // The lights flicker back on now and then while the machine is nearly dead.
+      const flickering = phase === 'fight' && scene.printer === 'up' && scene.damage >= FLICKER_FROM && !reduced;
+      if (frozenAt === null) {
+        for (let i = 0; i < 2; i++) {
+          const off = flickerOff[i];
+          if (off !== null && (now >= off || !flickering)) {
+            flickerOff[i] = null;
+            scene.lights[i] = false;
+            sounds.lightTick();
+          }
+        }
+        if (flickering && now >= flickerNext) {
+          const on = FLICKER_ON_MIN + Math.random() * (FLICKER_ON_MAX - FLICKER_ON_MIN);
+          const which = Math.random() < FLICKER_BOTH ? [0, 1] : [Math.floor(Math.random() * 2)];
+          for (const i of which) {
+            scene.lights[i] = true;
+            flickerOff[i] = now + on;
+          }
+          sounds.lightBuzz(on / 1000);
+          flickerNext = now + on + FLICKER_GAP_MIN + Math.random() * (FLICKER_GAP_MAX - FLICKER_GAP_MIN);
+        }
+      }
       // The slot's red light is a DOM box over the canvas: it trembles with the machine.
       slotLight.style.transform = scene.shake.x || scene.shake.y ? `translate(${scene.shake.x * scale}px, ${scene.shake.y * scale}px)` : '';
       // The cross's trail, for the snakes' lagged hunt: the pointer, or on touch the last tap.
