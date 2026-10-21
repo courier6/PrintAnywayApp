@@ -397,7 +397,7 @@ const HOTSPOTS: Hotspot[] = [
 ];
 
 const ROOM_ALT =
-  'A quiet office: drop ceiling with two fluorescent panels, a door shut under an EXIT sign, a clock, a Simple Products board with notes on it by a window with its blind down on a storm outside and a green first aid kit at its lower right, a water cooler, a plant, one large copier in the middle, and a USB stick on the carpet beside it';
+  'A quiet office: an exposed ceiling, a duct along it and two bare tube lights hanging on cords, a door shut under an EXIT sign, a clock, a Simple Products board with notes on it by a window with its blind down on a storm outside and a green first aid kit at its lower right, a water cooler, a plant, one large copier in the middle, and a USB stick on the carpet beside it';
 
 type Phase = 'look' | 'sticker' | 'fight' | 'continue' | 'over' | 'end';
 type AttackKind = 'scan' | 'staples' | 'pages' | 'ink' | 'bolts' | 'black';

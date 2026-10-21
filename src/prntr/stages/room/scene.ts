@@ -869,16 +869,28 @@ function drawHoles(p: Pix, s: SceneState): void {
  */
 export function drawRoom(p: Pix, s: SceneState): void {
   p.fill('A');
-  // ceiling: tiles with a grid, two fluorescent panels, a shadow line under it
-  p.rect(0, 0, W, 28, 'T');
-  for (let x = 0; x < W; x += 24) p.rect(x, 0, x + 1, 28, 't');
-  for (let y = 0; y < 28; y += 9) p.rect(0, y, W, y + 1, 't');
-  p.rect(0, 27, W, 29, 'a');
+  // the ceiling, exposed (the objects sheet's #4): a dark deck with its ribs, a fat duct along it with its
+  // seams, a pipe and a rust-red line under it, a shadow where it meets the wall; the two lights are bare
+  // tube fixtures hanging on two cords each, the tube white when lit (with a glow row under it), grey when out
+  p.rect(0, 0, W, 29, 'B');
+  p.rect(0, 0, W, 3, 'X');
+  for (let x = 0; x < W; x += 12) p.rect(x, 0, x + 1, 3, 'G');
+  p.rect(0, 4, W, 10, 'g');
+  p.rect(0, 4, W, 5, 'e');
+  p.rect(0, 9, W, 10, 'G');
+  for (let x = 30; x < W; x += 40) p.rect(x, 4, x + 1, 10, 'G');
+  p.rect(0, 21, W, 23, 'G');
+  p.rect(0, 21, W, 22, 'x');
+  p.rect(0, 25, W, 26, 'p');
+  p.rect(0, 27, W, 29, 'X');
   [44, 148].forEach((x0, i) => {
     const on = s.lights[i];
-    p.rect(x0, 9, x0 + 48, 18, 't');
-    p.rect(x0 + 1, 10, x0 + 47, 17, on ? 'F' : 'f');
-    if (on) p.rect(x0 + 6, 12, x0 + 42, 15, 'W');
+    line(p, x0 + 8, 0, x0 + 8, 12, 'K');
+    line(p, x0 + 40, 0, x0 + 40, 12, 'K');
+    p.rect(x0 + 2, 12, x0 + 46, 15, 'g');
+    p.rect(x0 + 2, 15, x0 + 46, 16, 'K');
+    p.rect(x0 + 4, 16, x0 + 44, 18, on ? 'W' : 'f');
+    if (on) p.rect(x0 + 4, 18, x0 + 44, 19, 'F');
   });
   // the wall darkens under a tube that is out
   if (!s.lights[0]) p.rect(0, 29, 120, 108, 'a');
