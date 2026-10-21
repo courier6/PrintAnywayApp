@@ -222,32 +222,32 @@ KccccccccccccccK
 ...KKK....KK....
 ..........K.....
 `,
-  // 13 × 10: a first aid kit on the wall by the window (not in sprites.txt):
-  // a white box with a plum outline, its cross and its clasp green instead of red, so it reads as
-  // good; KIT_OPEN is the same box shot open and empty, its lid hanging
+  // 13 × 10: a first aid kit on the wall by the window (not in sprites.txt): a soft green pouch
+  // hanging from a loop, a white cross on it (green, not red: the red cross is a protected emblem), a
+  // grey zip along its top; KIT_OPEN is the same pouch shot open, the zip gaping, hanging empty and limp
   KIT: `
+.....KKK.....
+....K...K....
 .KKKKKKKKKKK.
-KwwwwwnwwwwwK
-KwwwwnnnwwwwK
-KwwnnnnnnnwwK
-KwwnnnnnnnwwK
-KwwwwnnnwwwwK
-KwwwwwnwwwwwK
-KwwwwwwwwwwwK
-KwwwwnnnwwwwK
-.KKKKKKKKKKK.
+KngngngngngnK
+KnnnnnWnnnnnK
+KnnnnWWWnnnnK
+KnnnnnWnnnnnK
+KnnnnnnnnnnnK
+.KnnnnnnnnnK.
+..KKKKKKKKK..
 `,
   KIT_OPEN: `
-KKKKKK.......
-KwwwwwK......
-KwwnwwwK.....
-.KwwwwwK.....
-..KKKKKKKKKK.
-..KdddddddddK
-..KdKKdddKKdK
-..KdddddddddK
-..KdddddddddK
-..KKKKKKKKKKK
+.....KKK.....
+....K...K....
+.KKKKKKKKKKK.
+KiiiiiiiiiiiK
+KngnnnnnnngnK
+.KnnnnWnnnnK.
+.KnnnWWWnnnK.
+..KnnnWnnnK..
+...KnnnnnK...
+....KKKKK....
 `,
   // 6 × 4: the head of an ink tube up from behind the machine; its mouth (c) takes the ink's
   // colour (not in sprites.txt)
