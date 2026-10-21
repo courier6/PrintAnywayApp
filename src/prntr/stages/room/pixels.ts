@@ -89,6 +89,13 @@ export class Pix {
     this.d.fill(0);
   }
 
+  /** A rect made transparent (the hole in the wall the print is seen through). Half-open. */
+  clearRect(x0: number, y0: number, x1: number, y1: number): void {
+    for (let y = Math.max(0, y0); y < Math.min(H, y1); y++) {
+      for (let x = Math.max(0, x0); x < Math.min(W, x1); x++) this.d[(y * W + x) * 4 + 3] = 0;
+    }
+  }
+
   /** Half-open like the designer's Python: x0..x1-1, y0..y1-1. */
   rect(x0: number, y0: number, x1: number, y1: number, key: PalKey): void {
     for (let y = Math.max(0, y0); y < Math.min(H, y1); y++) {

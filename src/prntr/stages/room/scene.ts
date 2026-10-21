@@ -653,6 +653,8 @@ export const MACHINE_PIECES: { spr: Sprite; hx: number; hy: number }[] = (
 function drawHoles(p: Pix, s: SceneState): void {
   for (const h of s.holes) {
     if (h.kind === 'wall') {
+      // through the print: the hole is in the print's own cells (the stage draws it there); the room draws no mark
+      if (h.x >= ART_AT.x && h.x < ART_AT.x + ART_AT.w && h.y >= ART_AT.y && h.y < ART_AT.y + ART_AT.h) continue;
       p.set(h.x - 1, h.y, 'X');
       p.set(h.x + 1, h.y, 'X');
       p.set(h.x, h.y - 1, 'X');
@@ -700,11 +702,12 @@ export function drawRoom(p: Pix, s: SceneState): void {
   const sign = s.exit;
   if (sign.state === 'down') p.blit(Math.round(sign.x), Math.round(sign.y), SPR.EXIT_BROKEN);
   else p.blit(Math.round(sign.x), Math.round(sign.y), SPR.EXIT, 1, { remap: { n: sign.lit ? 'R' : 'G' }, tilt: sign.tilt });
-  // the wall art between the clock and the board: a wooden frame with a pale
-  // mat; the print itself is the stage's art canvas over the rect inside (a plum fallback under it)
+  // the wall art between the clock and the board: a wooden frame with a pale mat around a hole
+  // in the wall; the print itself is the stage's art canvas under the room canvas, seen through
+  // the hole, so everything drawn into the room from here on covers it (PRNTR-PLANNING.md P4)
   p.rect(ART_AT.x - 2, ART_AT.y - 2, ART_AT.x + ART_AT.w + 2, ART_AT.y + ART_AT.h + 2, 'K');
   p.rect(ART_AT.x - 1, ART_AT.y - 1, ART_AT.x + ART_AT.w + 1, ART_AT.y + ART_AT.h + 1, 'D');
-  p.rect(ART_AT.x, ART_AT.y, ART_AT.x + ART_AT.w, ART_AT.y + ART_AT.h, 'K');
+  p.clearRect(ART_AT.x, ART_AT.y, ART_AT.x + ART_AT.w, ART_AT.y + ART_AT.h);
   // the clock where the board was, the post-it board lower and by the window
   if (s.clock.state === 'up') p.blit(CLOCK_AT.x, CLOCK_AT.y, SPR.CLOCK);
   p.blit(BOARD_AT.x, BOARD_AT.y, s.broken.poster ? SPR.POSTER_TORN : SPR.POSTER);
@@ -790,6 +793,8 @@ export function drawRoom(p: Pix, s: SceneState): void {
   } else {
     drawMachine(p, s);
     if (!s.flashWhite) drawWear(p, MACHINE_AT.x0 + s.shake.x, MACHINE_AT.y0 + s.shake.y, s.damage, s.lights[1] ? 'A' : 'a');
+    // the flash whites the print too: a white rect over the hole, in the room's grid
+    if (s.machine.flash && !s.flashWhite) p.rect(ART_AT.x, ART_AT.y, ART_AT.x + ART_AT.w, ART_AT.y + ART_AT.h, 'W');
   }
   // the USB stick on the carpet, right of the machine, with its shadow
   if (s.usb) {

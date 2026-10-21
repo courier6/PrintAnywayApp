@@ -1,7 +1,7 @@
 import { reducedMotion, wait } from '../../anim';
 import type { Handoff, Stage } from '../../types';
 import { H, Pix, W, rotateSprite } from './pixels';
-import { CLOCK_AT, KIT_AT, MACHINE_AT, MACHINE_PIECES, NOZZLES, SPR, drawFireFront, drawFlame, drawRoom, drawWindowWreck, fireRect, inDoorway, lampX, lidTop, tubeX, type Broken, type ExitSign, type Hole, type SceneState, type Tube } from './scene';
+import { CLOCK_AT, KIT_AT, MACHINE_AT, MACHINE_PIECES, NOZZLES, SPR, drawFireFront, drawFlame, drawRoom, drawWindowWreck, fireRect, inDoorway, lampX, tubeX, type Broken, type ExitSign, type Hole, type SceneState, type Tube } from './scene';
 import { ART_AT, ART_SUB, renderVictory } from './art';
 import { PAL, type PalKey } from './palette';
 import { createRoomSounds, type FireSound, type Hum } from './sounds';
@@ -452,8 +452,9 @@ export const room: Stage = {
     front.setAttribute('aria-hidden', 'true');
     const fg = front.getContext('2d', { willReadFrequently: true });
     if (!fg) throw new Error('prntr: no 2d context');
-    // The print on the wall: its own canvas over the frame's inside, at
-    // ART_SUB cells to the room's pixel, so it is finer than anything around it.
+    // The print on the wall: its own canvas under the room canvas, seen through the hole the
+    // room leaves over the print's rect, at ART_SUB cells to the room's pixel, so it is finer
+    // than anything around it and behind everything the room draws (the lid, the tubes).
     const art = document.createElement('canvas');
     art.className = 'prntr-room-art';
     art.width = ART_AT.w * ART_SUB;
@@ -542,7 +543,7 @@ export const room: Stage = {
     const deathEl = el('div', 'prntr-room-death');
     deathEl.setAttribute('aria-hidden', 'true');
     deathEl.hidden = true;
-    frame.append(canvas, art, light, spill, fireLight, slotLight, holeLights, windowLight, front, dread, dreadWindow, wash, glows, hud, cursor, hurtEl, deathEl, continueEl, overEl);
+    frame.append(art, canvas, light, spill, fireLight, slotLight, holeLights, windowLight, front, dread, dreadWindow, wash, glows, hud, cursor, hurtEl, deathEl, continueEl, overEl);
     wrap.append(frame);
     root.append(wrap);
 
@@ -2153,11 +2154,6 @@ export const room: Stage = {
       art.classList.toggle('is-inverted', invertFrame);
       front.classList.toggle('is-inverted', invertFrame);
       invertFrame = false;
-      // The print's canvas sits over the room: the standing lid rises in front of it, so the print
-      // is clipped to the rows above the lid's top, and the flash whites it over.
-      const m = scene.machine;
-      const covered = m.lid < 0.05 ? 0 : m.flash ? ART_AT.h : Math.max(0, ART_AT.y + ART_AT.h - (lidTop(m.lid) + scene.shake.y));
-      art.style.clipPath = covered > 0 ? `inset(0 0 ${covered * scale}px 0)` : '';
     };
 
     // ---- loop and exit ----------------------------------------------------
