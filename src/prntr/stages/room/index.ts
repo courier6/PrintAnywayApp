@@ -1,5 +1,5 @@
 import { reducedMotion, wait } from '../../anim';
-import type { Handoff, Stage } from '../../types';
+import type { Handoff, RunStats, Stage } from '../../types';
 import { H, Pix, W, rotateSprite } from './pixels';
 import { CLOCK_AT, GLASS, KIT_AT, KNOB, MACHINE_AT, MACHINE_PIECES, NOZZLES, SPR, drawFireFront, drawFlame, drawMarks, drawRoom, drawWindowWreck, figLeaf, fireRect, inDoorway, knobX, lampX, markBox, tubeX, type Broken, type ExitSign, type Hole, type Mark, type SceneState, type Tube } from './scene';
 import { ART_AT, ART_SUB, renderVictory } from './art';
@@ -741,6 +741,16 @@ export const room: Stage = {
     /** Holes in the blind so far, and in the door. */
     let windowShots = 0;
     let doorShots = 0;
+    /** For the certificate's honours (types.ts RunStats). */
+    let shotsFired = 0;
+    let misses = 0;
+    let pagesShot = 0;
+    let staplesShot = 0;
+    let deaths = 0;
+    let fireEver = false;
+    let wonBy: RunStats['wonBy'] = 'gun';
+    /** When the fight first started (a continue restarts the phase, not this). */
+    let fightAt: number | null = null;
     /** The red light of each hole through the door or the blind. */
     const holeLightOf = new Map<Hole, HTMLElement>();
     let phase: Phase = 'look';
@@ -1046,6 +1056,7 @@ export const room: Stage = {
     };
     const startFight = (now: number) => {
       phase = 'fight';
+      if (fightAt === null) fightAt = now;
       phaseAt = now;
       showFightUi(true);
       hintEl.hidden = false;
@@ -1175,6 +1186,7 @@ export const room: Stage = {
     };
     // 1337: the machine is beaten. By the gun it bursts apart now; by the fire it already has.
     const startEnd = (now: number) => {
+      wonBy = scene.printer === 'wreck' ? 'fire' : 'gun';
       phase = 'end';
       phaseAt = now;
       endStep = 0;
@@ -1189,6 +1201,7 @@ export const room: Stage = {
     const die = (now: number) => {
       if (phase !== 'fight' || frozenAt !== null || god) return;
       lives--;
+      deaths++;
       health = 0;
       drawHealth();
       hurtUntil = 0;
@@ -1403,6 +1416,7 @@ export const room: Stage = {
         return;
       }
       shots--;
+      shotsFired++;
       drawShots();
       sounds.shot();
       if (!steady) recoil(now);
@@ -1435,6 +1449,7 @@ export const room: Stage = {
       });
       if (page) {
         page.shot = true;
+        pagesShot++;
         addScore(page.burning ? FIRE_PAGE_POINTS : PAGE_POINTS, now);
         return;
       }
@@ -1446,6 +1461,7 @@ export const room: Stage = {
       });
       if (staple) {
         staple.shot = true;
+        if (staple.kind === 'staple') staplesShot++;
         addScore(staple.kind === 'staple' ? STAPLE_POINTS : BOLT_POINTS, now);
         return;
       }
@@ -1576,10 +1592,18 @@ export const room: Stage = {
         return;
       }
       // Nothing to hit: the shot marks what it lands on. Into the storm through the doorway, nothing.
-      if (x >= 13 && x < 41 && y >= 43 && y < DOOR.y1 && (scene.doorBroken || x < 13 + scene.doorGap)) return;
+      // Out through the doorway, into the wall or the carpet: a miss. (A hole in the door or the blind
+      // is a hit: it works toward breaking them.)
+      if (x >= 13 && x < 41 && y >= 43 && y < DOOR.y1 && (scene.doorBroken || x < 13 + scene.doorGap)) {
+        misses++;
+        return;
+      }
       if (x >= DOOR.x0 && x < DOOR.x1 && y >= DOOR.y0 && y < DOOR.y1) addHole('door', x, y, now);
       else if (x >= WINDOW.x0 && x < WINDOW.x1 && y >= WINDOW.y0 && y < WINDOW.y1) windowShot(x, y, now);
-      else if (y < FLOOR_Y) addHole('wall', x, y);
+      else {
+        misses++;
+        if (y < FLOOR_Y) addHole('wall', x, y);
+      }
     };
     // A hole where the shot landed; through the door or the blind, the storm's light in it. Every hole in
     // the door counts toward its breaking.
@@ -1639,9 +1663,12 @@ export const room: Stage = {
       scene.marks.push({ kind, x, y });
       if (scene.marks.length > GLASS_MARKS_MAX) scene.marks.shift();
     };
-    // Shot open, the window takes no more holes: the shots go into the red.
+    // Shot open, the window takes no more holes: the shots go into the red (a miss).
     const windowShot = (x: number, y: number, now: number) => {
-      if (scene.windowOpen) return;
+      if (scene.windowOpen) {
+        misses++;
+        return;
+      }
       addHole('window', x, y);
       if (++windowShots >= WINDOW_BREAK_SHOTS) breakWindow(now);
     };
@@ -1709,6 +1736,7 @@ export const room: Stage = {
     const startFire = (now: number) => {
       shortAt = null;
       fireAt = now;
+      fireEver = true;
       // the machine sprays its ink the moment it catches fire, whatever its health: a volley now, ink in the rotation after
       inkNow = true;
       nextAttackAt = Math.min(nextAttackAt, now);
@@ -2120,6 +2148,7 @@ export const room: Stage = {
       console.info('prntr-dev-room');
       (window as unknown as { __prntrRoom?: unknown }).__prntrRoom = {
         phase: () => phase,
+        stats: () => ({ shotsFired, misses, pagesShot, staplesShot, deaths, fireEver, wonBy, fightAt }),
         setScore: (n: number) => {
           score = Math.min(HI - 1, Math.max(0, n));
           drawScore();
@@ -2897,7 +2926,22 @@ export const room: Stage = {
       );
       finish = () => {
         stop();
-        resolve(outcome === 'over' ? { kind: 'over', score } : { kind: 'cleared', score, player: PLAYER_NAME });
+        const stats: RunStats = {
+          wonBy,
+          window: scene.windowOpen,
+          door: scene.doorBroken,
+          fire: fireEver,
+          stokes,
+          shotsFired,
+          hits: shotsFired - misses,
+          livesLost: deaths,
+          continues: continued ? 1 : 0,
+          tubes: scene.stubs.length,
+          pages: pagesShot,
+          staples: staplesShot,
+          seconds: fightAt === null ? 0 : Math.max(0, Math.round((burstAt - fightAt) / 1000)),
+        };
+        resolve(outcome === 'over' ? { kind: 'over', score } : { kind: 'cleared', score, player: PLAYER_NAME, stats });
       };
       const loop = (now: number) => {
         if (done) return;
