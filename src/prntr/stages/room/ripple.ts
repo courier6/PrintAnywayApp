@@ -161,6 +161,16 @@ export class RippleView {
     this.canvas.height = Math.round(this.top.h * px);
   }
 
+  /** Releases the context (a browser allows a handful at once; the room is entered and left over and over in one
+   * session). The view draws nothing after. */
+  dispose(): void {
+    const gl = this.gl;
+    this.lost = true;
+    if (gl.isContextLost()) return;
+    for (const t of this.tex) gl.deleteTexture(t);
+    gl.getExtension('WEBGL_lose_context')?.loseContext();
+  }
+
   /** Draws the layers bent by the ripple `t` ms after a landing at virtual (cx, cy). False if it could not. */
   draw(cx: number, cy: number, t: number): boolean {
     const gl = this.gl;

@@ -787,6 +787,8 @@ export const room: Stage = {
      * SLAM_LIFE seen, and the slam it makes the next attack. */
     let slamAt: number | null = null;
     let slamStep = 0;
+    /** The landing's sound while the slam runs: ended with it when the slam is cut short. */
+    let landSound: { stop(): void } | null = null;
     let slamShake = { x: 0, y: 0 };
     let slamSeen = false;
     let slamNow = false;
@@ -918,6 +920,8 @@ export const room: Stage = {
     // Under reduced motion the rough name is broken once and stays so, and the worn one is plain.
     const poseName = (now: number) => {
       if (lifeName.hidden) return;
+      // Torn by the slam's ripple (PRNTR-SLAM.md §4.4): its broken letters stand until the tear lets go.
+      if (lifeName.classList.contains('is-torn') || lifeName.classList.contains('is-dropped')) return;
       const rough = lifeName.classList.contains('is-rough');
       const worn = lifeName.classList.contains('is-worn');
       if (!rough && !worn) {
@@ -1074,8 +1078,7 @@ export const room: Stage = {
       sprays = [];
       drops = [];
       scanAt = null;
-      slamAt = null;
-      releaseTears();
+      endSlam();
       wash.classList.remove('is-on');
       washAt = 0;
       wash.style.opacity = '';
@@ -1134,8 +1137,7 @@ export const room: Stage = {
       sprays = [];
       drops = [];
       scanAt = null;
-      slamAt = null;
-      releaseTears();
+      endSlam();
       scene.shake = { x: 0, y: 0 };
       nextAttackAt = Infinity;
       frame.classList.remove('is-mad');
@@ -1185,8 +1187,7 @@ export const room: Stage = {
       sprays = [];
       drops = [];
       scanAt = null;
-      slamAt = null;
-      releaseTears();
+      endSlam();
       wash.classList.remove('is-on');
       washAt = 0;
       wash.style.opacity = '';
@@ -1775,7 +1776,8 @@ export const room: Stage = {
           sounds.scanBurst();
         },
       ],
-      [SCAN_TOTAL_MS - 60, () => sounds.lidShut()],
+      // the thunk as the lid lands: 60 ms before the fall ends, or at the cut under reduced motion
+      [reduced ? LID_MS + SWEEP_MS + WASH_MS : SCAN_TOTAL_MS - 60, () => sounds.lidShut()],
     ];
     /** The machine's lid, lamp and flash from where the scan is; shut and dark when there is none. */
     const poseScan = (now: number) => {
@@ -1809,11 +1811,12 @@ export const room: Stage = {
       [
         SLAM_IMPACT_MS,
         () => {
-          sounds.slamLand(SLAM_OPEN_MS / 1000);
+          landSound = sounds.slamLand(SLAM_OPEN_MS / 1000);
           scheduleTears(performance.now());
         },
       ],
-      [SLAM_TOTAL_MS - 60, () => sounds.lidShut()],
+      // the thunk as the lid lands: 60 ms before the fall ends, or at the cut under reduced motion
+      [reduced ? SLAM_IMPACT_MS + SLAM_OPEN_MS : SLAM_TOTAL_MS - 60, () => sounds.lidShut()],
     ];
     /** The slam this frame: the lid, the lift, and the machine's offset (up as it lifts, the landing's shake),
      * or null when the slam is not moving it. Under reduced motion it does not move: the lid cuts open and shut. */
@@ -1825,6 +1828,7 @@ export const room: Stage = {
       slamStep = runSteps(SLAM_STEPS, slamStep, st);
       if (st >= SLAM_TOTAL_MS) {
         slamAt = null;
+        landSound = null;
         m.lid = 0;
         return null;
       }
@@ -1905,6 +1909,13 @@ export const room: Stage = {
     const releaseTears = () => {
       for (const t of tears) if (t.on) tearOff(t);
       tears = [];
+    };
+    /** A death, a continue or the burst ends a slam in progress: its timing, its tears and its landing's wobble. */
+    const endSlam = () => {
+      slamAt = null;
+      releaseTears();
+      landSound?.stop();
+      landSound = null;
     };
     /** The next attack the dev hook asked for, if any. */
     let forcedKind: AttackKind | null = null;
@@ -2157,6 +2168,8 @@ export const room: Stage = {
         /** The pages on the glass: where each landed, and whether it is sliding off yet. */
         landed: () => pages.filter((p) => p.landedAt !== null).map((p) => ({ x: p.x1, y: p.y1, sliding: performance.now() - p.landedAt! >= PAGE_LANDED_MS })),
         thrown: () => staples.map((s) => ({ kind: s.kind, x: s.x, y: s.y, at: s.at, shot: s.shot, hit: s.hit })),
+        /** How many things in flight have been shot down (staples, nuts, bolts, pages): a shot one of them took. */
+        shotDown: () => staples.filter((s) => s.shot).length + pages.filter((p) => p.shot).length,
         ghosts: () => ghosts.length,
         name: () => lifeName.textContent,
         clock: () => ({ ...scene.clock }),
@@ -2835,6 +2848,8 @@ export const room: Stage = {
         if (done) return;
         done = true;
         cancelAnimationFrame(raf);
+        rippleBack?.dispose();
+        rippleFront?.dispose();
         hum.stop();
         fireSound?.stop();
         stormSound?.stop(0.5);

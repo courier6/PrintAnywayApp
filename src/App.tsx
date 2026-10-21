@@ -84,9 +84,10 @@ export default function App() {
   const handleFileRef = useRef<(file: File) => void>(() => {});
   handleFileRef.current = (file) => void handleFile(file);
   // Prntr has the screen: a file dragged over it is not taken (it would end the game
-  // and replace the document unseen).
+  // and replace the document unseen). Nor while the app's UI is still dropping back in
+  // over its last frame: the state is back already, but Prntr is still mounted.
   const inPrntr = useRef(false);
-  inPrntr.current = appState === 'prntr';
+  inPrntr.current = appState === 'prntr' || prntrDrop !== null;
 
   // Window-level drag-and-drop: dropping a file anywhere, in any state but
   // Prntr, replaces the loaded document without confirmation. The depth counter
