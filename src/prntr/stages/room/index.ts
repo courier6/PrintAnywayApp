@@ -109,6 +109,9 @@ const GLASS_MARKS_MAX = 40;
  * for HIT_DAMAGE.nut and drops out of the frame; a bolt sticks for HIT_DAMAGE.bolt and stays as a
  * mark (PRNTR-PLANNING.md P1.C). BOLT_POINTS when shot. */
 const BOLT_HEALTH = 0.5;
+/** The ink comes into the rotation with the fire (or the mad machine), and at INK_HEALTH of its health or
+ * less whatever else: there it takes two places in the rotation, so every other attack or so is ink. */
+const INK_HEALTH = 0.75;
 const BOLT_MS = 1300;
 const BOLT_STAGGER_MS = 400;
 const BOLT_POINTS = 2;
@@ -1739,13 +1742,23 @@ export const room: Stage = {
     let forcedKind: AttackKind | null = null;
     // The machine does not move. Scan, staples, pages, in rotation; once it has caught fire, ink too; at
     // half health or less, nuts and bolts too.
-    const launchAttack = (now: number) => {
-      const gap = attackGap();
+    /** The attacks the machine takes turns with now. */
+    const rotation = (): AttackKind[] => {
       // the bulb shot, the scan is over for good: nothing to sweep with, nothing to flash
       const kinds: AttackKind[] = bulbOut ? ['staples', 'pages'] : ['scan', 'staples', 'pages'];
-      const nozzles = NOZZLES_X.filter((x) => !scene.stubs.includes(x));
-      if ((fireAt !== null || mad) && nozzles.length) kinds.push('ink');
+      const low = 1 - score / HI <= INK_HEALTH;
+      if ((fireAt !== null || mad || low) && NOZZLES_X.some((x) => !scene.stubs.includes(x))) {
+        kinds.push('ink');
+        // low, a second ink early in the rotation, never right after the first
+        if (low) kinds.splice(1, 0, 'ink');
+      }
       if (score >= HI * BOLT_HEALTH) kinds.push('bolts');
+      return kinds;
+    };
+    const launchAttack = (now: number) => {
+      const gap = attackGap();
+      const kinds = rotation();
+      const nozzles = NOZZLES_X.filter((x) => !scene.stubs.includes(x));
       // Nothing while the lid is up (a scan is on), and no scan while a tube is up: the lid would
       // cover it. The attack waits; a forced one keeps.
       const tubesUp = sprays.some((s) => now >= s.at - TUBE_RISE_MS && now < jetEnd(s) + TUBE_RISE_MS);
@@ -1942,6 +1955,8 @@ export const room: Stage = {
         /** The x of a tube spraying at the fire right now, or null. */
         fireJet: () => sprays.find((s) => s.fire && spraying(s, performance.now()))?.nx ?? null,
         mad: () => mad,
+        /** The attacks in turn now. */
+        rotation: () => rotation(),
         spread: () => spreadAt !== null,
         stokes: () => stokes,
         spreadMs: () => spreadMs,
