@@ -79,7 +79,8 @@ const LATE_SCORE = 900;
 /** The scan: the lid rises over LID_MS, the lamp sweeps the glass for SWEEP_MS (the window:
  * PRNTR-FIGHT-DESIGN.md §5), the flash washes the screen for WASH_MS, the lid falls over LID_MS.
  * A shot on the lamp during the sweep pops the bulb (LAMP_POINTS): the sweep stops where it is,
- * dead, and there is no flash; the lid still falls on time. */
+ * dead, and there is no flash; the lid still falls on time. The bulb is not replaced: the scan leaves the
+ * rotation for the rest of the stage, deaths and continues included. */
 const LID_MS = 450;
 const SWEEP_MS = 1200;
 const WASH_MS = 300;
@@ -736,7 +737,8 @@ export const room: Stage = {
     let scanAt: number | null = null;
     /** The flash's moment (0 = no white-out); the wash fades from it over WHITEOUT_MS (half under reduced motion). */
     let washAt = 0;
-    /** The scan's sound and flash steps run so far (SCAN_STEPS), and the bulb: shot, and where the lamp was then. */
+    /** The scan's sound and flash steps run so far (SCAN_STEPS), and the bulb: shot (for good: a dead bulb is not
+     * replaced), and where the lamp was then. */
     let scanStep = 0;
     let bulbOut = false;
     let lampStop = 0;
@@ -1669,7 +1671,6 @@ export const room: Stage = {
     const startScan = (now: number) => {
       scanAt = now;
       scanStep = 0;
-      bulbOut = false;
       sounds.lidOpen();
     };
     const SCAN_STEPS: [number, () => void][] = [
@@ -1712,7 +1713,8 @@ export const room: Stage = {
     // half health or less, nuts and bolts too.
     const launchAttack = (now: number) => {
       const gap = attackGap();
-      const kinds: AttackKind[] = ['scan', 'staples', 'pages'];
+      // the bulb shot, the scan is over for good: nothing to sweep with, nothing to flash
+      const kinds: AttackKind[] = bulbOut ? ['staples', 'pages'] : ['scan', 'staples', 'pages'];
       const nozzles = NOZZLES_X.filter((x) => !scene.stubs.includes(x));
       if ((fireAt !== null || mad) && nozzles.length) kinds.push('ink');
       if (score >= HI * BOLT_HEALTH) kinds.push('bolts');
