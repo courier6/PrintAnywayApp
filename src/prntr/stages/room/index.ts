@@ -5,7 +5,7 @@ import { CLOCK_AT, GLASS, KIT_AT, KNOB, MACHINE_AT, MACHINE_PIECES, NOZZLES, SPR
 import { ART_AT, ART_SUB, renderVictory } from './art';
 import { PAL, type PalKey } from './palette';
 import { createRoomSounds, type FireSound, type Hum } from './sounds';
-import { RIPPLE_MS, RippleView, rippleAt } from './ripple';
+import { RIPPLE_MS, RIPPLE_SPEED, RippleView, rippleAt } from './ripple';
 import { startStormSound } from '../storm';
 
 // ---------------------------------------------------------------------------
@@ -110,6 +110,10 @@ const SLAM_SHAKE_MS = 400;
 const SLAM_OPEN_MS = RIPPLE_MS;
 /** Where the slam's ripple starts: the machine's foot. */
 const SLAM_AT = { x: 120, y: 146 };
+/** The tear (PRNTR-SLAM.md §4.4): a HUD element is torn while the ripple's front is from its centre to TEAR_BAND
+ * px past it (150 ms); one tear in TEAR_DROP is a dropout instead. */
+const TEAR_BAND = 30;
+const TEAR_DROP = 0.25;
 const SLAM_TOTAL_MS = SLAM_IMPACT_MS + SLAM_OPEN_MS + LID_MS;
 const SLAM_GLASS_POINTS = 25;
 const GLASS_HIT_PAD = 1;
@@ -900,9 +904,9 @@ export const room: Stage = {
     /** The name's next flip or glitch, and when a flipped letter goes back (0 = none). */
     let nameAt = 0;
     let nameBackAt = 0;
-    /** The name with `n` of its letters broken (a glitch character or a gap). */
-    const brokenName = (n: number) => {
-      const chars = PLAYER_NAME.split('');
+    /** The name (or another text) with `n` of its letters broken (a glitch character or a gap). */
+    const brokenName = (n: number, text = PLAYER_NAME) => {
+      const chars = text.split('');
       for (let k = 0; k < n; k++) {
         const i = Math.floor(Math.random() * chars.length);
         if (chars[i] === ' ') continue;
@@ -1071,6 +1075,7 @@ export const room: Stage = {
       drops = [];
       scanAt = null;
       slamAt = null;
+      releaseTears();
       wash.classList.remove('is-on');
       washAt = 0;
       wash.style.opacity = '';
@@ -1179,6 +1184,7 @@ export const room: Stage = {
       drops = [];
       scanAt = null;
       slamAt = null;
+      releaseTears();
       wash.classList.remove('is-on');
       washAt = 0;
       wash.style.opacity = '';
@@ -1795,7 +1801,13 @@ export const room: Stage = {
       sounds.slamLift((SLAM_LIFT_MS + SLAM_DROP_MS) / 1000);
     };
     const SLAM_STEPS: [number, () => void][] = [
-      [SLAM_IMPACT_MS, () => sounds.slamLand(SLAM_OPEN_MS / 1000)],
+      [
+        SLAM_IMPACT_MS,
+        () => {
+          sounds.slamLand(SLAM_OPEN_MS / 1000);
+          scheduleTears(performance.now());
+        },
+      ],
       [SLAM_TOTAL_MS - 60, () => sounds.lidShut()],
     ];
     /** The slam this frame: the lid, the lift, and the machine's offset (up as it lifts, the landing's shake),
@@ -1824,6 +1836,70 @@ export const room: Stage = {
         return slamShake;
       } else return null;
       return { x: 0, y: -m.lift };
+    };
+    // The tear: the player's layer breaks where the slam's ripple passes under it. Each HUD element is torn while
+    // the crest is under it: split red and cyan and jittering, or dropped out; its letters broken, or a bar's
+    // fill wrong. Then it is put back to the truth (a text something rewrote meanwhile keeps the new text).
+    // Under reduced motion every element tears once at the landing, still.
+    interface Tear {
+      el: HTMLElement;
+      from: number;
+      to: number;
+      on: boolean;
+      /** The element whose letters were broken, what they were, and what they were broken to. */
+      text: HTMLElement | null;
+      was: string;
+      shown: string;
+    }
+    let tears: Tear[] = [];
+    const TEARABLE = [scoreEl, hiEl, creditEl, captionEl, healthEl, healthName, lifeEl, lifeName, pipsEl, shotsBtn];
+    /** At the landing: when the front reaches each element on show (its centre's distance from SLAM_AT). */
+    const scheduleTears = (now: number) => {
+      releaseTears();
+      const fr = frame.getBoundingClientRect();
+      for (const el of TEARABLE) {
+        if (el.hidden) continue;
+        const b = el.getBoundingClientRect();
+        if (!b.width || !b.height) continue;
+        const r = Math.hypot((b.left + b.width / 2 - fr.left) / scale - SLAM_AT.x, (b.top + b.height / 2 - fr.top) / scale - SLAM_AT.y);
+        const from = reduced ? now : now + r / RIPPLE_SPEED;
+        if (from - now >= RIPPLE_MS) continue;
+        tears.push({ el, from, to: from + TEAR_BAND / RIPPLE_SPEED, on: false, text: null, was: '', shown: '' });
+      }
+    };
+    const tearOn = (t: Tear) => {
+      t.on = true;
+      t.el.classList.add(!reduced && Math.random() < TEAR_DROP ? 'is-dropped' : 'is-torn');
+      if (t.el === healthEl) healthFill.style.width = `${Math.random() * 100}%`;
+      else if (t.el === lifeEl) lifeFill.style.width = `${Math.random() * 100}%`;
+      else {
+        const n = t.el === captionEl ? captionText : t.el;
+        if (n.childElementCount === 0 && n.textContent) {
+          t.text = n;
+          t.was = n.textContent;
+          t.shown = brokenName(1 + Math.floor(Math.random() * 3), t.was);
+          n.textContent = t.shown;
+        }
+      }
+    };
+    const tearOff = (t: Tear) => {
+      t.on = false;
+      t.el.classList.remove('is-torn', 'is-dropped');
+      if (t.el === healthEl) drawScore();
+      else if (t.el === lifeEl) drawHealth();
+      else if (t.text && t.text.textContent === t.shown) t.text.textContent = t.was;
+    };
+    const poseTears = (now: number) => {
+      for (const t of tears) {
+        const on = now >= t.from && now < t.to;
+        if (on && !t.on) tearOn(t);
+        else if (!on && t.on) tearOff(t);
+      }
+      tears = tears.filter((t) => t.on || now < t.to);
+    };
+    const releaseTears = () => {
+      for (const t of tears) if (t.on) tearOff(t);
+      tears = [];
     };
     /** The next attack the dev hook asked for, if any. */
     let forcedKind: AttackKind | null = null;
@@ -2112,6 +2188,8 @@ export const room: Stage = {
         slam: () => ({ at: slamAt, lift: scene.machine.lift, next: slamNow }),
         /** The world drawn bent by WebGL this frame; the ripple's displacement at a virtual point now (zero when none). */
         rippling: () => frame.classList.contains('is-rippling'),
+        /** The HUD's elements torn now (their class names), and those still to tear in this slam. */
+        torn: () => ({ now: TEARABLE.filter((n) => n.classList.contains('is-torn') || n.classList.contains('is-dropped')).map((n) => n.className), left: tears.filter((t) => !t.on).length }),
         rippleAt: (x: number, y: number) => (slamAt === null ? { x: 0, y: 0 } : rippleAt(x, y, SLAM_AT.x, SLAM_AT.y, performance.now() - slamAt - SLAM_IMPACT_MS)),
         /** The machine's shake this frame (the tremble, the landing): what is attached to it moves with it. */
         shake: () => ({ ...scene.shake }),
@@ -2723,6 +2801,7 @@ export const room: Stage = {
       const rt = slamAt === null ? -1 : now - slamAt - SLAM_IMPACT_MS;
       const bent = rt >= 0 && rt < RIPPLE_MS && !!rippleBack?.draw(SLAM_AT.x, SLAM_AT.y, rt) && !!rippleFront?.draw(SLAM_AT.x, SLAM_AT.y, rt);
       frame.classList.toggle('is-rippling', bent);
+      poseTears(now);
       drawGlows(now);
       // The white-out: the flash's wash from 100%, fading fast then with a tail; under the HUD and the cross.
       if (washAt) {

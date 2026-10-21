@@ -817,6 +817,23 @@
   }
 }
 
+/* The slam's tear (PRNTR-SLAM.md §4.4): a HUD element the ripple's crest is passing under splits red and
+   cyan and jitters as the rough name does, faster; or it drops out. Still under reduced motion. */
+.prntr-room-hud .is-torn {
+  filter: drop-shadow(calc(-1px * var(--s)) 0 #19B8F0) drop-shadow(calc(1px * var(--s)) 0 #B8140A);
+  animation: prntr-name-rough 60ms steps(1, end) infinite;
+}
+
+.prntr-room-hud .is-dropped {
+  visibility: hidden;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .prntr-room-hud .is-torn {
+    animation: none;
+  }
+}
+
 /* A hit that leaves health: a short red flash over the room. */
 .prntr-room-hurt {
   position: absolute;
