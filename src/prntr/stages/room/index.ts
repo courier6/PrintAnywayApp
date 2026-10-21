@@ -1,7 +1,7 @@
 import { reducedMotion, wait } from '../../anim';
 import type { Handoff, Stage } from '../../types';
 import { H, Pix, W, rotateSprite } from './pixels';
-import { CLOCK_AT, KIT_AT, KNOB, MACHINE_AT, MACHINE_PIECES, NOZZLES, SPR, drawFireFront, drawFlame, drawMarks, drawRoom, drawWindowWreck, figLeaf, fireRect, inDoorway, knobX, lampX, markBox, tubeX, type Broken, type ExitSign, type Hole, type Mark, type SceneState, type Tube } from './scene';
+import { CLOCK_AT, GLASS, KIT_AT, KNOB, MACHINE_AT, MACHINE_PIECES, NOZZLES, SPR, drawFireFront, drawFlame, drawMarks, drawRoom, drawWindowWreck, figLeaf, fireRect, inDoorway, knobX, lampX, markBox, tubeX, type Broken, type ExitSign, type Hole, type Mark, type SceneState, type Tube } from './scene';
 import { ART_AT, ART_SUB, renderVictory } from './art';
 import { PAL, type PalKey } from './palette';
 import { createRoomSounds, type FireSound, type Hum } from './sounds';
@@ -96,6 +96,20 @@ const WHITEOUT_MS = 1200;
 const SCAN_TOTAL_MS = LID_MS + SWEEP_MS + WASH_MS + LID_MS;
 const LAMP_POINTS = 40;
 const LAMP_HIT_PAD = 1;
+/** The slam (PRNTR-SLAM.md), in the rotation once the machine has SLAM_LIFE left of its 1337 (the design's
+ * phase 2): the machine strains up SLAM_LIFT px over SLAM_LIFT_MS, drops in SLAM_DROP_MS and
+ * lands shaking for SLAM_SHAKE_MS; the lid bangs open at the landing and stands for SLAM_OPEN_MS, the glass
+ * worth SLAM_GLASS_POINTS, then falls over LID_MS. */
+const SLAM_LIFE = 900;
+const SLAM_LIFT = 6;
+const SLAM_LIFT_MS = 500;
+const SLAM_DROP_MS = 90;
+const SLAM_IMPACT_MS = SLAM_LIFT_MS + SLAM_DROP_MS;
+const SLAM_SHAKE_MS = 400;
+const SLAM_OPEN_MS = 1600;
+const SLAM_TOTAL_MS = SLAM_IMPACT_MS + SLAM_OPEN_MS + LID_MS;
+const SLAM_GLASS_POINTS = 25;
+const GLASS_HIT_PAD = 1;
 const STAPLE_MS = 1500;
 const STAPLE_STAGGER_MS = 500;
 /** The staple's hit box: its sprite at the current scale, plus this many virtual px around. */
@@ -423,7 +437,7 @@ const ROOM_ALT =
   'A quiet office: an exposed ceiling, a duct along it and two bare tube lights hanging on cords, a door shut under an EXIT sign, a clock, a Simple Products board with notes on it by a window with its blind down on a storm outside, a tall fig tree before it and a green first aid kit at its lower right, a water cooler, a plant, one large copier in the middle, and a USB stick on the carpet beside it';
 
 type Phase = 'look' | 'sticker' | 'fight' | 'continue' | 'over' | 'end';
-type AttackKind = 'scan' | 'staples' | 'pages' | 'ink' | 'bolts' | 'black';
+type AttackKind = 'scan' | 'staples' | 'pages' | 'ink' | 'bolts' | 'black' | 'slam';
 
 /** A staple, or a nut or a bolt: all thrown out of the slot at the camera. */
 type ThrownKind = 'staple' | 'nut' | 'bolt';
@@ -673,7 +687,7 @@ export const room: Stage = {
       ledRed: false,
       trayPage: true,
       usb: true,
-      machine: { lid: 0, lamp: null, lampOut: false, flash: false, power: true, angry: false, back: 1, t: 0, error: null },
+      machine: { lid: 0, lamp: null, lampOut: false, flash: false, power: true, angry: false, back: 1, t: 0, error: null, lift: 0 },
       flashWhite: false,
       buttonBright: false,
       broken: { clock: false, poster: false, tank: false, plant: false, vase: false, kit: false, fig: false, figPot: false },
@@ -753,6 +767,13 @@ export const room: Stage = {
      * replaced), and where the lamp was then. */
     let scanStep = 0;
     let bulbOut = false;
+    /** The slam on now (its start), the step its sounds are at, its landing shake this frame; the first fall to
+     * SLAM_LIFE seen, and the slam it makes the next attack. */
+    let slamAt: number | null = null;
+    let slamStep = 0;
+    let slamShake = { x: 0, y: 0 };
+    let slamSeen = false;
+    let slamNow = false;
     let lampStop = 0;
     let autoReloadAt: number | null = null;
     let reloadSecondAt: number | null = null;
@@ -1037,6 +1058,7 @@ export const room: Stage = {
       sprays = [];
       drops = [];
       scanAt = null;
+      slamAt = null;
       wash.classList.remove('is-on');
       washAt = 0;
       wash.style.opacity = '';
@@ -1144,6 +1166,7 @@ export const room: Stage = {
       sprays = [];
       drops = [];
       scanAt = null;
+      slamAt = null;
       wash.classList.remove('is-on');
       washAt = 0;
       wash.style.opacity = '';
@@ -1436,6 +1459,16 @@ export const room: Stage = {
           popBulb(hx, now);
           flashFrames = HIT_FLASH_FRAMES;
           addScore(LAMP_POINTS, now);
+          return;
+        }
+      }
+      // The glass while the slam holds the lid open: the window, SLAM_GLASS_POINTS.
+      if (slamAt !== null && m.lid >= 1) {
+        const { x: sx, y: sy } = scene.shake;
+        if (x >= GLASS.x0 - GLASS_HIT_PAD + sx && x < GLASS.x1 + GLASS_HIT_PAD + sx && y >= GLASS.y0 - GLASS_HIT_PAD + sy && y < GLASS.y1 + GLASS_HIT_PAD + sy) {
+          flashFrames = HIT_FLASH_FRAMES;
+          stoke(x, y, now);
+          addScore(SLAM_GLASS_POINTS, now);
           return;
         }
       }
@@ -1741,6 +1774,45 @@ export const room: Stage = {
       m.flash = !bulbOut && st >= LID_MS + SWEEP_MS && st < falls;
       if (st >= SCAN_TOTAL_MS) scanAt = null;
     };
+    // A slam: the machine strains up, drops and lands; the lid bangs open as it lands and stands, then falls.
+    const startSlam = (now: number) => {
+      slamAt = now;
+      slamStep = 0;
+      // a slam forced before the first one's turn is the first one
+      slamNow = false;
+      sounds.slamLift((SLAM_LIFT_MS + SLAM_DROP_MS) / 1000);
+    };
+    const SLAM_STEPS: [number, () => void][] = [
+      [SLAM_IMPACT_MS, () => sounds.slamLand(SLAM_OPEN_MS / 1000)],
+      [SLAM_TOTAL_MS - 60, () => sounds.lidShut()],
+    ];
+    /** The slam this frame: the lid, the lift, and the machine's offset (up as it lifts, the landing's shake),
+     * or null when the slam is not moving it. Under reduced motion it does not move: the lid cuts open and shut. */
+    const poseSlam = (now: number): { x: number; y: number } | null => {
+      const m = scene.machine;
+      m.lift = 0;
+      if (slamAt === null) return null;
+      const st = now - slamAt;
+      slamStep = runSteps(SLAM_STEPS, slamStep, st);
+      if (st >= SLAM_TOTAL_MS) {
+        slamAt = null;
+        m.lid = 0;
+        return null;
+      }
+      const open = SLAM_IMPACT_MS + SLAM_OPEN_MS;
+      m.lid = st < SLAM_IMPACT_MS ? 0 : st < open ? 1 : reduced ? 0 : 1 - (st - open) / LID_MS;
+      if (reduced) return null;
+      if (st < SLAM_LIFT_MS) {
+        const u = st / SLAM_LIFT_MS;
+        m.lift = Math.round(SLAM_LIFT * (1 - (1 - u) * (1 - u)));
+      } else if (st < SLAM_IMPACT_MS) {
+        m.lift = Math.round(SLAM_LIFT * (1 - (st - SLAM_LIFT_MS) / SLAM_DROP_MS));
+      } else if (st < SLAM_IMPACT_MS + SLAM_SHAKE_MS) {
+        if (frameCount % SHAKE_FRAMES === 0 || st - SLAM_IMPACT_MS < 16) slamShake = { x: Math.floor(Math.random() * 5) - 2, y: Math.floor(Math.random() * 5) - 2 };
+        return slamShake;
+      } else return null;
+      return { x: 0, y: -m.lift };
+    };
     /** The next attack the dev hook asked for, if any. */
     let forcedKind: AttackKind | null = null;
     // The machine does not move. Scan, staples, pages, in rotation; once it has caught fire, ink too; at
@@ -1756,25 +1828,29 @@ export const room: Stage = {
         if (low) kinds.splice(1, 0, 'ink');
       }
       if (score >= HI * BOLT_HEALTH || scene.fig.burning) kinds.push('bolts');
+      if (HI - score <= SLAM_LIFE) kinds.push('slam');
       return kinds;
     };
     const launchAttack = (now: number) => {
       const gap = attackGap();
       const kinds = rotation();
       const nozzles = NOZZLES_X.filter((x) => !scene.stubs.includes(x));
-      // Nothing while the lid is up (a scan is on), and no scan while a tube is up: the lid would
-      // cover it. The attack waits; a forced one keeps.
+      // Nothing while the lid is up (a scan or a slam is on), and no scan or slam while a tube is up: the lid
+      // would cover it. The attack waits; a forced one keeps.
       const tubesUp = sprays.some((s) => now >= s.at - TUBE_RISE_MS && now < jetEnd(s) + TUBE_RISE_MS);
-      if (scanAt !== null || ((forcedKind ?? kinds[attackIndex % kinds.length]) === 'scan' && tubesUp)) {
+      const next = forcedKind ?? (slamNow ? 'slam' : kinds[attackIndex % kinds.length]);
+      if (scanAt !== null || slamAt !== null || ((next === 'scan' || next === 'slam') && tubesUp)) {
         nextAttackAt = now + 100;
         return;
       }
       // the fire's volley comes first, then the burning fig's, unless an attack was forced (they wait for the next)
       const fireVolley = forcedKind === null && inkNow && nozzles.length > 0;
       const figVolley = forcedKind === null && !fireVolley && boltsNow;
+      // then the first slam, once the machine has fallen to SLAM_LIFE
+      const slamFirst = forcedKind === null && !fireVolley && !figVolley && slamNow;
       if (fireVolley) inkNow = false;
       if (figVolley) boltsNow = false;
-      let kind = forcedKind ?? (fireVolley ? 'ink' : figVolley ? 'bolts' : kinds[attackIndex++ % kinds.length]);
+      let kind = forcedKind ?? (fireVolley ? 'ink' : figVolley ? 'bolts' : slamFirst ? 'slam' : kinds[attackIndex++ % kinds.length]);
       // the rotation's ink tries the black cartridge first, then now and then (a forced 'ink' never does)
       if (kind === 'ink' && forcedKind === null && !fireVolley && !scene.stubs.includes(BLACK_X) && (inkTries++ === 0 || Math.random() < BLACK_CHANCE)) kind = 'black';
       forcedKind = null;
@@ -1815,6 +1891,9 @@ export const room: Stage = {
       } else if (kind === 'scan') {
         startScan(now);
         nextAttackAt = now + SCAN_TOTAL_MS + gap;
+      } else if (kind === 'slam') {
+        startSlam(now);
+        nextAttackAt = now + SLAM_TOTAL_MS + gap;
       } else if (kind === 'staples') {
         for (let i = 0; i < 3; i++) {
           staples.push({ kind: 'staple', ms: STAPLE_MS, x0: SLOT.x0 + 3 + Math.random() * (SLOT.x1 - SLOT.x0 - 6), x: 20 + Math.random() * 180, y: 40 + Math.random() * 70, at: now + i * STAPLE_STAGGER_MS, hit: false, shot: false, fed: false });
@@ -2017,6 +2096,8 @@ export const room: Stage = {
         lid: () => scene.machine.lid,
         lamp: () => (scene.machine.lamp === null ? null : lampX(scene.machine.lamp)),
         bulb: () => bulbOut,
+        /** The slam: when it started (null: none on), the machine's lift now, and whether it is next. */
+        slam: () => ({ at: slamAt, lift: scene.machine.lift, next: slamNow }),
         /** The machine's shake this frame (the tremble, the landing): what is attached to it moves with it. */
         shake: () => ({ ...scene.shake }),
       };
@@ -2183,6 +2264,11 @@ export const room: Stage = {
             addScore(0, now);
             return;
           }
+        }
+        // the first fall to SLAM_LIFE: the slam is the machine's next attack
+        if (!slamSeen && HI - score <= SLAM_LIFE) {
+          slamSeen = true;
+          slamNow = true;
         }
         if (shots === 0 && autoReloadAt !== null && now >= autoReloadAt) reload(now);
         if (reloadSecondAt !== null && now >= reloadSecondAt) {
@@ -2416,10 +2502,12 @@ export const room: Stage = {
       scene.buttonBright = phase === 'fight' && scene.printer === 'up' && (mad || buttonBright(now));
       if (scene.printer === 'wreck') posePieces(now);
       // The tremble: a new offset of ±1 px every few frames while the mad machine fights; the
-      // pounce's landing before that.
+      // pounce's landing before that, and the slam's lift and landing over it.
       frameCount++;
       const landing = poseBack(now);
+      const slam = poseSlam(now);
       if (landing) scene.shake = landing;
+      else if (slam) scene.shake = slam;
       else if (mad && phase === 'fight' && scene.printer === 'up' && frozenAt === null && !reduced) {
         if (frameCount % SHAKE_FRAMES === 0) scene.shake = { x: Math.floor(Math.random() * 3) - 1, y: -Math.floor(Math.random() * 2) };
       } else {
