@@ -110,10 +110,8 @@ const HIT_FLASH_FRAMES = 2;
 const CONTINUE_MS = 10_000;
 /** Clicks this soon after death do not count as yes: the shot that died must not answer. */
 const CONTINUE_ARM_MS = 300;
-/** A game over: GAME OVER giant in Comic Sans across the frozen, dimmed room
- * for GAME_OVER_MS, then the dim alone for OVER_HOLD_MS as before, then Prntr ends. */
-const GAME_OVER_MS = 2000;
-const OVER_HOLD_MS = 500;
+/** A game over: GAME OVER giant in Comic Sans across the frozen, dimmed room; the stage ends the
+ * moment it goes up, so the host's Tetris drop falls over the card while the sting plays. */
 /** PROTECT YOURSELF. and the binding under it stay this long, then fade (HINT_FADE_MS, as in prntr.css). */
 const HINT_MS = 2000;
 const HINT_FADE_MS = 500;
@@ -238,12 +236,11 @@ const WINDOW_BREAK_SHOTS = 9;
  * little nearer than the last; if there is a fire it rages on, its flames on the machine growing
  * by RAGE_MORE over the second after the score runs out instead of dying down; without one the
  * machine just falls apart in the dark room. A triumphant tune starts FANFARE_AFTER_MS after the
- * bang (the stage is won: there is no stage after this one), and the stage ends WIN_END_MS after
- * the burst, once the tune is over. */
+ * bang (the stage is won: there is no stage after this one), and the stage ends as the tune
+ * starts, so the host's sky drop plays over it. */
 const PIECE_GRAVITY = 260;
 const RAGE_MORE = 0.25;
 const FANFARE_AFTER_MS = 500;
-const WIN_END_MS = 4300;
 
 /** The machine: the gun's target. */
 const MACHINE = MACHINE_AT;
@@ -917,6 +914,8 @@ export const room: Stage = {
       overText.hidden = false;
       sounds.gameOver();
       ctx.announce('Game over.');
+      // the stage ends here: the loop stops on this frame and the card stays painted under the host's drop
+      finish();
     };
     // Engulfed: the machine bursts into its pieces, thrown out and up from its middle, and the
     // fight is as good as won. Nothing more comes out of it.
@@ -1759,9 +1758,9 @@ export const room: Stage = {
       return landShake;
     };
     let landShake = { x: 0, y: 0 };
-    // The end: the machine in pieces, the fire (if there is one) raging on in
-    // the dark room, the HUD gone, the tune; then out, WIN_END_MS after the burst. The lights stay
-    // off and nothing comes back. (Until then it ended on the quiet room, lit again, the lid shut.)
+    // The end: the machine in pieces, the fire (if there is one) raging on in the dark room, the
+    // HUD gone; out as the tune starts, FANFARE_AFTER_MS after the burst (the tune plays on under
+    // the host's drop). The lights stay off and nothing comes back.
     const END_STEPS: [number, () => void][] = [[0, () => showFightUi(false)]];
 
     // ---- update -----------------------------------------------------------
@@ -1922,12 +1921,9 @@ export const room: Stage = {
         // 9 → 0, a second each; 0 gets its full second, then it is over.
         countEl.textContent = String(Math.max(0, 9 - Math.floor(t / 1000)));
         if (t >= CONTINUE_MS) startOver(now);
-      } else if (phase === 'over') {
-        if (t >= GAME_OVER_MS) overText.hidden = true;
-        if (t >= GAME_OVER_MS + OVER_HOLD_MS) finish();
       } else if (phase === 'end') {
         endStep = runSteps(END_STEPS, endStep, t);
-        if (now - burstAt >= WIN_END_MS) finish();
+        if (now - burstAt >= FANFARE_AFTER_MS) finish();
       }
     };
 
