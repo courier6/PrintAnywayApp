@@ -9,7 +9,7 @@ import type { Certificate } from './prntr/types';
 import { ErrorState, type ErrorKind } from './components/ErrorState';
 import { t, useLocale } from './i18n';
 import { GOLD_INK, INKS } from './lib/inks';
-import { fileKind, loadDocument, type SourceDocument } from './lib/loadDocument';
+import { fileKind, loadDocument, prefetchPdfjs, type SourceDocument } from './lib/loadDocument';
 import { classifyError, logAppError, type ErrorCode } from './lib/errors';
 import { PageStore } from './lib/pageStore';
 import { exportFormat, exportRecolored, type ExportFormat } from './lib/exportFile';
@@ -86,6 +86,7 @@ export default function App() {
       Array.from(e.dataTransfer?.types ?? []).includes('Files');
     const onDragEnter = (e: globalThis.DragEvent) => {
       if (!isFileDrag(e)) return;
+      prefetchPdfjs();
       depth.current++;
       setDragging(true);
     };
@@ -168,6 +169,7 @@ export default function App() {
   }, [appState]);
 
   function openPicker() {
+    prefetchPdfjs();
     fileInput.current?.click();
   }
 

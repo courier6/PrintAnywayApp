@@ -47,6 +47,15 @@ function getPdfWorker() {
   return pdfWorker;
 }
 
+/**
+ * Starts loading pdf.js and its worker (about 480 KB gzipped) before a file
+ * arrives, on a sign that one is coming: the pointer on the drop zone, a file
+ * dragged in, the picker opened. Failures are left for the real load to report.
+ */
+export function prefetchPdfjs(): void {
+  getPdfWorker().catch(() => undefined);
+}
+
 // ~150 DPI: readable in print, fast enough for per-pixel recoloring.
 const RENDER_DPI = 150;
 // The largest canvas a page gets, for PDF pages and images alike: a poster or
