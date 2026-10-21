@@ -91,12 +91,22 @@ export default function Prntr({ source, recolored, inkHex, stage, audioContext, 
     const startAt = Math.min(Math.max(0, stage), STAGES.length - 1);
     // After the last stage the frame stays painted: the host drops its UI over it
     // and unmounts us (PRNTR-STAGE-1.md §4.10).
-    void runChain(ctx, STAGES, startAt).then((handoff) => {
-      if (!handoff) return;
-      setDone(true);
-      if (handoff.kind === 'cleared') onDoneRef.current('cleared', makeCertificate(handoff.player, handoff.score, 1337));
-      else onDoneRef.current('over');
-    });
+    runChain(ctx, STAGES, startAt)
+      .then((handoff) => {
+        if (!handoff) return;
+        // Made before ✕ goes: if it throws, the way out must still be there.
+        const certificate = handoff.kind === 'cleared' ? makeCertificate(handoff.player, handoff.score, 1337) : undefined;
+        setDone(true);
+        if (certificate) onDoneRef.current('cleared', certificate);
+        else onDoneRef.current('over');
+      })
+      // A stage that throws (no 2D context on a phone short of memory, a bug) would
+      // leave a black screen, and on a phone there is no Esc: leave as ✕ would.
+      .catch((err: unknown) => {
+        if (controller.signal.aborted) return;
+        console.error('[prntr]', err);
+        onExitRef.current();
+      });
     return () => {
       controller.abort();
       root.remove();

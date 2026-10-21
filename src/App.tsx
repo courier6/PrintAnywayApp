@@ -326,7 +326,19 @@ export default function App() {
   // The room cleared, the page the app comes back to is the certificate of completion,
   // in place of whatever document it had.
   function finishPrntr(outcome: 'cleared' | 'over', certificate?: Certificate) {
-    if (certificate) loadCertificate(certificate);
+    if (certificate) {
+      try {
+        loadCertificate(certificate);
+      } catch (err) {
+        // The old document is already gone: say so on the error card rather than
+        // drop back onto an empty preview.
+        const code = classifyError(err);
+        logAppError(code, err, null);
+        setErrorInfo({ code, kind: KIND_BY_CODE[code] });
+        setAppState('error');
+        return;
+      }
+    }
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
       exitPrntr();
       return;
