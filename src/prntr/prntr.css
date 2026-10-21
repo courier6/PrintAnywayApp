@@ -121,9 +121,10 @@
   animation: prntr-card 1250ms linear forwards;
 }
 
-/* The cut after the card: the card inverted, white, the logo alone in black. */
+/* The cut after the card: the logo alone in black on a deep dark red (it was white: the fight
+   has white flashes enough), the logo's inner shapes in the red. */
 .prntr-card.is-beep {
-  background: #FFFFFF;
+  background: #5C0A12;
   opacity: 1;
   animation: none;
 }
@@ -142,7 +143,7 @@
 }
 
 .prntr-card.is-beep .prntr-card-logo [fill="#000000"] {
-  fill: #FFFFFF;
+  fill: #5C0A12;
 }
 
 .prntr-card-brand {

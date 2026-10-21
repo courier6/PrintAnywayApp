@@ -9,7 +9,7 @@ const WOBBLE = 1;
 const POP_MS = 200;
 /** The Simple Products card, fades included. */
 const CARD_MS = 1250;
-/** Then the cut: the card inverted, the logo alone on white, under a beep. */
+/** Then the cut: the logo alone in black on a deep dark red, under a beep. */
 const BEEP_MS = 250;
 /** From the last letter landing to the credit flip and its coin cue. */
 const CREDIT_AFTER_TITLE_MS = 2000;
@@ -90,7 +90,7 @@ export const opening: Stage = {
     const t0 = performance.now();
     await wait(Math.max(0, t0 + CARD_MS - performance.now()), signal);
     if (signal.aborted) return { kind: 'start' };
-    // The cut: the same card inverted, white with the logo in black and nothing else, under the
+    // The cut: the same card, dark red with the logo in black and nothing else, under the
     // bleep of a cut between scenes, for BEEP_MS; then black.
     card.classList.add('is-beep');
     const beep = audio.context && audio.master ? playBeep(audio.context, audio.master, BEEP_MS / 1000) : null;
