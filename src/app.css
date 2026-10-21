@@ -65,6 +65,7 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
   --ink-5: color-mix(in oklab, var(--ink) 5%, white);
   --ink-4: color-mix(in oklab, var(--ink) 4%, white);
   min-height: 100vh;
+  min-height: 100dvh; /* iOS: the visible height, not the height with the toolbars hidden */
   display: flex;
   flex-direction: column;
   background: #ffffff;
@@ -102,6 +103,7 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
 .no-print.is-sky-drop {
   z-index: 101;
   min-height: 100vh;
+  min-height: 100dvh;
   background: #ffffff;
   animation: sky-drop 700ms both;
 }
@@ -122,6 +124,7 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
 .no-print.is-tetris-drop {
   z-index: 101;
   min-height: 100vh;
+  min-height: 100dvh;
 }
 
 .no-print.is-tetris-drop :is(.header, .toolbar, .preview-stage, .sidebar, .state-pad) {
@@ -219,8 +222,11 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
   text-decoration: none;
 }
 
-.lang-nav a:hover {
-  text-decoration: underline;
+/* Hover only where there is a pointer that hovers: on a phone a tap would leave it stuck. */
+@media (hover: hover) {
+  .lang-nav a:hover {
+    text-decoration: underline;
+  }
 }
 
 .lang-nav a[aria-current='page'] {
@@ -240,8 +246,10 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
   cursor: pointer;
 }
 
-.btn-primary:hover:not(:disabled) {
-  opacity: 0.9;
+@media (hover: hover) {
+  .btn-primary:hover:not(:disabled) {
+    opacity: 0.9;
+  }
 }
 
 .btn-primary:disabled {
@@ -754,6 +762,14 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
   padding: 0;
   cursor: pointer;
   flex: none;
+  position: relative;
+}
+
+/* A bigger target than the dot for a finger: 36 × 44 px, short of the next swatch. */
+.swatch::before {
+  content: '';
+  position: absolute;
+  inset: -9px -5px;
 }
 
 .ink-name {
