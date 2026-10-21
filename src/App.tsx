@@ -80,16 +80,20 @@ export default function App() {
   const printRoot = useRef<HTMLDivElement>(null);
   const handleFileRef = useRef<(file: File) => void>(() => {});
   handleFileRef.current = (file) => void handleFile(file);
+  // Prntr has the screen: a file dragged over it is not taken (it would end the game
+  // and replace the document unseen).
+  const inPrntr = useRef(false);
+  inPrntr.current = appState === 'prntr';
 
-  // Window-level drag-and-drop: dropping a file anywhere, in any state,
-  // replaces the loaded document without confirmation. The depth counter
+  // Window-level drag-and-drop: dropping a file anywhere, in any state but
+  // Prntr, replaces the loaded document without confirmation. The depth counter
   // keeps the overlay from flickering as the drag crosses child elements.
   useEffect(() => {
     const depth = { current: 0 };
     const isFileDrag = (e: globalThis.DragEvent) =>
       Array.from(e.dataTransfer?.types ?? []).includes('Files');
     const onDragEnter = (e: globalThis.DragEvent) => {
-      if (!isFileDrag(e)) return;
+      if (!isFileDrag(e) || inPrntr.current) return;
       prefetchPdfjs();
       depth.current++;
       setDragging(true);
@@ -106,6 +110,10 @@ export default function App() {
       depth.current = 0;
       setDragging(false);
       if (!isFileDrag(e)) return;
+      if (inPrntr.current) {
+        e.preventDefault(); // nor may the browser open the file in place of the app
+        return;
+      }
       // The empty/error DropZone handles its own drops (and prevents default);
       // don't process the same file twice.
       if (e.defaultPrevented) return;
@@ -316,7 +324,14 @@ export default function App() {
   }
 
   function exitPrntr() {
+    prntrPage.current = null; // the page it was handed goes with it
     setAppState(prntrReturn.current);
+  }
+
+  // The drop has landed (or its safety net fired): Prntr unmounts, and its page goes.
+  function landPrntrDrop() {
+    prntrPage.current = null;
+    setPrntrDrop(null);
   }
 
   // The drops (PRNTR-STAGE-1.md §4.10): after the room is cleared the app's UI falls
@@ -326,7 +341,19 @@ export default function App() {
   // The room cleared, the page the app comes back to is the certificate of completion,
   // in place of whatever document it had.
   function finishPrntr(outcome: 'cleared' | 'over', certificate?: Certificate) {
-    if (certificate) loadCertificate(certificate);
+    if (certificate) {
+      try {
+        loadCertificate(certificate);
+      } catch (err) {
+        // The old document is already gone: say so on the error card rather than
+        // drop back onto an empty preview.
+        const code = classifyError(err);
+        logAppError(code, err, null);
+        setErrorInfo({ code, kind: KIND_BY_CODE[code] });
+        setAppState('error');
+        return;
+      }
+    }
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
       exitPrntr();
       return;
@@ -356,7 +383,7 @@ export default function App() {
   // Safety net: Prntr never stays mounted if the drop's animationend does not arrive.
   useEffect(() => {
     if (!prntrDrop) return;
-    const id = window.setTimeout(() => setPrntrDrop(null), prntrDrop === 'tetris' ? 2000 : 1200);
+    const id = window.setTimeout(landPrntrDrop, prntrDrop === 'tetris' ? 2000 : 1200);
     return () => window.clearTimeout(id);
   }, [prntrDrop]);
 
@@ -439,7 +466,7 @@ export default function App() {
         onAnimationEnd={(e) => {
           // The sky drop animates .no-print itself; the Tetris drop's last piece is the header.
           const landed = prntrDrop === 'tetris' ? (e.target as HTMLElement).classList.contains('header') : e.target === e.currentTarget;
-          if (landed) setPrntrDrop(null);
+          if (landed) landPrntrDrop();
         }}
       >
         <Header />
