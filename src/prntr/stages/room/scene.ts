@@ -1,6 +1,6 @@
 import { ART_AT } from './art';
 import { SPRITES, type PalKey } from './palette';
-import { H, Pix, W, parseSprite, rotateSprite, sliceRect, sliceRows, type Sprite } from './pixels';
+import { H, Pix, W, parseSprite, rotateSprite, sliceRect, type Sprite } from './pixels';
 
 export const SPR = {
   INFO: parseSprite(SPRITES.INFO),
@@ -12,16 +12,20 @@ export const SPR = {
   NUT: parseSprite(SPRITES.NUT),
   BOLT: parseSprite(SPRITES.BOLT),
   COOLER: parseSprite(SPRITES.COOLER),
-  PLANT: parseSprite(SPRITES.PLANT),
+  MONSTERA: parseSprite(SPRITES.MONSTERA),
   POSTER: parseSprite(SPRITES.POSTER),
   CLOCK: parseSprite(SPRITES.CLOCK),
   EXIT: parseSprite(SPRITES.EXIT),
   PAGE_SMALL: parseSprite(SPRITES.PAGE_SMALL),
   PAGE_PRINTED: parseSprite(SPRITES.PAGE_PRINTED),
   POSTER_TORN: parseSprite(SPRITES.POSTER_TORN),
-  TANK_BROKEN: parseSprite(SPRITES.TANK_BROKEN),
-  PLANT_BARE: parseSprite(SPRITES.PLANT_BARE),
-  POT_BROKEN: parseSprite(SPRITES.POT_BROKEN),
+  COOLER_SHOT: parseSprite(SPRITES.COOLER_SHOT),
+  MONSTERA_BARE: parseSprite(SPRITES.MONSTERA_BARE),
+  MONSTERA_DOWN: parseSprite(SPRITES.MONSTERA_DOWN),
+  FIG: parseSprite(SPRITES.FIG),
+  FIG_BARE: parseSprite(SPRITES.FIG_BARE),
+  FIG_POT: parseSprite(SPRITES.FIG_POT),
+  FIG_SHARDS: parseSprite(SPRITES.FIG_SHARDS),
   EXIT_BROKEN: parseSprite(SPRITES.EXIT_BROKEN),
   SPLAT: parseSprite(SPRITES.SPLAT),
   TUBE_HEAD: parseSprite(SPRITES.TUBE_HEAD),
@@ -31,11 +35,6 @@ export const SPR = {
 /** The clock at each quarter turn, for rolling. */
 const CLOCK_ROT = [0, 1, 2, 3].map((q) => rotateSprite(SPR.CLOCK, q));
 /** The cooler below its bottle, the plant's leaves and its pot, so each half can break alone. */
-const COOLER_BODY = sliceRows(SPR.COOLER, 8, 22);
-const PLANT_TOP = sliceRows(SPR.PLANT, 0, 10);
-const PLANT_POT = sliceRows(SPR.PLANT, 10, 16);
-/** The bare plant lying on the carpet, its top to the left: the pot shot from under it. */
-const PLANT_FALLEN = rotateSprite(SPR.PLANT_BARE, 3);
 
 /** What the gun has broken: each stays broken for the rest of the stage. */
 export interface Broken {
@@ -50,6 +49,17 @@ export interface Broken {
   vase: boolean;
   /** The first aid kit (a pouch), shot open: it gave the player full health, once. */
   kit: boolean;
+  /** The fig's leaves, shot off. */
+  fig: boolean;
+  /** The fig's planter, shot: the tree collapses toward the machine. */
+  figPot: boolean;
+}
+
+/** The fig after its planter is shot: how far it has fallen (0 standing … 1 leaning on the machine), and
+ * whether it has caught from the fire and burns. */
+export interface Fig {
+  fall: number;
+  burning: boolean;
 }
 
 /**
@@ -210,6 +220,8 @@ export const tubeX = (tb: Tube, y: number): number => {
 export interface SceneState {
   /** Left, right fluorescent panel. */
   lights: [boolean, boolean];
+  /** The weeping fig by the window. */
+  fig: Fig;
   printer: PrinterPose;
   /** The machine's power light red (the beat after the USB goes in; the handoff reddened its sticker). */
   ledRed: boolean;
@@ -260,6 +272,39 @@ export interface SceneState {
  * board at 66,40 and the clock at 112,36. */
 export const CLOCK_AT = { x: 50, y: 41 };
 export const BOARD_AT = { x: 136, y: 46 };
+/** The water cooler (22×46), and with its bottle shot (22×33): at the room's own resolution. */
+export const COOLER_AT = { x: 51, y: 90 };
+export const COOLER_SHOT_AT = { x: 51, y: 103 };
+/** The weeping fig by the window, behind the monstera: its tree (or bare) and its planter (or the shards); it
+ * falls about FIG_AT.pivot, the foot of its trunk, by up to FIG_LEAN radians toward the machine, and comes to
+ * rest against the machine's back right corner (the machine is drawn after it, in front). */
+export const FIG_AT = { tree: { x: 172, y: 56 }, bare: { x: 176, y: 62 }, pot: { x: 181, y: 116 }, shards: { x: 177, y: 121 }, pivot: { x: 192, y: 126 } };
+export const FIG_LEAN = 0.5;
+/** The fig's crown, for the flames when it burns: its centre on the standing tree. */
+const FIG_CROWN = { x: 192, y: 73 };
+
+/** Blits a sprite turned by a radians toward the left (its top going left) about a pivot: each pixel of the
+ * turned box takes the sprite pixel that turns onto it (nearest), so nothing gaps. */
+export function blitLeaning(p: Pix, x0: number, y0: number, s: Sprite, pivot: { x: number; y: number }, a: number): void {
+  const c = Math.cos(a), sn = Math.sin(a);
+  const corners = [[x0, y0], [x0 + s.w, y0], [x0, y0 + s.h], [x0 + s.w, y0 + s.h]].map(([x, y]) => { const dx = x - pivot.x, dy = y - pivot.y; return [pivot.x + dx * c + dy * sn, pivot.y - dx * sn + dy * c]; });
+  const bx0 = Math.floor(Math.min(...corners.map((q) => q[0]))), bx1 = Math.ceil(Math.max(...corners.map((q) => q[0])));
+  const by0 = Math.floor(Math.min(...corners.map((q) => q[1]))), by1 = Math.ceil(Math.max(...corners.map((q) => q[1])));
+  for (let y = by0; y <= by1; y++) {
+    for (let x = bx0; x <= bx1; x++) {
+      const dx = x + 0.5 - pivot.x, dy = y + 0.5 - pivot.y;
+      const sx = Math.floor(pivot.x + dx * c - dy * sn) - x0, sy = Math.floor(pivot.y + dx * sn + dy * c) - y0;
+      if (sx < 0 || sy < 0 || sx >= s.w || sy >= s.h) continue;
+      const k = s.rows[sy][sx];
+      if (k !== '.') p.set(x, y, k as PalKey);
+    }
+  }
+}
+
+/** The monstera by the window, whole, its leaves shot off, and down with its pot shot: at the room's own resolution. */
+export const MONSTERA_AT = { whole: { x: 191, y: 94 }, bare: { x: 194, y: 101 }, down: { x: 183, y: 125 } };
+/** The USB stick on the carpet, its lanyard and its shadow (39×8, at the room's own resolution). */
+export const USB_AT = { x: 157, y: 138 };
 /** The first aid kit (13×10), a green pouch hanging on the wall at the lower right of the window. */
 export const KIT_AT = { x: 226, y: 79 };
 
@@ -865,16 +910,28 @@ function drawHoles(p: Pix, s: SceneState): void {
  */
 export function drawRoom(p: Pix, s: SceneState): void {
   p.fill('A');
-  // ceiling: tiles with a grid, two fluorescent panels, a shadow line under it
-  p.rect(0, 0, W, 28, 'T');
-  for (let x = 0; x < W; x += 24) p.rect(x, 0, x + 1, 28, 't');
-  for (let y = 0; y < 28; y += 9) p.rect(0, y, W, y + 1, 't');
-  p.rect(0, 27, W, 29, 'a');
+  // the ceiling, exposed (the objects sheet's #4): a dark deck with its ribs, a fat duct along it with its
+  // seams, a pipe and a rust-red line under it, a shadow where it meets the wall; the two lights are bare
+  // tube fixtures hanging on two cords each, the tube white when lit (with a glow row under it), grey when out
+  p.rect(0, 0, W, 29, 'B');
+  p.rect(0, 0, W, 3, 'X');
+  for (let x = 0; x < W; x += 12) p.rect(x, 0, x + 1, 3, 'G');
+  p.rect(0, 4, W, 10, 'g');
+  p.rect(0, 4, W, 5, 'e');
+  p.rect(0, 9, W, 10, 'G');
+  for (let x = 30; x < W; x += 40) p.rect(x, 4, x + 1, 10, 'G');
+  p.rect(0, 21, W, 23, 'G');
+  p.rect(0, 21, W, 22, 'x');
+  p.rect(0, 25, W, 26, 'p');
+  p.rect(0, 27, W, 29, 'X');
   [44, 148].forEach((x0, i) => {
     const on = s.lights[i];
-    p.rect(x0, 9, x0 + 48, 18, 't');
-    p.rect(x0 + 1, 10, x0 + 47, 17, on ? 'F' : 'f');
-    if (on) p.rect(x0 + 6, 12, x0 + 42, 15, 'W');
+    line(p, x0 + 8, 0, x0 + 8, 12, 'K');
+    line(p, x0 + 40, 0, x0 + 40, 12, 'K');
+    p.rect(x0 + 2, 12, x0 + 46, 15, 'g');
+    p.rect(x0 + 2, 15, x0 + 46, 16, 'K');
+    p.rect(x0 + 4, 16, x0 + 44, 18, on ? 'W' : 'f');
+    if (on) p.rect(x0 + 4, 18, x0 + 44, 19, 'F');
   });
   // the wall darkens under a tube that is out
   if (!s.lights[0]) p.rect(0, 29, 120, 108, 'a');
@@ -968,10 +1025,9 @@ export function drawRoom(p: Pix, s: SceneState): void {
     // the water on the carpet, the stump of the bottle, the cooler itself
     p.rect(46, 135, 78, 137, 'L');
     p.rect(42, 137, 82, 139, 'l');
-    p.blit(50, 92, SPR.TANK_BROKEN, 2);
-    p.blit(50, 108, COOLER_BODY, 2);
+    p.blit(COOLER_SHOT_AT.x, COOLER_SHOT_AT.y, SPR.COOLER_SHOT);
   } else {
-    p.blit(50, 92, SPR.COOLER, 2);
+    p.blit(COOLER_AT.x, COOLER_AT.y, SPR.COOLER);
   }
   // the clock off the wall: falling, rolling or lying in front of the cooler, burning as it goes
   const ck = s.clock;
@@ -984,17 +1040,25 @@ export function drawRoom(p: Pix, s: SceneState): void {
   }
   if (s.fire) drawFire(p, s.fire, 'mid');
   p.rect(190, 132, 206, 135, 'X');
-  // the plant in its pot; its leaves shot off, bare stems; the pot shot, the stems lie on the carpet
-  if (s.broken.vase) p.blit(182, 121, PLANT_FALLEN, 2);
-  else p.blit(200, 103, s.broken.plant ? SPR.PLANT_BARE : PLANT_TOP, 2);
-  p.blit(200, 123, s.broken.vase ? SPR.POT_BROKEN : PLANT_POT, 2);
-  if (s.broken.plant) {
-    // leaves on the carpet
-    p.rect(194, 134, 196, 136, 'v');
-    p.rect(198, 136, 200, 138, 'V');
-    p.rect(230, 133, 232, 135, 'V');
-    p.rect(226, 136, 228, 138, 'v');
+  // the weeping fig behind the monstera: standing in its planter, or falling (then leaning) toward the machine
+  // with the planter in shards; burning once it has caught from the fire
+  p.rect(170, 127, 184, 130, 'X');
+  const figTree = s.broken.fig ? SPR.FIG_BARE : SPR.FIG;
+  const figAt = s.broken.fig ? FIG_AT.bare : FIG_AT.tree;
+  if (s.fig.fall <= 0) p.blit(figAt.x, figAt.y, figTree);
+  else blitLeaning(p, figAt.x, figAt.y, figTree, FIG_AT.pivot, FIG_LEAN * s.fig.fall);
+  if (s.broken.figPot) p.blit(FIG_AT.shards.x, FIG_AT.shards.y, SPR.FIG_SHARDS);
+  else p.blit(FIG_AT.pot.x, FIG_AT.pot.y, SPR.FIG_POT);
+  if (s.fig.burning) {
+    const a = FIG_LEAN * s.fig.fall, dx = FIG_CROWN.x - FIG_AT.pivot.x, dy = FIG_CROWN.y - FIG_AT.pivot.y;
+    const cx = FIG_AT.pivot.x + dx * Math.cos(a) + dy * Math.sin(a), cy = FIG_AT.pivot.y - dx * Math.sin(a) + dy * Math.cos(a);
+    drawFlame(p, cx, 14, 20, cy + 10, 300, s.fire?.t ?? 0);
+    drawFlame(p, (cx + FIG_AT.pivot.x) / 2, 6, 12, (cy + FIG_AT.pivot.y) / 2 + 6, 310, s.fire?.t ?? 0);
   }
+  // the monstera in its pot; its leaves shot off, the bare stalks; the pot shot, the plant lies on the carpet
+  if (s.broken.vase) p.blit(MONSTERA_AT.down.x, MONSTERA_AT.down.y, SPR.MONSTERA_DOWN);
+  else if (s.broken.plant) p.blit(MONSTERA_AT.bare.x, MONSTERA_AT.bare.y, SPR.MONSTERA_BARE);
+  else p.blit(MONSTERA_AT.whole.x, MONSTERA_AT.whole.y, SPR.MONSTERA);
   // the ink tubes up from behind the machine: a ribbed hose (row by row, so it can snake), its
   // head, the ink in its mouth; the machine covers the hose's foot, the ink in the air is drawn over
   // them. They are attached to the machine, so they shake with it (PRNTR-PLANNING.md P3).
@@ -1032,8 +1096,5 @@ export function drawRoom(p: Pix, s: SceneState): void {
     if (s.machine.flash && !s.flashWhite) p.rect(ART_AT.x, ART_AT.y, ART_AT.x + ART_AT.w, ART_AT.y + ART_AT.h, 'W');
   }
   // the USB stick on the carpet, right of the machine, with its shadow
-  if (s.usb) {
-    p.rect(174, 146, 190, 148, 'X');
-    p.blit(172, 136, SPR.USB, 2);
-  }
+  if (s.usb) p.blit(USB_AT.x, USB_AT.y, SPR.USB);
 }
