@@ -118,7 +118,7 @@ export default function Prntr({ source, recolored, inkHex, stage, audioContext, 
         if (!handoff) return;
         finished = true;
         // Made before ✕ goes: if it throws, the way out must still be there.
-        const certificate = handoff.kind === 'cleared' ? makeCertificate(handoff.player, handoff.score, 1337) : undefined;
+        const certificate = handoff.kind === 'cleared' ? makeCertificate(handoff.player, handoff.score, 1337, handoff.stats) : undefined;
         setDone(true);
         if (certificate) onDoneRef.current('cleared', certificate);
         else onDoneRef.current('over');

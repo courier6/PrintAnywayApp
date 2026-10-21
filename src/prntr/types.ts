@@ -33,7 +33,31 @@ export interface StageContext {
  * are added here as stages land: the room (stage 1) ends with `cleared` (and who
  * cleared it), or with `over` (a game over), which ends the chain whatever follows.
  */
-export type Handoff = { kind: 'start' } | { kind: 'cleared'; score: number; player: string } | { kind: 'over'; score: number };
+export type Handoff = { kind: 'start' } | { kind: 'cleared'; score: number; player: string; stats: RunStats } | { kind: 'over'; score: number };
+
+/** What the room counted while it was won; the certificate turns it into honours. */
+export interface RunStats {
+  /** By the gun (1337 reached while the machine stood) or by the fire (it burst as the score ran out). */
+  wonBy: 'gun' | 'fire';
+  /** The blind shot out (`breakWindow`), the door shot to planks (`breakDoor`). */
+  window: boolean;
+  door: boolean;
+  /** The fire was started at least once (it may have been put out), and how often it was stoked. */
+  fire: boolean;
+  stokes: number;
+  /** Shots fired, and the ones that hit something (anything the room reacts to: not the wall, the carpet, or out through the open door or window). */
+  shotsFired: number;
+  hits: number;
+  livesLost: number;
+  continues: number;
+  /** Ink tubes blown off the head (`explodeTube`), 0–4. */
+  tubes: number;
+  /** Pages and staples shot out of the air. */
+  pages: number;
+  staples: number;
+  /** From the fight's start to the burst. */
+  seconds: number;
+}
 
 /**
  * The certificate of completion: the page the app loads in place of
