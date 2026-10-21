@@ -52,6 +52,66 @@ ccWcc
 c.....cc.....c..KKKKKKKKKKKKKKKK.......
 ........ccccc...XXXXXXXXXXXXXXXXXXXXXX.
 `,
+  // 21 × 10 at 8,120: the staff badge on the carpet by the door, its lanyard trailing up and left
+  BADGE: `
+c....................
+.c.......KK..........
+..c.....KKKKKKKKKKKKK
+...c....KwwwwwwwwwwwK
+....cc..KwggKwKKKKwwK
+......ccKwggKwwwwwwwK
+........KwggKwKKKwwwK
+........KwwwKwwwwwwwK
+........KXXXXXXXXXXXK
+........KKKKKKKKKKKKK
+`,
+  // 16 × 9 at 8,121: the badge shot, in pieces
+  BADGE_SHOT: `
+c...............
+.c..............
+..c.......Kw....
+...c..wK......Kw
+....cc...KK.w...
+......cc..wwK..K
+.......K.....KK.
+..........XX....
+........K....wK.
+`,
+  // 26 × 32: the badge's photo, a sitter in a booth, nobody in particular
+  PHOTO: `
+KKKKKKKKKKKKKKKKKKKKKKKKKK
+KddddddddddddddddddddddddK
+KddddddddddddddddddddddddK
+KddddddddddddddddddddddddK
+KddddddddddGGGGGGddddddddK
+KdddddddddGGGGGGGGdddddddK
+KdddddddddGGGGGGGGdddddddK
+KdddddddddGGGGGGGGdddddddK
+KdddddddddGGGGGGGGdddddddK
+KdddddddddGGGGGGGGdddddddK
+KdddddddddGGGGGGGGdddddddK
+KdddddddddGGGGGGGGdddddddK
+KdddddddddGGGGGGGGdddddddK
+KdddddddddGGGGGGGGdddddddK
+KdddddddddGGGGGGGGdddddddK
+KdddddddddGGGGGGGGdddddddK
+KdddddddddGGGGGGGGdddddddK
+KdddddddddGGGGGGGGdddddddK
+KddddddddddGGGGGGddddddddK
+KddddddddddGGGGGGddddddddK
+KdddddddddddGGGGdddddddddK
+KdddddddddddGGGGdddddddddK
+KdddddGGGGGGGGGGGGGGGGdddK
+KdddGGGGGGGGGGGGGGGGGGGGdK
+KdddGGGGGGGGGGGGGGGGGGGGdK
+KdddGGGGGGGGGGGGGGGGGGGGdK
+KdddGGGGGGGGGGGGGGGGGGGGdK
+KdddGGGGGGGGGGGGGGGGGGGGdK
+KdddGGGGGGGGGGGGGGGGGGGGdK
+KdddGGGGGGGGGGGGGGGGGGGGdK
+KdddGGGGGGGGGGGGGGGGGGGGdK
+KKKKKKKKKKKKKKKKKKKKKKKKKK
+`,
   // 8 × 11
   POINTER: `
 ..KK....

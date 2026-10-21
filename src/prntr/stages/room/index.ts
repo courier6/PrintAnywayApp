@@ -716,6 +716,7 @@ export const room: Stage = {
       ledRed: false,
       trayPage: true,
       usb: true,
+      badge: 'floor',
       machine: { lid: 0, lamp: null, lampOut: false, flash: false, power: true, angry: false, back: 1, t: 0, error: null, lift: 0 },
       flashWhite: false,
       buttonBright: false,
