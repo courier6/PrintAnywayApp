@@ -9,7 +9,7 @@ const WOBBLE = 1;
 const POP_MS = 200;
 /** The Simple Products card, fades included. */
 const CARD_MS = 1250;
-/** Then the cut: the card inverted, the logo alone on white, under a beep. */
+/** Then the cut: the machine over crossed bones in black on a deep dark red, under a beep. */
 const BEEP_MS = 250;
 /** From the last letter landing to the credit flip and its coin cue. */
 const CREDIT_AFTER_TITLE_MS = 2000;
@@ -59,6 +59,48 @@ const LOGO =
   '<rect x="60" y="71" width="24" height="3" fill="#000000"></rect>' +
   '</svg>';
 
+/** The cut's mark: the machine from the room (SP-7331, front on, lid shut, its four ink caps) as a flat
+ * silhouette in the SNARC's style, over two crossed bones like a skull and crossbones. Black on the
+ * cut's dark red; its openings and the halo that parts it from the bones are the red. */
+const CUT_MARK =
+  '<svg class="prntr-card-cutmark" viewBox="0 0 160 138" role="img" aria-label="A printer over crossed bones">' +
+  // the bones, crossing under the machine with their ends out at its sides: a shaft and two knobs at each end
+  '<g fill="#000" stroke="#000">' +
+  '<line x1="10" y1="80" x2="150" y2="128" stroke-width="7" stroke-linecap="round"></line>' +
+  '<line x1="150" y1="80" x2="10" y2="128" stroke-width="7" stroke-linecap="round"></line>' +
+  '<circle cx="8.9" cy="83.3" r="4.5" stroke="none"></circle><circle cx="11.1" cy="76.7" r="4.5" stroke="none"></circle>' +
+  '<circle cx="148.9" cy="131.3" r="4.5" stroke="none"></circle><circle cx="151.1" cy="124.7" r="4.5" stroke="none"></circle>' +
+  '<circle cx="151.1" cy="83.3" r="4.5" stroke="none"></circle><circle cx="148.9" cy="76.7" r="4.5" stroke="none"></circle>' +
+  '<circle cx="11.1" cy="131.3" r="4.5" stroke="none"></circle><circle cx="8.9" cy="124.7" r="4.5" stroke="none"></circle>' +
+  '</g>' +
+  // the machine's outline, once wide in the red (the halo) and once in black
+  '<defs><g id="prntr-cut-sil">' +
+  '<rect x="62.5" y="9" width="7" height="8" rx="1.5"></rect><rect x="76.5" y="9" width="7" height="8" rx="1.5"></rect>' +
+  '<rect x="90.5" y="9" width="7" height="8" rx="1.5"></rect><rect x="104.5" y="9" width="7" height="8" rx="1.5"></rect>' +
+  '<rect x="28" y="16" width="104" height="12" rx="2"></rect>' +
+  '<rect x="25" y="30" width="110" height="62" rx="3"></rect>' +
+  '<rect x="30" y="91" width="13" height="6" rx="1"></rect><rect x="117" y="91" width="13" height="6" rx="1"></rect>' +
+  '</g></defs>' +
+  '<use href="#prntr-cut-sil" fill="#5C0A12" stroke="#5C0A12" stroke-width="7" stroke-linejoin="round"></use>' +
+  '<use href="#prntr-cut-sil" fill="#000"></use>' +
+  // its openings: the lid's handle, the display with its three lines, four keys, the button, the output
+  // slot with a page in it, the two drawers' seams and handles
+  '<g fill="#5C0A12">' +
+  '<rect x="72" y="23" width="16" height="2.5"></rect>' +
+  '<rect x="31" y="35" width="32" height="12" rx="1.5"></rect>' +
+  '<rect x="68" y="38" width="5" height="5"></rect><rect x="76" y="38" width="5" height="5"></rect>' +
+  '<rect x="84" y="38" width="5" height="5"></rect><rect x="92" y="38" width="5" height="5"></rect>' +
+  '<rect x="108" y="35.5" width="20" height="11" rx="2"></rect>' +
+  '<rect x="31" y="52" width="98" height="9" rx="1.5"></rect>' +
+  '<rect x="28" y="66" width="104" height="1.8"></rect><rect x="28" y="79" width="104" height="1.8"></rect>' +
+  '<rect x="70" y="71" width="20" height="2.6"></rect><rect x="70" y="84" width="20" height="2.6"></rect>' +
+  '</g>' +
+  '<g fill="#000">' +
+  '<rect x="34" y="38" width="20" height="1.6"></rect><rect x="34" y="41" width="25" height="1.6"></rect><rect x="34" y="44" width="12" height="1.6"></rect>' +
+  '<rect x="40" y="54.5" width="80" height="4"></rect>' +
+  '</g>' +
+  '</svg>';
+
 function el(tag: string, className: string, text?: string): HTMLElement {
   const node = document.createElement(tag);
   node.className = className;
@@ -81,8 +123,8 @@ export const opening: Stage = {
     // Beats 1–2: the card, 1.25s in total (in 250ms, hold, out 250ms).
     const card = el('div', 'prntr-card');
     card.innerHTML =
-      `<div class="prntr-card-brand">${LOGO}<div class="prntr-card-name">SIMPLE PRODUCTS</div></div>` +
-      '<div class="prntr-card-presents">presents…</div>';
+      `<div class="prntr-card-brand">${LOGO}${CUT_MARK}<div class="prntr-card-name">SIMPLE PRODUCTS</div></div>` +
+      '<div class="prntr-card-presents">presents</div>';
     root.append(card);
     // Under the card, as long as it is on: the jingle. Cut with the stage.
     const jingle = audio.context && audio.master ? playCardJingle(audio.context, audio.master, CARD_MS / 1000) : null;
@@ -90,8 +132,8 @@ export const opening: Stage = {
     const t0 = performance.now();
     await wait(Math.max(0, t0 + CARD_MS - performance.now()), signal);
     if (signal.aborted) return { kind: 'start' };
-    // The cut: the same card inverted, white with the logo in black and nothing else, under the
-    // bleep of a cut between scenes, for BEEP_MS; then black.
+    // The cut: the card goes dark red with the machine over crossed bones in black in place of the
+    // logo, and nothing else, under the bleep of a cut between scenes, for BEEP_MS; then black.
     card.classList.add('is-beep');
     const beep = audio.context && audio.master ? playBeep(audio.context, audio.master, BEEP_MS / 1000) : null;
     if (beep) signal.addEventListener('abort', () => beep.stop(), { once: true });

@@ -121,28 +121,28 @@
   animation: prntr-card 1250ms linear forwards;
 }
 
-/* The cut after the card: the card inverted, white, the logo alone in black. */
+/* The cut after the card: on a deep dark red (it was white: the fight has white flashes enough),
+   the machine over crossed bones in black in place of the logo (CUT_MARK in opening.ts). */
 .prntr-card.is-beep {
-  background: #FFFFFF;
+  background: #5C0A12;
   opacity: 1;
   animation: none;
 }
 
 .prntr-card.is-beep .prntr-card-name,
-.prntr-card.is-beep .prntr-card-presents {
+.prntr-card.is-beep .prntr-card-presents,
+.prntr-card.is-beep .prntr-card-logo {
   display: none;
 }
 
-.prntr-card.is-beep .prntr-card-logo {
-  fill: #000000;
+.prntr-card-cutmark {
+  display: none;
+  width: 168px;
+  height: 145px;
 }
 
-.prntr-card.is-beep .prntr-card-logo path {
-  stroke: #000000;
-}
-
-.prntr-card.is-beep .prntr-card-logo [fill="#000000"] {
-  fill: #FFFFFF;
+.prntr-card.is-beep .prntr-card-cutmark {
+  display: block;
 }
 
 .prntr-card-brand {
@@ -164,18 +164,20 @@
 
 .prntr-card-name {
   color: #EDEDED;
-  font-size: 26px;
-  font-weight: 400;
-  letter-spacing: 0.32em;
-  padding-left: 0.32em; /* optical centring against the tracking */
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 0 0.1em 10px;
+  border-bottom: 1px solid #4A4A4A; /* a hairline under the name, like a letterhead */
   text-transform: uppercase;
 }
 
 .prntr-card-presents {
-  color: #9A9A9A;
-  font-size: 18px;
-  font-style: italic;
-  letter-spacing: 0.06em;
+  color: #8A8A8A;
+  font-size: 13px;
+  letter-spacing: 0.45em;
+  padding-left: 0.45em; /* optical centring against the tracking */
+  text-transform: uppercase;
 }
 
 .prntr-title-wrap {
