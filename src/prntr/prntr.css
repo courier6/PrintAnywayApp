@@ -121,8 +121,8 @@
   animation: prntr-card 1250ms linear forwards;
 }
 
-/* The cut after the card: the logo alone in black on a deep dark red (it was white: the fight
-   has white flashes enough), the logo's inner shapes in the red. */
+/* The cut after the card: on a deep dark red (it was white: the fight has white flashes enough),
+   the machine over crossed bones in black in place of the logo (CUT_MARK in opening.ts). */
 .prntr-card.is-beep {
   background: #5C0A12;
   opacity: 1;
@@ -130,20 +130,19 @@
 }
 
 .prntr-card.is-beep .prntr-card-name,
-.prntr-card.is-beep .prntr-card-presents {
+.prntr-card.is-beep .prntr-card-presents,
+.prntr-card.is-beep .prntr-card-logo {
   display: none;
 }
 
-.prntr-card.is-beep .prntr-card-logo {
-  fill: #000000;
+.prntr-card-cutmark {
+  display: none;
+  width: 168px;
+  height: 145px;
 }
 
-.prntr-card.is-beep .prntr-card-logo path {
-  stroke: #000000;
-}
-
-.prntr-card.is-beep .prntr-card-logo [fill="#000000"] {
-  fill: #5C0A12;
+.prntr-card.is-beep .prntr-card-cutmark {
+  display: block;
 }
 
 .prntr-card-brand {
