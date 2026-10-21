@@ -12,6 +12,8 @@ interface Props {
   fileName: string;
   downloadFormat: ExportFormat;
   pageCount: number;
+  /** Pages rendered so far; the rest are still on their way. */
+  renderedCount: number;
   currentPage: number;
   onPageChange: (page: number) => void;
   /** The inks on offer (the four, and gold once Prntr's room is won). */
@@ -39,6 +41,7 @@ export function PreviewState({
   fileName,
   downloadFormat,
   pageCount,
+  renderedCount,
   currentPage,
   onPageChange,
   inks,
@@ -184,6 +187,14 @@ export function PreviewState({
               >
                 ›
               </button>
+            </div>
+          )}
+          {/* The rest of a long document is still rendering: say so, as Print and Download
+              wait for it. Kept in the layout once done so the page does not jump; not a live
+              region, which would read out every page. */}
+          {pageCount > 1 && (
+            <div className={'preview-progress' + (renderedCount >= pageCount ? ' is-done' : '')}>
+              {t('processing.page', { page: Math.min(renderedCount + 1, pageCount), total: pageCount })}
             </div>
           )}
           {pageReady ? (

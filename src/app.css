@@ -65,6 +65,7 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
   --ink-5: color-mix(in oklab, var(--ink) 5%, white);
   --ink-4: color-mix(in oklab, var(--ink) 4%, white);
   min-height: 100vh;
+  min-height: 100dvh; /* iOS: the visible height, not the height with the toolbars hidden */
   display: flex;
   flex-direction: column;
   background: #ffffff;
@@ -102,6 +103,7 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
 .no-print.is-sky-drop {
   z-index: 101;
   min-height: 100vh;
+  min-height: 100dvh;
   background: #ffffff;
   animation: sky-drop 700ms both;
 }
@@ -122,6 +124,7 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
 .no-print.is-tetris-drop {
   z-index: 101;
   min-height: 100vh;
+  min-height: 100dvh;
 }
 
 .no-print.is-tetris-drop :is(.header, .toolbar, .preview-stage, .sidebar, .state-pad) {
@@ -192,7 +195,7 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
 
 .header-formats {
   font-size: 12.5px;
-  color: var(--ink-55);
+  color: var(--ink-70);
   flex: none;
 }
 
@@ -215,12 +218,15 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
 }
 
 .lang-nav a {
-  color: var(--ink-55);
+  color: var(--ink-70);
   text-decoration: none;
 }
 
-.lang-nav a:hover {
-  text-decoration: underline;
+/* Hover only where there is a pointer that hovers: on a phone a tap would leave it stuck. */
+@media (hover: hover) {
+  .lang-nav a:hover {
+    text-decoration: underline;
+  }
 }
 
 .lang-nav a[aria-current='page'] {
@@ -240,8 +246,10 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
   cursor: pointer;
 }
 
-.btn-primary:hover:not(:disabled) {
-  opacity: 0.9;
+@media (hover: hover) {
+  .btn-primary:hover:not(:disabled) {
+    opacity: 0.9;
+  }
 }
 
 .btn-primary:disabled {
@@ -369,7 +377,7 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
 
 .hero-formats {
   font-size: 13px;
-  color: var(--ink-55);
+  color: var(--ink-70);
 }
 
 .below-zone {
@@ -380,14 +388,14 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
 
 .privacy-line {
   font-size: 12.5px;
-  color: var(--ink-50);
+  color: var(--ink-70);
 }
 
 /* One quiet line under the privacy note; opens to the per-brand tips. */
 .printer-tips {
   padding-top: 8px;
   font-size: 12.5px;
-  color: var(--ink-50);
+  color: var(--ink-70);
   text-align: center;
 }
 
@@ -426,7 +434,7 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
 .printer-tips-list dd {
   margin: 2px 0 0;
   line-height: 1.5;
-  color: var(--ink-65);
+  color: var(--ink-70);
 }
 
 .error-card {
@@ -450,7 +458,7 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
 .error-body {
   font-size: 14px;
   line-height: 1.5;
-  color: var(--ink-65);
+  color: var(--ink-70);
 }
 
 .error-actions {
@@ -468,7 +476,7 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
 .error-code {
   margin-top: 10px;
   font-size: 12px;
-  color: var(--ink-40);
+  color: var(--ink-70);
 }
 
 /* ---------- Processing ---------- */
@@ -482,17 +490,6 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
   gap: 24px;
   padding: 36px;
   background: var(--ink-4);
-}
-
-.processing-page {
-  width: 290px;
-  max-width: 100%;
-  box-shadow: 0 10px 30px color-mix(in oklab, var(--ink) 18%, transparent);
-}
-
-.processing-page canvas {
-  width: 100%;
-  display: block;
 }
 
 .progress-unit {
@@ -520,12 +517,6 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
   font-size: 14.5px;
   font-weight: 700;
   color: var(--ink);
-}
-
-.progress-sub {
-  font-size: 12.5px;
-  color: var(--ink-55);
-  text-align: center;
 }
 
 /* ---------- Preview toolbar ---------- */
@@ -575,7 +566,7 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
 
 .file-chip {
   font-size: 13px;
-  color: var(--ink-60);
+  color: var(--ink-70);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -586,6 +577,16 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
   display: flex;
   align-items: center;
   gap: 10px;
+}
+
+.preview-progress {
+  margin-top: -8px;
+  font-size: 12.5px;
+  color: var(--ink-75);
+}
+
+.preview-progress.is-done {
+  visibility: hidden;
 }
 
 .pager-btn {
@@ -640,7 +641,7 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
   font: 700 10.5px ui-monospace, Menlo, monospace;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--ink-60);
+  color: var(--ink-75);
 }
 
 .page-stack {
@@ -700,7 +701,7 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
   align-items: center;
   justify-content: center;
   font-size: 13px;
-  color: var(--ink-55);
+  color: var(--ink-75);
 }
 
 .pill-btn {
@@ -736,7 +737,7 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
   font: 700 11px ui-monospace, Menlo, monospace;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--ink-55);
+  color: var(--ink-70);
   margin-bottom: 12px;
 }
 
@@ -754,6 +755,14 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
   padding: 0;
   cursor: pointer;
   flex: none;
+  position: relative;
+}
+
+/* A bigger target than the dot for a finger: 36 × 44 px, short of the next swatch. */
+.swatch::before {
+  content: '';
+  position: absolute;
+  inset: -9px -5px;
 }
 
 .ink-name {
@@ -767,7 +776,7 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
   margin: 0;
   font-size: 12.5px;
   line-height: 1.55;
-  color: var(--ink-60);
+  color: var(--ink-70);
 }
 
 .help-section {
@@ -798,7 +807,7 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
 .help-body {
   font-size: 12.5px;
   line-height: 1.5;
-  color: var(--ink-65);
+  color: var(--ink-70);
   padding-top: 6px;
 }
 
@@ -857,7 +866,7 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
   display: block;
   margin-top: 4px;
   font-size: 12px;
-  color: var(--ink-65);
+  color: var(--ink-70);
 }
 
 /* ---------- Print output ---------- */
@@ -902,7 +911,7 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
 
 .drag-overlay-subline {
   font-size: 14px;
-  color: var(--ink-65);
+  color: var(--ink-70);
 }
 
 @media print {
@@ -931,7 +940,7 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
 
   /* Printed from the browser's menu before the Print button: the page on screen,
      not the app around it. */
-  .app:not(.has-print-pages) .no-print :is(.header, .toolbar, .pager, .pill-btn, .sidebar, .compare-caption, .print-reminder, .page-original, .page-flash, .drag-overlay) {
+  .app:not(.has-print-pages) .no-print :is(.header, .toolbar, .pager, .preview-progress, .pill-btn, .sidebar, .compare-caption, .print-reminder, .page-original, .page-flash, .drag-overlay) {
     display: none !important;
   }
 

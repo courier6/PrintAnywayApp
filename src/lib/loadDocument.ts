@@ -104,19 +104,26 @@ export function fileKind(file: File): FileKind | null {
 export async function loadDocument(file: File): Promise<SourceDocument> {
   const kind = fileKind(file);
   if (kind === 'pdf') return loadPdf(file);
-  if (kind === 'heic') return loadImage(await decodeHeic(file));
+  if (kind === 'heic') return fromBitmap(await decodeHeic(file));
   if (kind === 'png' || kind === 'jpg') return loadImage(file);
   throw new UnsupportedFileError();
 }
 
-// Browsers (Safari aside) can't decode HEIC natively; the decoder is imported
-// only when a HEIC file actually arrives so the common path stays light.
-async function decodeHeic(file: File): Promise<Blob> {
+// Safari decodes HEIC itself, and iPhones, where most HEIC files come from,
+// mostly use it: no decoder to download there. Elsewhere heic-to (about 730 KB
+// gzipped) is imported only when a HEIC file actually arrives, and decodes
+// straight to a bitmap.
+async function decodeHeic(file: File): Promise<ImageBitmap> {
+  try {
+    return await createImageBitmap(file);
+  } catch {
+    // not a browser that reads HEIC
+  }
   // Outside the try: a decoder that fails to load (offline, or a deploy since
   // the page opened) is PA-100, worth a retry, not a damaged photo.
   const { heicTo } = await import('heic-to');
   try {
-    return await heicTo({ blob: file, type: 'image/png' });
+    return await heicTo({ blob: file, type: 'bitmap' });
   } catch (err) {
     throw new HeicDecodeError(err instanceof Error ? err.message : String(err));
   }
@@ -174,6 +181,11 @@ async function loadImage(file: Blob): Promise<SourceDocument> {
   } catch (err) {
     throw new ImageDecodeError(err instanceof Error ? err.message : String(err));
   }
+  return fromBitmap(bitmap);
+}
+
+/** One page: the bitmap on paper white, within MAX_DIM. Closes the bitmap. */
+function fromBitmap(bitmap: ImageBitmap): SourceDocument {
   const scale = fitScale(bitmap.width, bitmap.height, 1);
   const canvas = document.createElement('canvas');
   canvas.width = Math.round(bitmap.width * scale);

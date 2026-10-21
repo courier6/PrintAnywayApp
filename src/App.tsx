@@ -454,7 +454,6 @@ export default function App() {
   const inkHex = inks[inkIndex].hex;
   const recoloredCanvas = appState === 'preview' ? store.getRecolored(currentPage, inkHex) : null;
   const sourceCanvas = appState === 'preview' ? store.getSource(currentPage) : null;
-  const firstPage = appState === 'processing' ? store.getRecolored(0, inkHex) : null;
 
   return (
     <div
@@ -474,13 +473,14 @@ export default function App() {
           <EmptyState onFile={(f) => void handleFile(f)} onChoose={openPicker} />
         )}
         {appState === 'processing' && (
-          <ProcessingState firstPage={firstPage} done={processedCount} total={pageCount} />
+          <ProcessingState done={processedCount} total={pageCount} />
         )}
         {appState === 'preview' && (
           <PreviewState
             fileName={fileName}
             downloadFormat={format}
             pageCount={pageCount}
+            renderedCount={processedCount}
             currentPage={currentPage}
             onPageChange={goToPage}
             inks={inks}

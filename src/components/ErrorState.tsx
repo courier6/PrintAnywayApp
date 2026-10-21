@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import { t } from '../i18n';
 import { DropZone } from './DropZone';
 import type { ErrorCode } from '../lib/errors';
@@ -33,16 +34,22 @@ const RETRY: Record<ErrorKind, boolean> = {
 
 export function ErrorState({ kind, code, onFile, onChoose, onRetry }: Props) {
   const retry = RETRY[kind];
+  // The control that had focus (the picker's button, the preview) is gone: bring
+  // keyboard users to the card's first action. role="alert" reads the card out.
+  const firstAction = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    firstAction.current?.focus({ preventScroll: true });
+  }, [kind, code]);
   return (
     <div className="state-pad">
-      <DropZone onFile={onFile} onChoose={onChoose}>
-        <div className="error-card">
+      <DropZone onFile={onFile}>
+        <div className="error-card" role="alert">
           <div className="error-title">{t(`error.${kind}.title`)}</div>
           <div className="error-body">{t(`error.${kind}.body`)}</div>
           <div className="error-actions">
             {retry ? (
               <>
-                <button className="btn-primary" onClick={onRetry}>
+                <button className="btn-primary" ref={firstAction} onClick={onRetry}>
                   {t('error.tryAgain')}
                 </button>
                 <button className="btn-secondary" onClick={onChoose}>
@@ -50,7 +57,7 @@ export function ErrorState({ kind, code, onFile, onChoose, onRetry }: Props) {
                 </button>
               </>
             ) : (
-              <button className="btn-primary" onClick={onChoose}>
+              <button className="btn-primary" ref={firstAction} onClick={onChoose}>
                 {t('error.chooseDifferent')}
               </button>
             )}

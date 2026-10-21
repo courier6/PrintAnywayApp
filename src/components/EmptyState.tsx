@@ -10,7 +10,7 @@ interface Props {
 export function EmptyState({ onFile, onChoose }: Props) {
   return (
     <div className="state-pad">
-      <DropZone onFile={onFile} onChoose={onChoose}>
+      <DropZone onFile={onFile}>
         <h1 className="hero-headline">{t('empty.headline')}</h1>
         <p className="hero-subline">{t('empty.subline')}</p>
         <div className="hero-actions">
