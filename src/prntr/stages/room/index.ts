@@ -335,6 +335,9 @@ const BREAKABLES: { id: keyof Broken; x0: number; y0: number; x1: number; y1: nu
   { id: 'tank', x0: 48, y0: 90, x1: 76, y1: 108, sound: 'shatter' },
   { id: 'plant', x0: 190, y0: 93, x1: 239, y1: 119, sound: 'rustle' },
   { id: 'vase', x0: 203, y0: 119, x1: 226, y1: 136, sound: 'shatter' },
+  // the fig behind the monstera (which is in front, so it is tried first): its crown, then its planter
+  { id: 'fig', x0: 172, y0: 56, x1: 213, y1: 90, sound: 'rustle' },
+  { id: 'figPot', x0: 180, y0: 115, x1: 204, y1: 131, sound: 'shatter' },
 ];
 /** The clock shot: it falls off the wall over CLOCK_FALL_MS, drifting to
  * CLOCK_LAND_X, to the floor in front of the cooler (its top at CLOCK_FLOOR_Y, its bottom at 140,
@@ -353,6 +356,13 @@ const CLOCK_BURN_SPEED = 28;
 /** While the machine shakes (the pounce and its landing, the mad tremble) the clock's hands spin out of
  * control, and for CLOCK_SPIN_TAIL_MS after; then they are back at 1:37. Still under reduced motion. */
 const CLOCK_SPIN_TAIL_MS = 600;
+/** The fig's planter shot: the tree collapses toward the machine over FIG_FALL_MS, faster as it goes
+ * (a cut under reduced motion), and lands leaning on the machine's back corner with a crash of leaves.
+ * Leaning there while the fire burns, it catches FIG_CATCH_MS later and burns, and the burning tree
+ * sets the machine going: the fire's spread onto it starts at once whatever its health, or, already
+ * spreading, goes a stoke faster. */
+const FIG_FALL_MS = 700;
+const FIG_CATCH_MS = 1200;
 /** The lights, out since the pounce, flicker back on at random once the machine has FLICKER_FROM of its
  * damage (20% of its health or less): one panel at a time (now and then both), on for FLICKER_ON_MIN–
  * FLICKER_ON_MAX ms with a buzz, then out with a click, the next coming FLICKER_GAP_MIN–FLICKER_GAP_MAX ms
@@ -391,13 +401,15 @@ const HOTSPOTS: Hotspot[] = [
   { id: 'kit', ...KIT_HIT, captions: ['A FIRST AID KIT. GREEN.', 'A FIRST AID KIT. GREEN.'] },
   // The print between the clock and the board.
   { id: 'art', x0: ART_AT.x - 4, y0: ART_AT.y - 4, x1: ART_AT.x + ART_AT.w + 4, y1: ART_AT.y + ART_AT.h + 4, captions: ['THE WINGED VICTORY. A PRINT.', 'SHE HAS NO HEAD.'] },
+  // the monstera is in front of the fig, the fig in front of the window: tried in that order
+  { id: 'plant', x0: 190, y0: 92, x1: 240, y1: 138, captions: ["A PLANT. IT'S REAL.", "A PLANT. IT'S REAL."] },
+  { id: 'fig', x0: 172, y0: 56, x1: 213, y1: 131, captions: ['A FIG. OLDER THAN THE OFFICE.', 'IT LEANS TOWARD THE PRINTER.'] },
   { id: 'window', x0: 156, y0: 32, x1: 228, y1: 94, captions: ['UNABLE TO OPEN.', 'STILL UNABLE TO OPEN.'] },
   { id: 'cooler', x0: 46, y0: 88, x1: 78, y1: 140, captions: ['WATER COOLER. FULL.', 'STILL FULL.'] },
-  { id: 'plant', x0: 190, y0: 92, x1: 240, y1: 138, captions: ["A PLANT. IT'S REAL.", "A PLANT. IT'S REAL."] },
 ];
 
 const ROOM_ALT =
-  'A quiet office: an exposed ceiling, a duct along it and two bare tube lights hanging on cords, a door shut under an EXIT sign, a clock, a Simple Products board with notes on it by a window with its blind down on a storm outside and a green first aid kit at its lower right, a water cooler, a plant, one large copier in the middle, and a USB stick on the carpet beside it';
+  'A quiet office: an exposed ceiling, a duct along it and two bare tube lights hanging on cords, a door shut under an EXIT sign, a clock, a Simple Products board with notes on it by a window with its blind down on a storm outside, a tall fig tree before it and a green first aid kit at its lower right, a water cooler, a plant, one large copier in the middle, and a USB stick on the carpet beside it';
 
 type Phase = 'look' | 'sticker' | 'fight' | 'continue' | 'over' | 'end';
 type AttackKind = 'scan' | 'staples' | 'pages' | 'ink' | 'bolts' | 'black';
@@ -653,7 +665,8 @@ export const room: Stage = {
       machine: { lid: 0, lamp: null, lampOut: false, flash: false, power: true, angry: false, back: 1, t: 0, error: null },
       flashWhite: false,
       buttonBright: false,
-      broken: { clock: false, poster: false, tank: false, plant: false, vase: false, kit: false },
+      broken: { clock: false, poster: false, tank: false, plant: false, vase: false, kit: false, fig: false, figPot: false },
+      fig: { fall: 0, burning: false },
       clock: { state: 'up', x: CLOCK_AT.x, y: CLOCK_AT.y, rot: 0 },
       clockSpin: null,
       exit: { state: 'up', x: EXIT_WALL.x, y: EXIT_WALL.y, tilt: 0, lit: true },
@@ -749,6 +762,9 @@ export const room: Stage = {
     /** The clock's hands: spinning since spinFrom, until spinUntil. */
     let spinFrom = 0;
     let spinUntil = -Infinity;
+    /** The fig: when its planter was shot (it falls from then), and when it catches from the fire. */
+    let figFallAt: number | null = null;
+    let figCatchAt: number | null = null;
     /** The flicker: when the next panel comes on, and when each lit one goes out (null: out). */
     let flickerNext = 0;
     const flickerOff: (number | null)[] = [null, null];
@@ -1440,11 +1456,13 @@ export const room: Stage = {
         ctx.announce('First aid. Health full.');
         return;
       }
-      const thing = BREAKABLES.find((b) => !scene.broken[b.id] && x >= b.x0 && x < b.x1 && y >= b.y0 && y < b.y1);
+      const thing = BREAKABLES.find((b) => !scene.broken[b.id] && !(b.id === 'fig' && scene.broken.figPot) && x >= b.x0 && x < b.x1 && y >= b.y0 && y < b.y1);
       if (thing) {
         scene.broken[thing.id] = true;
         // the pot shot takes the plant with it (one break's points); the leaves shot leave the pot
         if (thing.id === 'vase') scene.broken.plant = true;
+        // the fig's planter: the tree goes over toward the machine
+        if (thing.id === 'figPot') figFallAt = now;
         sounds[thing.sound]();
         addScore(BREAK_POINTS, now);
         if (thing.id === 'tank') startShort(now);
@@ -1920,6 +1938,7 @@ export const room: Stage = {
         clock: () => ({ ...scene.clock }),
         clockSpin: () => scene.clockSpin,
         lights: () => [...scene.lights],
+        fig: () => ({ ...scene.fig, leaves: scene.broken.fig, pot: scene.broken.figPot }),
         wreck: () => scene.printer === 'wreck',
         pieces: () => scene.pieces.map((q) => [Math.round(q.x), Math.round(q.y)]),
         windowOpen: () => scene.windowOpen,
@@ -2352,6 +2371,29 @@ export const room: Stage = {
         if (frameCount % SHAKE_FRAMES === 0) scene.shake = { x: Math.floor(Math.random() * 3) - 1, y: -Math.floor(Math.random() * 2) };
       } else {
         scene.shake = { x: 0, y: 0 };
+      }
+      // The fig going over, and catching from the fire once it leans on the machine.
+      if (figFallAt !== null && scene.fig.fall < 1) {
+        const u = reduced ? 1 : Math.min(1, (now - figFallAt) / FIG_FALL_MS);
+        scene.fig.fall = u * u;
+        if (u >= 1) {
+          sounds.knock();
+          sounds.rustle();
+        }
+      }
+      if (scene.fig.fall >= 1 && !scene.fig.burning && fireAt !== null && scene.printer === 'up' && frozenAt === null) {
+        figCatchAt ??= now + FIG_CATCH_MS;
+        if (now >= figCatchAt) {
+          scene.fig.burning = true;
+          sounds.whoosh();
+          if (spreadAt === null) spreadAt = now;
+          else if (stokes < STOKE_MAX) {
+            const v = spreadU(now);
+            stokes++;
+            spreadMs = Math.round(FIRE_SPREAD_MS * Math.pow(STOKE_STEP, stokes));
+            spreadAt = now - v * spreadMs;
+          }
+        }
       }
       // The clock's hands spin while the machine moves: forward in the pounce, shaking as it lands, trembling mad.
       const moving = landing !== null || (scene.machine.back > 0 && scene.machine.back < 1) || scene.shake.x !== 0 || scene.shake.y !== 0;

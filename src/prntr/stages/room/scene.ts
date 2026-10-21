@@ -22,6 +22,10 @@ export const SPR = {
   COOLER_SHOT: parseSprite(SPRITES.COOLER_SHOT),
   MONSTERA_BARE: parseSprite(SPRITES.MONSTERA_BARE),
   MONSTERA_DOWN: parseSprite(SPRITES.MONSTERA_DOWN),
+  FIG: parseSprite(SPRITES.FIG),
+  FIG_BARE: parseSprite(SPRITES.FIG_BARE),
+  FIG_POT: parseSprite(SPRITES.FIG_POT),
+  FIG_SHARDS: parseSprite(SPRITES.FIG_SHARDS),
   EXIT_BROKEN: parseSprite(SPRITES.EXIT_BROKEN),
   SPLAT: parseSprite(SPRITES.SPLAT),
   TUBE_HEAD: parseSprite(SPRITES.TUBE_HEAD),
@@ -45,6 +49,17 @@ export interface Broken {
   vase: boolean;
   /** The first aid kit (a pouch), shot open: it gave the player full health, once. */
   kit: boolean;
+  /** The fig's leaves, shot off. */
+  fig: boolean;
+  /** The fig's planter, shot: the tree collapses toward the machine. */
+  figPot: boolean;
+}
+
+/** The fig after its planter is shot: how far it has fallen (0 standing … 1 leaning on the machine), and
+ * whether it has caught from the fire and burns. */
+export interface Fig {
+  fall: number;
+  burning: boolean;
 }
 
 /**
@@ -205,6 +220,8 @@ export const tubeX = (tb: Tube, y: number): number => {
 export interface SceneState {
   /** Left, right fluorescent panel. */
   lights: [boolean, boolean];
+  /** The weeping fig by the window. */
+  fig: Fig;
   printer: PrinterPose;
   /** The machine's power light red (the beat after the USB goes in; the handoff reddened its sticker). */
   ledRed: boolean;
@@ -258,6 +275,32 @@ export const BOARD_AT = { x: 136, y: 46 };
 /** The water cooler (22×46), and with its bottle shot (22×33): at the room's own resolution. */
 export const COOLER_AT = { x: 51, y: 90 };
 export const COOLER_SHOT_AT = { x: 51, y: 103 };
+/** The weeping fig by the window, behind the monstera: its tree (or bare) and its planter (or the shards); it
+ * falls about FIG_AT.pivot, the foot of its trunk, by up to FIG_LEAN radians toward the machine, and comes to
+ * rest against the machine's back right corner (the machine is drawn after it, in front). */
+export const FIG_AT = { tree: { x: 172, y: 56 }, bare: { x: 176, y: 62 }, pot: { x: 181, y: 116 }, shards: { x: 177, y: 121 }, pivot: { x: 192, y: 126 } };
+export const FIG_LEAN = 0.5;
+/** The fig's crown, for the flames when it burns: its centre on the standing tree. */
+const FIG_CROWN = { x: 192, y: 73 };
+
+/** Blits a sprite turned by a radians toward the left (its top going left) about a pivot: each pixel of the
+ * turned box takes the sprite pixel that turns onto it (nearest), so nothing gaps. */
+export function blitLeaning(p: Pix, x0: number, y0: number, s: Sprite, pivot: { x: number; y: number }, a: number): void {
+  const c = Math.cos(a), sn = Math.sin(a);
+  const corners = [[x0, y0], [x0 + s.w, y0], [x0, y0 + s.h], [x0 + s.w, y0 + s.h]].map(([x, y]) => { const dx = x - pivot.x, dy = y - pivot.y; return [pivot.x + dx * c + dy * sn, pivot.y - dx * sn + dy * c]; });
+  const bx0 = Math.floor(Math.min(...corners.map((q) => q[0]))), bx1 = Math.ceil(Math.max(...corners.map((q) => q[0])));
+  const by0 = Math.floor(Math.min(...corners.map((q) => q[1]))), by1 = Math.ceil(Math.max(...corners.map((q) => q[1])));
+  for (let y = by0; y <= by1; y++) {
+    for (let x = bx0; x <= bx1; x++) {
+      const dx = x + 0.5 - pivot.x, dy = y + 0.5 - pivot.y;
+      const sx = Math.floor(pivot.x + dx * c - dy * sn) - x0, sy = Math.floor(pivot.y + dx * sn + dy * c) - y0;
+      if (sx < 0 || sy < 0 || sx >= s.w || sy >= s.h) continue;
+      const k = s.rows[sy][sx];
+      if (k !== '.') p.set(x, y, k as PalKey);
+    }
+  }
+}
+
 /** The monstera by the window, whole, its leaves shot off, and down with its pot shot: at the room's own resolution. */
 export const MONSTERA_AT = { whole: { x: 191, y: 94 }, bare: { x: 194, y: 101 }, down: { x: 183, y: 125 } };
 /** The USB stick on the carpet, its lanyard and its shadow (39×8, at the room's own resolution). */
@@ -997,6 +1040,21 @@ export function drawRoom(p: Pix, s: SceneState): void {
   }
   if (s.fire) drawFire(p, s.fire, 'mid');
   p.rect(190, 132, 206, 135, 'X');
+  // the weeping fig behind the monstera: standing in its planter, or falling (then leaning) toward the machine
+  // with the planter in shards; burning once it has caught from the fire
+  p.rect(170, 127, 184, 130, 'X');
+  const figTree = s.broken.fig ? SPR.FIG_BARE : SPR.FIG;
+  const figAt = s.broken.fig ? FIG_AT.bare : FIG_AT.tree;
+  if (s.fig.fall <= 0) p.blit(figAt.x, figAt.y, figTree);
+  else blitLeaning(p, figAt.x, figAt.y, figTree, FIG_AT.pivot, FIG_LEAN * s.fig.fall);
+  if (s.broken.figPot) p.blit(FIG_AT.shards.x, FIG_AT.shards.y, SPR.FIG_SHARDS);
+  else p.blit(FIG_AT.pot.x, FIG_AT.pot.y, SPR.FIG_POT);
+  if (s.fig.burning) {
+    const a = FIG_LEAN * s.fig.fall, dx = FIG_CROWN.x - FIG_AT.pivot.x, dy = FIG_CROWN.y - FIG_AT.pivot.y;
+    const cx = FIG_AT.pivot.x + dx * Math.cos(a) + dy * Math.sin(a), cy = FIG_AT.pivot.y - dx * Math.sin(a) + dy * Math.cos(a);
+    drawFlame(p, cx, 14, 20, cy + 10, 300, s.fire?.t ?? 0);
+    drawFlame(p, (cx + FIG_AT.pivot.x) / 2, 6, 12, (cy + FIG_AT.pivot.y) / 2 + 6, 310, s.fire?.t ?? 0);
+  }
   // the monstera in its pot; its leaves shot off, the bare stalks; the pot shot, the plant lies on the carpet
   if (s.broken.vase) p.blit(MONSTERA_AT.down.x, MONSTERA_AT.down.y, SPR.MONSTERA_DOWN);
   else if (s.broken.plant) p.blit(MONSTERA_AT.bare.x, MONSTERA_AT.bare.y, SPR.MONSTERA_BARE);
