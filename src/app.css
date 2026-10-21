@@ -836,6 +836,59 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
   border-radius: 2px;
 }
 
+/* The way into Prntr looks like plain text until it has the pointer or the focus; then glyphs rise above it
+   and sink below it (RisingGlyphs): superscripts, subscripts and ASCII in the ink colour, absolutely placed so
+   the words never move, each fading in and out over its own life. Some are split red and cyan, as Prntr's own
+   glitches are. The wrapper is an inline block so the two words stay on one line and the glyphs have a box. */
+.help-omen {
+  position: relative;
+  display: inline-block;
+}
+
+.omen-glyph {
+  position: absolute;
+  z-index: 1;
+  top: -4px;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  opacity: 0;
+  pointer-events: none;
+  animation: omen-rise 1s ease-out forwards;
+}
+
+.omen-glyph.is-down {
+  top: auto;
+  bottom: -4px;
+  animation-name: omen-sink;
+}
+
+.omen-glyph.is-split {
+  text-shadow:
+    -1px 0 rgba(255, 0, 70, 0.75),
+    1px 0 rgba(0, 190, 255, 0.75);
+}
+
+@keyframes omen-rise {
+  0% { transform: translate(-50%, 0); opacity: 0; }
+  20% { opacity: 1; }
+  100% { transform: translate(-50%, -22px); opacity: 0; }
+}
+
+@keyframes omen-sink {
+  0% { transform: translate(-50%, 0); opacity: 0; }
+  20% { opacity: 1; }
+  100% { transform: translate(-50%, 22px); opacity: 0; }
+}
+
+/* Reduced motion: the glyphs still come and go, a little above and below the words, but hold still. */
+@keyframes omen-still {
+  0% { opacity: 0; }
+  30% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
 /* ---------- Print reminder overlay ---------- */
 
 .print-reminder {
@@ -979,6 +1032,16 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
 
   .btn-shimmer::after {
     content: none;
+  }
+
+  .omen-glyph {
+    animation-name: omen-still;
+    transform: translate(-50%, -10px);
+  }
+
+  .omen-glyph.is-down {
+    animation-name: omen-still;
+    transform: translate(-50%, 10px);
   }
 }
 
