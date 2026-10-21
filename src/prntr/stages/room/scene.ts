@@ -196,7 +196,8 @@ export interface SceneState {
   /** How wide the door stands open on black, in px: ajar at 6; once the sign is down it swings in. */
   doorGap: number;
   fire: Fire | null;
-  /** The mad machine's tremble: it is drawn this far off its place. */
+  /** The mad machine's tremble (and the pounce's landing): the machine and everything attached to
+   * it (the tubes, the stumps, the ink still behind it) are drawn this far off their place. */
   shake: { x: number; y: number };
   /** The ink in the air behind the machine this frame: the jets come up from behind it. */
   inkBehind: InkDot[];
@@ -582,7 +583,9 @@ const BACK_PIX = new LetterPix(MACHINE_AT.x0, 40, 104, 112);
 /**
  * The machine standing back: drawn full size into BACK_PIX, then every pixel of that put down
  * at `sc` about the foot line's centre (120, `foot`), each covering the cell it maps onto (at
- * least one px, so the outlines never drop out). Nearest neighbour; the shake applies after.
+ * least one px). Where two source pixels land on one cell a plum outline already there stays
+ * (the outline wins), so the one-pixel lines never drop out. Nearest neighbour; the shake
+ * applies after.
  */
 function drawMachineBack(p: Pix, s: MachineScene): void {
   const { sc, foot } = machineBack(s.machine.back);
@@ -590,6 +593,8 @@ function drawMachineBack(p: Pix, s: MachineScene): void {
   drawMachine(BACK_PIX, { ...s, shake: { x: 0, y: 0 } });
   const cx = 120;
   const { x: ox, y: oy } = s.shake;
+  // which cells this machine has put down so far, and whether with plum (2) or anything else (1)
+  const mine = new Uint8Array(W * H);
   for (let y = 0; y < BACK_PIX.h; y++) {
     const row = BACK_PIX.rows[y];
     const sy = y + 40;
@@ -601,7 +606,15 @@ function drawMachineBack(p: Pix, s: MachineScene): void {
       const sx = x + MACHINE_AT.x0;
       const dx = Math.round(cx + (sx - cx) * sc);
       const w = Math.max(1, Math.round(cx + (sx + 1 - cx) * sc) - dx);
-      p.rect(dx + ox, dy + oy, dx + w + ox, dy + h + oy, k as PalKey);
+      for (let yy = dy + oy; yy < dy + h + oy; yy++) {
+        for (let xx = dx + ox; xx < dx + w + ox; xx++) {
+          if (xx < 0 || yy < 0 || xx >= W || yy >= H) continue;
+          const i = yy * W + xx;
+          if (mine[i] === 2 && k !== 'K') continue;
+          p.set(xx, yy, k as PalKey);
+          mine[i] = k === 'K' ? 2 : 1;
+        }
+      }
     }
   }
 }
@@ -640,6 +653,8 @@ export const MACHINE_PIECES: { spr: Sprite; hx: number; hy: number }[] = (
 function drawHoles(p: Pix, s: SceneState): void {
   for (const h of s.holes) {
     if (h.kind === 'wall') {
+      // through the print: the hole is in the print's own cells (the stage draws it there); the room draws no mark
+      if (h.x >= ART_AT.x && h.x < ART_AT.x + ART_AT.w && h.y >= ART_AT.y && h.y < ART_AT.y + ART_AT.h) continue;
       p.set(h.x - 1, h.y, 'X');
       p.set(h.x + 1, h.y, 'X');
       p.set(h.x, h.y - 1, 'X');
@@ -687,11 +702,12 @@ export function drawRoom(p: Pix, s: SceneState): void {
   const sign = s.exit;
   if (sign.state === 'down') p.blit(Math.round(sign.x), Math.round(sign.y), SPR.EXIT_BROKEN);
   else p.blit(Math.round(sign.x), Math.round(sign.y), SPR.EXIT, 1, { remap: { n: sign.lit ? 'R' : 'G' }, tilt: sign.tilt });
-  // the wall art between the clock and the board: a wooden frame with a pale
-  // mat; the print itself is the stage's art canvas over the rect inside (a plum fallback under it)
+  // the wall art between the clock and the board: a wooden frame with a pale mat around a hole
+  // in the wall; the print itself is the stage's art canvas under the room canvas, seen through
+  // the hole, so everything drawn into the room from here on covers it (PRNTR-PLANNING.md P4)
   p.rect(ART_AT.x - 2, ART_AT.y - 2, ART_AT.x + ART_AT.w + 2, ART_AT.y + ART_AT.h + 2, 'K');
   p.rect(ART_AT.x - 1, ART_AT.y - 1, ART_AT.x + ART_AT.w + 1, ART_AT.y + ART_AT.h + 1, 'D');
-  p.rect(ART_AT.x, ART_AT.y, ART_AT.x + ART_AT.w, ART_AT.y + ART_AT.h, 'K');
+  p.clearRect(ART_AT.x, ART_AT.y, ART_AT.x + ART_AT.w, ART_AT.y + ART_AT.h);
   // the clock where the board was, the post-it board lower and by the window
   if (s.clock.state === 'up') p.blit(CLOCK_AT.x, CLOCK_AT.y, SPR.CLOCK);
   p.blit(BOARD_AT.x, BOARD_AT.y, s.broken.poster ? SPR.POSTER_TORN : SPR.POSTER);
@@ -745,25 +761,28 @@ export function drawRoom(p: Pix, s: SceneState): void {
     p.rect(226, 136, 228, 138, 'v');
   }
   // the ink tubes up from behind the machine: a ribbed hose (row by row, so it can snake), its
-  // head, the ink in its mouth; the machine covers the hose's foot, the ink in the air is drawn over them
+  // head, the ink in its mouth; the machine covers the hose's foot, the ink in the air is drawn over
+  // them. They are attached to the machine, so they shake with it (PRNTR-PLANNING.md P3).
+  const { x: sx, y: sy } = s.shake;
   for (const tb of s.tubes) {
     for (let y = tb.top + 4; y < 90; y++) {
-      const cx = tubeX(tb, y);
-      p.rect(cx - 2, y, cx + 2, y + 1, 'K');
-      p.rect(cx - 1, y, cx + 1, y + 1, (y - tb.top) % 2 === 0 ? 'G' : 'i');
+      const cx = tubeX(tb, y) + sx;
+      p.rect(cx - 2, y + sy, cx + 2, y + sy + 1, 'K');
+      p.rect(cx - 1, y + sy, cx + 1, y + sy + 1, (y - tb.top) % 2 === 0 ? 'G' : 'i');
     }
-    p.blit(tubeX(tb, tb.top) - 3, tb.top, SPR.TUBE_HEAD, 1, { remap: { c: tb.color } });
+    p.blit(tubeX(tb, tb.top) - 3 + sx, tb.top + sy, SPR.TUBE_HEAD, 1, { remap: { c: tb.color } });
   }
   // the stumps of the tubes shot to pieces: a ragged end of hose just over the edge
-  for (const x of s.stubs) {
-    p.rect(x - 2, 77, x + 2, 90, 'K');
-    p.rect(x - 1, 78, x + 1, 90, 'i');
-    p.set(x - 2, 77, 'A');
-    p.set(x + 1, 77, 'A');
-    p.set(x, 78, 'G');
+  for (const x0 of s.stubs) {
+    const x = x0 + sx;
+    p.rect(x - 2, 77 + sy, x + 2, 90 + sy, 'K');
+    p.rect(x - 1, 78 + sy, x + 1, 90 + sy, 'i');
+    p.set(x - 2, 77 + sy, 'A');
+    p.set(x + 1, 77 + sy, 'A');
+    p.set(x, 78 + sy, 'G');
   }
-  // the ink sprayed from behind the machine, where it is still behind it
-  for (const d of s.inkBehind) p.rect(d.x, d.y, d.x + d.size, d.y + d.size, d.color);
+  // the ink sprayed from behind the machine, where it is still behind it: it has not left yet
+  for (const d of s.inkBehind) p.rect(d.x + sx, d.y + sy, d.x + d.size + sx, d.y + d.size + sy, d.color);
   // the printer; its shadow falls the other way. Nothing points it out.
   if (s.printer === 'wreck') {
     // the burst machine: its pieces in the air and on the floor, the fire raging where it stood
@@ -774,6 +793,8 @@ export function drawRoom(p: Pix, s: SceneState): void {
   } else {
     drawMachine(p, s);
     if (!s.flashWhite) drawWear(p, MACHINE_AT.x0 + s.shake.x, MACHINE_AT.y0 + s.shake.y, s.damage, s.lights[1] ? 'A' : 'a');
+    // the flash whites the print too: a white rect over the hole, in the room's grid
+    if (s.machine.flash && !s.flashWhite) p.rect(ART_AT.x, ART_AT.y, ART_AT.x + ART_AT.w, ART_AT.y + ART_AT.h, 'W');
   }
   // the USB stick on the carpet, right of the machine, with its shadow
   if (s.usb) {

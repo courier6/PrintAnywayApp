@@ -1,7 +1,7 @@
 import { reducedMotion, wait } from '../../anim';
 import type { Handoff, Stage } from '../../types';
 import { H, Pix, W, rotateSprite } from './pixels';
-import { CLOCK_AT, KIT_AT, MACHINE_AT, MACHINE_PIECES, NOZZLES, SPR, drawFireFront, drawFlame, drawRoom, drawWindowWreck, fireRect, inDoorway, lampX, lidTop, tubeX, type Broken, type ExitSign, type Hole, type SceneState, type Tube } from './scene';
+import { CLOCK_AT, KIT_AT, MACHINE_AT, MACHINE_PIECES, NOZZLES, SPR, drawFireFront, drawFlame, drawRoom, drawWindowWreck, fireRect, inDoorway, lampX, tubeX, type Broken, type ExitSign, type Hole, type SceneState, type Tube } from './scene';
 import { ART_AT, ART_SUB, renderVictory } from './art';
 import { PAL, type PalKey } from './palette';
 import { createRoomSounds, type FireSound, type Hum } from './sounds';
@@ -452,8 +452,9 @@ export const room: Stage = {
     front.setAttribute('aria-hidden', 'true');
     const fg = front.getContext('2d', { willReadFrequently: true });
     if (!fg) throw new Error('prntr: no 2d context');
-    // The print on the wall: its own canvas over the frame's inside, at
-    // ART_SUB cells to the room's pixel, so it is finer than anything around it.
+    // The print on the wall: its own canvas under the room canvas, seen through the hole the
+    // room leaves over the print's rect, at ART_SUB cells to the room's pixel, so it is finer
+    // than anything around it and behind everything the room draws (the lid, the tubes).
     const art = document.createElement('canvas');
     art.className = 'prntr-room-art';
     art.width = ART_AT.w * ART_SUB;
@@ -542,7 +543,7 @@ export const room: Stage = {
     const deathEl = el('div', 'prntr-room-death');
     deathEl.setAttribute('aria-hidden', 'true');
     deathEl.hidden = true;
-    frame.append(canvas, art, light, spill, fireLight, slotLight, holeLights, windowLight, front, dread, dreadWindow, wash, glows, hud, cursor, hurtEl, deathEl, continueEl, overEl);
+    frame.append(art, canvas, light, spill, fireLight, slotLight, holeLights, windowLight, front, dread, dreadWindow, wash, glows, hud, cursor, hurtEl, deathEl, continueEl, overEl);
     wrap.append(frame);
     root.append(wrap);
 
@@ -1198,7 +1199,8 @@ export const room: Stage = {
       const jet = sprays.find((s) => {
         if (!spraying(s, now)) return false;
         const tb = poseTube(s.nx, 1, now);
-        return x >= s.nx - 3 - tb.amp - NOZZLE_HIT_PAD && x < s.nx + 3 + tb.amp + NOZZLE_HIT_PAD && y >= tb.top - NOZZLE_HIT_PAD && y < TUBE_BASE + NOZZLE_HIT_PAD;
+        const { x: sx, y: sy } = scene.shake;
+        return x >= s.nx - 3 - tb.amp - NOZZLE_HIT_PAD + sx && x < s.nx + 3 + tb.amp + NOZZLE_HIT_PAD + sx && y >= tb.top - NOZZLE_HIT_PAD + sy && y < TUBE_BASE + NOZZLE_HIT_PAD + sy;
       });
       if (jet) {
         explodeTube(jet, now);
@@ -1386,6 +1388,8 @@ export const room: Stage = {
       flashFrames = 1;
       if (reduced) return;
       const m = mouthOf(jet, now);
+      m.x += scene.shake.x;
+      m.y += scene.shake.y;
       for (let i = 0; i < 16; i++) {
         const a = -Math.PI * (0.1 + Math.random() * 0.8);
         const v = 30 + Math.random() * 90;
@@ -1693,6 +1697,8 @@ export const room: Stage = {
         lid: () => scene.machine.lid,
         lamp: () => (scene.machine.lamp === null ? null : lampX(scene.machine.lamp)),
         bulb: () => bulbOut,
+        /** The machine's shake this frame (the tremble, the landing): what is attached to it moves with it. */
+        shake: () => ({ ...scene.shake }),
       };
     }
 
@@ -1935,7 +1941,7 @@ export const room: Stage = {
       for (const s of sprays) {
         if (!spraying(s, now)) continue;
         const tb = poseTube(s.nx, 1, now);
-        rects.push({ x: s.nx - 3 - Math.round(tb.amp), y: tb.top, w: 6 + 2 * Math.round(tb.amp), h: TUBE_BASE - tb.top });
+        rects.push({ x: s.nx - 3 - Math.round(tb.amp) + scene.shake.x, y: tb.top + scene.shake.y, w: 6 + 2 * Math.round(tb.amp), h: TUBE_BASE - tb.top });
       }
       if (scene.buttonBright) rects.push({ ...BUTTON, x: BUTTON.x + scene.shake.x, y: BUTTON.y + scene.shake.y });
       while (glows.children.length < rects.length) glows.append(el('div', 'prntr-room-glow'));
@@ -2148,11 +2154,6 @@ export const room: Stage = {
       art.classList.toggle('is-inverted', invertFrame);
       front.classList.toggle('is-inverted', invertFrame);
       invertFrame = false;
-      // The print's canvas sits over the room: the standing lid rises in front of it, so the print
-      // is clipped to the rows above the lid's top, and the flash whites it over.
-      const m = scene.machine;
-      const covered = m.lid < 0.05 ? 0 : m.flash ? ART_AT.h : Math.max(0, ART_AT.y + ART_AT.h - (lidTop(m.lid) + scene.shake.y));
-      art.style.clipPath = covered > 0 ? `inset(0 0 ${covered * scale}px 0)` : '';
     };
 
     // ---- loop and exit ----------------------------------------------------

@@ -364,7 +364,10 @@
   cursor: none; /* the POINTER and CROSSHAIR sprites are drawn on .prntr-room-cursor */
 }
 
+/* Positioned, so the DOM order puts it over the print's canvas, which comes first in the frame. */
 .prntr-room-canvas {
+  position: absolute;
+  inset: 0;
   display: block;
   width: 100%;
   height: 100%;
@@ -378,8 +381,9 @@
   filter: invert(1);
 }
 
-/* The print on the wall: a canvas at four cells to the room's pixel over the
-   frame's inside (ART_AT in art.ts), under the light and the washes like the wall it hangs on. */
+/* The print on the wall: a canvas at four cells to the room's pixel under the room canvas, seen
+   through the hole the room leaves over its rect (ART_AT in art.ts); everything the room draws
+   covers it, the lid and the tubes included, and the light and the washes lie over both. */
 .prntr-room-art {
   position: absolute;
   left: calc(88px * var(--s));
