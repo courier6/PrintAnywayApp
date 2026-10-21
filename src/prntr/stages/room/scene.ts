@@ -150,7 +150,7 @@ export interface InkDot {
 }
 
 /** Where a shot hit nothing to break: a dark hole in the wall or the ceiling,
- * a hole through the door or the window's blind (the stage lights those red). */
+ * a hole through the door or the window's blind (the storm shows through those). */
 export interface Hole {
   x: number;
   y: number;
@@ -204,8 +204,10 @@ export interface SceneState {
   broken: Broken;
   clock: Clock;
   exit: ExitSign;
-  /** How wide the door stands open on black, in px: ajar at 6; once the sign is down it swings in. */
+  /** How wide the door stands open on the storm, in px: 0 shut; 2 cracked by the sign; up to 22 swung in. */
   doorGap: number;
+  /** The storm outside this frame. */
+  storm: StormView;
   fire: Fire | null;
   /** The mad machine's tremble (and the pounce's landing): the machine and everything attached to
    * it (the tubes, the stumps, the ink still behind it) are drawn this far off their place. */
@@ -220,7 +222,7 @@ export interface SceneState {
   holes: Hole[];
   /** The marks on the glass (staples stuck in, bolts stuck point first), oldest first; the front layer. */
   marks: Mark[];
-  /** The window's blind shot to pieces: a gaping hole, the red behind it. */
+  /** The window's blind shot to pieces: a gaping hole, the storm behind it. */
   windowOpen: boolean;
   /** The burst machine's pieces, where they are this frame (printer `wreck`). */
   pieces: Piece[];
@@ -307,9 +309,106 @@ export function drawFireFront(p: Pix, f: Fire): void {
   if (f.v > 0) drawFlame(p, 80 + 40 * f.v, 8 + 42 * f.v, 20 + 48 * f.v, 146, 400, f.t);
 }
 
+/** The storm this frame: the rain's time (0 = still), the near flash 0..1, the far flicker 0..1, the bolt. */
+export interface StormView {
+  t: number;
+  near: number;
+  far: number;
+  bolt: { x: number; seed: number } | null;
+}
+/** A half-open rect in room px. */
+export interface Rect {
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
+}
+/** The horizon outside, in room px: the forest stands on it, the lot is below it. */
+const HORIZON = 66;
+
 /**
- * What is left of the blind once it is shot open, drawn over the window's red light (on the
- * stage's front layer): the head rail, a strip hanging at each side, a slat torn loose and
+ * The storm seen through an opening `r` (the storm sheet's S3, PRNTR-PLANNING.md P5): the night sky
+ * (white under a near flash, then pale blue, the afterglow's dark blue), a bank of cloud across the
+ * top drifting right (its underside lit by far lightning), under a near flash the title's place (the
+ * forest along the horizon, the lot with its stalls and light poles, the office block off to the
+ * right, a road in from the left), the bolt down to the horizon, and the rain: steep streaks in water
+ * blue, lit in a flash. The world outside is one world: the same place whichever opening shows it.
+ */
+export function drawStorm(p: Pix, r: Rect, s: StormView): void {
+  const { t, near, far } = s;
+  const sky: PalKey = near > 0.6 ? 'W' : near > 0.25 ? 'j' : near > 0 ? 'U' : 'N';
+  p.rect(r.x0, r.y0, r.x1, r.y1, sky);
+  const inR = (x: number, y: number) => x >= r.x0 && x < r.x1 && y >= r.y0 && y < r.y1;
+  // the clouds
+  const lit = far > 0 && near === 0;
+  const d = Math.floor(t / 120);
+  for (let y = r.y0; y < Math.min(r.y1, 56); y++) {
+    for (let x = r.x0; x < r.x1; x++) {
+      const hsh = hash(Math.floor((x - d * 0.25) / 6) * 31 + Math.floor(y / 4) * 7);
+      const bottom = 44 + Math.round(8 * hash(Math.floor((x - d * 0.25) / 8)));
+      if (y < bottom && hsh < 0.85) p.set(x, y, near > 0.25 ? 'U' : lit && y > bottom - 4 ? 'U' : 'M');
+    }
+  }
+  if (near > 0) {
+    // the place: the forest on the horizon, the lot, the block, the road, the poles
+    for (let x = r.x0; x < r.x1; x++) {
+      const tree = 58 + Math.round(6 * hash(Math.floor(x / 5) * 13)) + (hash(x * 7) < 0.3 ? -2 : 0);
+      for (let y = Math.max(r.y0, tree); y <= Math.min(r.y1 - 1, HORIZON); y++) p.set(x, y, 'J');
+    }
+    p.rect(r.x0, Math.max(r.y0, HORIZON), r.x1, r.y1, 'M');
+    for (let y = HORIZON + 3; y < r.y1; y += 6) for (let x = r.x0 + (Math.floor(y / 6) % 2); x < r.x1; x += 4) if (y >= r.y0) p.set(x, y, 'u');
+    const bx0 = 190;
+    const bx1 = 212;
+    const by0 = 46;
+    p.rect(Math.max(r.x0, bx0), Math.max(r.y0, by0), Math.min(r.x1, bx1), Math.min(r.y1, HORIZON + 1), 'N');
+    for (let y = by0 + 3; y < HORIZON - 2; y += 4) for (let x = bx0 + 2; x < bx1 - 1; x += 3) if (inR(x, y)) p.set(x, y, near > 0.6 ? 'M' : 'J');
+    for (let y = by0 - 6; y < by0; y++) if (inR(bx0 + 6, y)) p.set(bx0 + 6, y, 'N');
+    if (r.x0 < 50) {
+      line(p, r.x0, r.y1 - 1, Math.min(r.x1 - 1, r.x0 + 24), HORIZON, 'N');
+      line(p, r.x0 + 4, r.y1 - 1, Math.min(r.x1 - 1, r.x0 + 26), HORIZON, 'N');
+    }
+    for (const px of [172, 186, 206, 20, 30]) {
+      if (px < r.x0 || px >= r.x1) continue;
+      for (let y = HORIZON - 6; y <= HORIZON + 2; y++) if (inR(px, y)) p.set(px, y, 'N');
+      if (inR(px, HORIZON - 7)) p.set(px, HORIZON - 7, near > 0.6 ? 'H' : 'u');
+    }
+  }
+  if (near > 0.25 && s.bolt) {
+    // the bolt: a jagged line from the top of the sky to the horizon, with a pale edge
+    let x = s.bolt.x;
+    let y = r.y0;
+    let i = 0;
+    while (y < HORIZON) {
+      const ny = Math.min(HORIZON, y + 4 + Math.floor(hash(s.bolt.seed + i) * 6));
+      const nx = x + Math.floor(hash(s.bolt.seed + i * 3 + 1) * 9) - 4;
+      if (inR(nx, y) && inR(x, y)) {
+        line(p, x, y, nx, Math.min(ny, r.y1 - 1), 'j');
+        line(p, x + 1, y, nx + 1, Math.min(ny, r.y1 - 1), 'W');
+      }
+      if (i === 2 && inR(nx + 6, ny + 8)) line(p, nx, ny, nx + 6, ny + 8, 'j');
+      x = nx;
+      y = ny;
+      i++;
+    }
+  }
+  // the rain: short streaks falling steeply, a little to the left; brighter in a flash
+  const k: PalKey = near > 0.25 ? 'H' : 'h';
+  const n = Math.round((r.x1 - r.x0) * 1.2);
+  for (let i = 0; i < n; i++) {
+    const col = r.x0 + Math.floor(hash(i * 17 + r.x0) * (r.x1 - r.x0));
+    const speed = 55 + 25 * hash(i * 5);
+    const yy = r.y0 + (((t * speed) / 1000 + hash(i * 11) * 200) % (r.y1 - r.y0 + 6)) - 6;
+    const xx = col - Math.floor((yy - r.y0) * 0.12);
+    for (let dd = 0; dd < 3; dd++) {
+      const y = Math.floor(yy) + dd;
+      if (inR(xx, y)) p.set(xx, y, k);
+    }
+  }
+}
+
+/**
+ * What is left of the blind once it is shot open, drawn over the storm (on the stage's front
+ * layer): the head rail, a strip hanging at each side, a slat torn loose and
  * hanging askew from the top, and a piece of the bottom slat. Nothing left of x 167 below y 79,
  * where the machine's corner stands in front of the window.
  */
@@ -689,7 +788,7 @@ export const MACHINE_PIECES: { spr: Sprite; hx: number; hy: number }[] = (
   ] as const
 ).map(([x0, y0, x1, y1]) => ({ spr: sliceRect(MACHINE_SPRITE, x0, y0, x1, y1), hx: x0, hy: y0 }));
 
-/** A wall hole is a dark cross; a door or blind hole goes through to the black behind. */
+/** A wall hole is a dark cross; a door or blind hole goes through to the storm behind. */
 function drawHoles(p: Pix, s: SceneState): void {
   for (const h of s.holes) {
     if (h.kind === 'wall') {
@@ -701,7 +800,7 @@ function drawHoles(p: Pix, s: SceneState): void {
       p.set(h.x, h.y + 1, 'X');
       p.set(h.x, h.y, 'K');
     } else if (!inDoorway(h, s.doorGap) && !(h.kind === 'window' && s.windowOpen)) {
-      p.rect(h.x - 1, h.y - 1, h.x + 1, h.y + 1, 'z');
+      drawStorm(p, { x0: h.x - 1, y0: h.y - 1, x1: h.x + 1, y1: h.y + 1 }, s.storm);
     }
   }
 }
@@ -731,13 +830,16 @@ export function drawRoom(p: Pix, s: SceneState): void {
   for (let y = 109; y < H; y++) {
     for (let x = 0; x < W; x++) p.set(x, y, (x + y) % 2 === 0 ? 'C' : 'x');
   }
-  // the door, ajar on black, EXIT above it
+  // the door in its frame, shut on the storm; cracked by the sign or swung by the shots it shows it
   p.rect(10, 40, 44, 108, 'E');
   p.rect(13, 43, 41, 108, 'D');
-  p.rect(13, 43, 13 + s.doorGap, 108, 'z');
-  // the door's leading edge, once it has swung further in
-  if (s.doorGap > 6) p.rect(13 + s.doorGap, 43, 14 + s.doorGap, 108, 'E');
-  p.rect(36, 76, 38, 78, 'K');
+  if (s.doorGap > 0) {
+    drawStorm(p, { x0: 13, y0: 43, x1: 13 + s.doorGap, y1: 108 }, s.storm);
+    // the door's leading edge
+    p.rect(13 + s.doorGap, 43, 14 + s.doorGap, 108, 'E');
+  }
+  const kx = 36 + Math.min(s.doorGap, 4);
+  p.rect(kx, 76, kx + 2, 78, 'K');
   // the EXIT sign: on the wall, hanging loose, falling, or on the floor in front of the door
   const sign = s.exit;
   if (sign.state === 'down') p.blit(Math.round(sign.x), Math.round(sign.y), SPR.EXIT_BROKEN);
@@ -751,10 +853,10 @@ export function drawRoom(p: Pix, s: SceneState): void {
   // the clock where the board was, the post-it board lower and by the window
   if (s.clock.state === 'up') p.blit(CLOCK_AT.x, CLOCK_AT.y, SPR.CLOCK);
   p.blit(BOARD_AT.x, BOARD_AT.y, s.broken.poster ? SPR.POSTER_TORN : SPR.POSTER);
-  // the window: light, blinds, nothing outside; shot open, the black the red light fills
+  // the window: the blind down over the storm, its slat gaps lit by every strike; shot open, the storm itself
   p.rect(160, 36, 224, 90, 'e');
   if (s.windowOpen) {
-    p.rect(163, 39, 221, 87, 'z');
+    drawStorm(p, { x0: 163, y0: 39, x1: 221, y1: 87 }, s.storm);
     // the slats that came down, on the baseboard and the carpet under the window
     p.rect(170, 108, 178, 109, 's');
     p.rect(181, 111, 186, 112, 'a');
@@ -762,7 +864,8 @@ export function drawRoom(p: Pix, s: SceneState): void {
     p.rect(176, 113, 181, 114, 's');
   } else {
     p.rect(163, 39, 221, 87, 's');
-    for (let y = 41; y < 87; y += 4) p.rect(163, y, 221, y + 1, 'a');
+    const gapK: PalKey = s.storm.near > 0.3 ? 'H' : s.storm.near > 0 || s.storm.far > 0.3 ? 'L' : 'a';
+    for (let y = 41; y < 87; y += 4) p.rect(163, y, 221, y + 1, gapK);
   }
   // the first aid kit by the window's lower right corner, green where a kit is red
   p.blit(KIT_AT.x, KIT_AT.y, s.broken.kit ? SPR.KIT_OPEN : SPR.KIT);

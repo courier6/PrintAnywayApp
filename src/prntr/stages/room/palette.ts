@@ -11,6 +11,15 @@ export const PAL = {
   v: '#3E8E4E', V: '#2E6E3E', p: '#B86B3A', s: '#FFF6CC', e: '#A8A08A', R: '#B8140A',
   /** Not in palette.json: the bright red the open machine's button blinks. */
   Q: '#FF2A1A',
+  /** The storm's own colours, from stage 0's storm (storm.ts): outside the room, outside palette.json. */
+  N: '#0B0D16', // the night sky, the building's silhouette
+  M: '#181C2C', // the building's windows, the cloud bank
+  U: '#2A3350', // a lit cloud's underside (far lightning), the sky in the afterglow
+  u: '#6A7A9C', // the lot's lines, a far light
+  h: '#7FC8FF', // water (the rain)
+  H: '#BFE7FF', // water, lit
+  j: '#9FD8FF', // a bolt's edge; the sky under a near flash
+  J: '#070910', // the trees
 } as const;
 export type PalKey = keyof typeof PAL;
 

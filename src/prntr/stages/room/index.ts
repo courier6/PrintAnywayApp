@@ -233,16 +233,30 @@ const EXIT_FLICKER: [number, number][] = [
 const EXIT_FALL_MS = 550;
 const EXIT_WALL = { x: 17, y: 31 };
 const EXIT_FLOOR = { x: 20, y: 108 };
-/** The door: ajar DOOR_AJAR px on black; DOOR_DELAY_MS after the sign hits the
- * floor it creaks open to DOOR_OPEN px over DOOR_OPEN_MS, and the red from inside reaches into
- * the room (.prntr-room-frame.is-open, prntr.css). It never closes again. */
-const DOOR_AJAR = 6;
+/** The door: shut on the storm (PRNTR-PLANNING.md P5). DOOR_DELAY_MS after the sign hits the floor it
+ * cracks open DOOR_CRACK px with the creak; swung, it stands DOOR_OPEN px open, reached over DOOR_OPEN_MS.
+ * It never closes again. */
+const DOOR_CRACK = 2;
 const DOOR_OPEN = 22;
 const DOOR_DELAY_MS = 400;
 const DOOR_OPEN_MS = 1400;
+/** The storm outside (PRNTR-PLANNING.md P5; the timing is stage 0's storm.ts): a near strike the first
+ * STRIKE_FIRST_MS in and then every STRIKE_MIN–STRIKE_MAX ms, its flash FLASH_MS long with an afterglow
+ * of AFTERGLOW_MS; far lightning the first FAR_FIRST_MS in and then every FAR_MIN–FAR_MAX ms, never within
+ * FAR_GAP_MS of a near strike, FAR_MS long. */
+const STRIKE_FIRST_MS = 2500;
+const STRIKE_MIN_MS = 4000;
+const STRIKE_MAX_MS = 9000;
+const FLASH_MS = 220;
+const AFTERGLOW_MS = 600;
+const FAR_FIRST_MS = 4500;
+const FAR_MIN_MS = 3000;
+const FAR_MAX_MS = 7000;
+const FAR_GAP_MS = 1500;
+const FAR_MS = 400;
 /** A shot that hits nothing to break leaves a hole: dark in the wall and the
- * ceiling, lit red through the door and the window's blind, as if the red behind the door were
- * behind everything. The oldest go past HOLES_MAX. The carpet takes no mark. */
+ * ceiling, the storm showing through the door and the window's blind. The oldest go past HOLES_MAX.
+ * The carpet takes no mark. */
 const HOLES_MAX = 150;
 const DOOR = { x0: 10, y0: 40, x1: 44, y1: 108 };
 const WINDOW = { x0: 160, y0: 36, x1: 224, y1: 90 };
@@ -348,7 +362,7 @@ const HOTSPOTS: Hotspot[] = [
 ];
 
 const ROOM_ALT =
-  'A quiet office: drop ceiling with two fluorescent panels, a door ajar on black with an EXIT sign, a clock, a Simple Products board with notes on it by a window with its blind down and a green first aid kit at its lower right, a water cooler, a plant, one large copier in the middle, and a USB stick on the carpet beside it';
+  'A quiet office: drop ceiling with two fluorescent panels, a door shut under an EXIT sign, a clock, a Simple Products board with notes on it by a window with its blind down on a storm outside and a green first aid kit at its lower right, a water cooler, a plant, one large copier in the middle, and a USB stick on the carpet beside it';
 
 type Phase = 'look' | 'sticker' | 'fight' | 'continue' | 'over' | 'end';
 type AttackKind = 'scan' | 'staples' | 'pages' | 'ink' | 'bolts';
@@ -602,7 +616,8 @@ export const room: Stage = {
       broken: { clock: false, poster: false, tank: false, plant: false, vase: false, kit: false },
       clock: { state: 'up', x: CLOCK_AT.x, y: CLOCK_AT.y, rot: 0 },
       exit: { state: 'up', x: EXIT_WALL.x, y: EXIT_WALL.y, tilt: 0, lit: true },
-      doorGap: DOOR_AJAR,
+      doorGap: 0,
+      storm: { t: 0, near: 0, far: 0, bolt: null },
       fire: null,
       shake: { x: 0, y: 0 },
       inkBehind: [],
@@ -712,8 +727,17 @@ export const room: Stage = {
     /** When the door starts to open (set as the sign lands), and when it did. */
     let doorAt: number | null = null;
     let doorOpenAt: number | null = null;
-    /** The width the door's light is drawn at, so the style is set only when it changes. */
-    let lightGap = DOOR_AJAR;
+    /** The width the door's light is drawn at, so the style is set only when it changes (-1: not yet). */
+    let lightGap = -1;
+    /** The gap the door's swing started from. */
+    let doorFrom = 0;
+    /** The storm: the next near strike and the last, its bolt; the next far flicker and the last. */
+    let nextStrike = phaseAt + STRIKE_FIRST_MS;
+    let strikeAt = -Infinity;
+    let bolt = { x: 0, seed: 0 };
+    let nextFar = phaseAt + FAR_FIRST_MS;
+    let farAt = -Infinity;
+    let lastNear = -Infinity;
     const attackGap = () => Math.round((score >= LATE_SCORE ? ATTACK_GAP_LATE_MS : ATTACK_GAP_MS) * Math.pow(RAGE_STEP, rage));
     const scheduleBlink = (from: number, delay: number) => {
       nextBlinkAt = from + delay + Math.random() * (BLINK_MAX_MS - BLINK_MIN_MS);
@@ -1717,6 +1741,10 @@ export const room: Stage = {
         attackGap,
         exit: (): ExitSign['state'] => scene.exit.state,
         doorGap: () => scene.doorGap,
+        door: () => (scene.doorGap >= DOOR_OPEN ? 'open' : scene.doorGap > 0 ? 'cracked' : 'closed'),
+        /** The storm this frame, and a near strike now. */
+        storm: () => ({ ...scene.storm }),
+        strike: () => strike(performance.now()),
         short: () => shortAt !== null,
         fire: () => fireAt !== null,
         fireU: () => fireU(performance.now()),
@@ -1869,10 +1897,11 @@ export const room: Stage = {
       }
       if (doorAt !== null && now >= doorAt) {
         doorAt = null;
-        doorOpenAt = now;
-        sounds.doorCreak();
-        frame.classList.add('is-open');
+        crackDoor();
       }
+      // The storm: a near strike now and then, far lightning between.
+      if (now >= nextStrike) strike(now);
+      if (now >= nextFar) farStrike(now);
       // The clock: lands, comes to rest, catches fire by the burning cooler, rolls out (not while frozen).
       if (frozenAt === null) {
         const ck = scene.clock;
@@ -2063,11 +2092,18 @@ export const room: Stage = {
         ck.rot = clockRot0 - Math.floor((clockX0 - ck.x) / CLOCK_ROLL_PX);
       }
     };
-    // The door swings in, easing out, a pixel at a time; the light in it is drawn as wide.
+    // The sign down: the door cracks open with the creak (unless the shots already swung it).
+    const crackDoor = () => {
+      if (scene.doorGap > 0) return;
+      scene.doorGap = DOOR_CRACK;
+      sounds.doorCreak();
+    };
+    // The door swings in from where it stands, easing out, a pixel at a time; the light in it is drawn as wide.
     const poseDoor = (now: number) => {
-      if (doorOpenAt === null) return;
-      const u = reduced ? 1 : Math.min(1, (now - doorOpenAt) / DOOR_OPEN_MS);
-      scene.doorGap = DOOR_AJAR + Math.floor((DOOR_OPEN - DOOR_AJAR) * (1 - (1 - u) * (1 - u)));
+      if (doorOpenAt !== null) {
+        const u = reduced ? 1 : Math.min(1, (now - doorOpenAt) / DOOR_OPEN_MS);
+        scene.doorGap = doorFrom + Math.floor((DOOR_OPEN - doorFrom) * (1 - (1 - u) * (1 - u)));
+      }
       if (scene.doorGap !== lightGap) {
         lightGap = scene.doorGap;
         light.style.width = `calc(${lightGap}px * var(--s))`;
@@ -2093,10 +2129,36 @@ export const room: Stage = {
       fireLight.style.height = `${(r.y1 - r.y0) * scale}px`;
       fireLight.style.opacity = reduced ? '0.8' : String(0.65 + 0.35 * Math.abs(Math.sin(now / 90)));
     };
+    // The storm outside: a near strike (its bolt in the door's or the window's view), far lightning
+    // between, and what the room sees of it this frame.
+    const strike = (now: number) => {
+      strikeAt = now;
+      lastNear = now;
+      bolt = { x: Math.random() < 0.5 ? 16 + Math.floor(Math.random() * 22) : 166 + Math.floor(Math.random() * 52), seed: Math.floor(now) };
+      nextStrike = now + STRIKE_MIN_MS + Math.random() * (STRIKE_MAX_MS - STRIKE_MIN_MS);
+      if (nextFar < now + FAR_GAP_MS) nextFar = now + FAR_GAP_MS;
+    };
+    const farStrike = (now: number) => {
+      if (now - lastNear < FAR_GAP_MS) {
+        nextFar = lastNear + FAR_GAP_MS;
+        return;
+      }
+      farAt = now;
+      nextFar = now + FAR_MIN_MS + Math.random() * (FAR_MAX_MS - FAR_MIN_MS);
+    };
+    const poseStorm = (now: number) => {
+      const st = now - strikeAt;
+      const u = st / FLASH_MS;
+      const near = reduced ? (st < 20 ? 1 : 0) : u < 0.15 ? 1 : u < 1 ? 1 - u : st < FLASH_MS + AFTERGLOW_MS ? 0.12 * (1 - (st - FLASH_MS) / AFTERGLOW_MS) : 0;
+      const fu = (now - farAt) / FAR_MS;
+      const far = reduced ? 0 : fu < 0.2 ? 1 : fu < 0.35 ? 0.4 : fu < 0.5 ? 0.9 : fu < 1 ? 1 - fu : 0;
+      scene.storm = { t: reduced ? 0 : now, near, far, bolt: near > 0.25 ? bolt : null };
+    };
     const render = (now: number) => {
       poseSign(now);
       poseClock(now);
       poseDoor(now);
+      poseStorm(now);
       poseFire(now);
       scene.flashWhite = flashFrames > 0;
       scene.damage = score / HI;
