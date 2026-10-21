@@ -34,6 +34,8 @@ const CLOCK_ROT = [0, 1, 2, 3].map((q) => rotateSprite(SPR.CLOCK, q));
 const COOLER_BODY = sliceRows(SPR.COOLER, 8, 22);
 const PLANT_TOP = sliceRows(SPR.PLANT, 0, 10);
 const PLANT_POT = sliceRows(SPR.PLANT, 10, 16);
+/** The bare plant lying on the carpet, its top to the left: the pot shot from under it. */
+const PLANT_FALLEN = rotateSprite(SPR.PLANT_BARE, 3);
 
 /** What the gun has broken: each stays broken for the rest of the stage. */
 export interface Broken {
@@ -927,7 +929,9 @@ export function drawRoom(p: Pix, s: SceneState): void {
   }
   if (s.fire) drawFire(p, s.fire, 'mid');
   p.rect(190, 132, 206, 135, 'X');
-  p.blit(200, 103, s.broken.plant ? SPR.PLANT_BARE : PLANT_TOP, 2);
+  // the plant in its pot; its leaves shot off, bare stems; the pot shot, the stems lie on the carpet
+  if (s.broken.vase) p.blit(182, 121, PLANT_FALLEN, 2);
+  else p.blit(200, 103, s.broken.plant ? SPR.PLANT_BARE : PLANT_TOP, 2);
   p.blit(200, 123, s.broken.vase ? SPR.POT_BROKEN : PLANT_POT, 2);
   if (s.broken.plant) {
     // leaves on the carpet

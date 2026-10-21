@@ -1371,6 +1371,8 @@ export const room: Stage = {
       const thing = BREAKABLES.find((b) => !scene.broken[b.id] && x >= b.x0 && x < b.x1 && y >= b.y0 && y < b.y1);
       if (thing) {
         scene.broken[thing.id] = true;
+        // the pot shot takes the plant with it (one break's points); the leaves shot leave the pot
+        if (thing.id === 'vase') scene.broken.plant = true;
         sounds[thing.sound]();
         addScore(BREAK_POINTS, now);
         if (thing.id === 'tank') startShort(now);
