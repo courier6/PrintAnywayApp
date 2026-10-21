@@ -416,17 +416,19 @@
   pointer-events: none;
 }
 
-/* The light in the door: deliberately the one unpixelated thing in the room
-   (handoff §2.3). Never captioned, never explained. */
+/* The light in the door: the storm's, pale and cold, a smooth glow over the storm drawn in the gap
+   (the one unpixelated thing in the room, handoff §2.3; never captioned). The stage sets its width
+   as the door opens; it flares with the strikes (--storm-glow) and is brighter the wider the door
+   stands (--storm-door). */
 .prntr-room-light {
   position: absolute;
   left: calc(13px * var(--s));
   top: calc(43px * var(--s));
-  width: calc(6px * var(--s));
+  width: 0;
   height: calc(65px * var(--s));
-  background: linear-gradient(to bottom, #2A0404 0%, #5A0A0A 45%, #8A1410 100%);
-  box-shadow: 0 0 calc(4.4px * var(--s)) calc(1.6px * var(--s)) rgba(120, 14, 12, 0.42);
-  transition: box-shadow 1500ms ease-out;
+  background: linear-gradient(to bottom, rgba(170, 200, 240, 0.12) 0%, rgba(190, 215, 250, 0.3) 100%);
+  box-shadow: 0 0 calc(6px * var(--s)) calc(2px * var(--s)) rgba(170, 200, 240, 0.9);
+  opacity: calc(var(--storm-glow, 0.06) * var(--storm-door, 0) * 1.25);
   pointer-events: none;
 }
 
@@ -437,7 +439,8 @@
   width: calc(38px * var(--s));
   height: calc(8.8px * var(--s));
   border-radius: 50%;
-  background: radial-gradient(ellipse at center, rgba(140, 18, 14, 0.5) 0%, rgba(140, 18, 14, 0) 70%);
+  background: radial-gradient(ellipse at center, rgba(170, 200, 240, 0.5) 0%, rgba(170, 200, 240, 0) 70%);
+  opacity: calc(var(--storm-glow, 0.06) * var(--storm-door, 0) * 3);
   filter: blur(calc(0.6px * var(--s)));
   transition:
     left 1500ms ease-out,
@@ -447,16 +450,7 @@
   pointer-events: none;
 }
 
-/* Once the door has creaked open (the EXIT sign shot down): the light in it
-   is wider (the stage sets its width as the door swings), its glow reaches further, the spill
-   on the carpet is larger, and the red from inside reaches the wall around the door, the
-   cooler, the poster and the near side of the machine, the whole room a shade darker and
-   redder with it. The wash multiplies, so every pixel keeps its edges; the HUD, the glows
-   and the cursor sit above it. */
-.prntr-room-frame.is-open .prntr-room-light {
-  box-shadow: 0 0 calc(9px * var(--s)) calc(3px * var(--s)) rgba(140, 16, 12, 0.55);
-}
-
+/* Once the door has swung open (.is-open): the spill on the carpet is larger. */
 .prntr-room-frame.is-open .prntr-room-spill {
   left: calc(-6px * var(--s));
   top: calc(98px * var(--s));
@@ -483,8 +477,8 @@
   opacity: 1;
 }
 
-/* A bullet hole through the door or the window's blind: the 2×2 px hole
-   lit like the light in the door, glowing past its edges. */
+/* A bullet hole through the door or the window's blind: the 2×2 px hole shows the storm; its
+   box is the storm's cold light glowing past the edges, flaring with the strikes. */
 .prntr-room-hole-lights {
   position: absolute;
   inset: 0;
@@ -496,51 +490,42 @@
   width: calc(2px * var(--s));
   height: calc(2px * var(--s));
   border-radius: 30%;
-  background: radial-gradient(circle, #B01A12 0%, #8A1410 45%, #5A0A0A 100%);
-  box-shadow: 0 0 calc(2.4px * var(--s)) calc(0.8px * var(--s)) rgba(140, 16, 12, 0.55);
+  background: radial-gradient(circle, #DCE8FA 0%, #AAC8F0 45%, #6A86B8 100%);
+  box-shadow: 0 0 calc(2.4px * var(--s)) calc(0.8px * var(--s)) rgba(170, 200, 240, 0.7);
+  opacity: calc(0.3 + var(--storm-glow, 0.06));
 }
 
-/* The window shot open: the red from behind the door pours through the
-   gap where the blind was (163,39 58×48), glowing past the frame, and fades in over 1.5 s. The
-   fill is clipped off the machine's corner (x < 165 below y 79), which stands in front of the
-   window; the blind's remnants are drawn over it on the front canvas. */
+/* The window shot open: the storm's light pours through the gap where the blind was (163,39 58×48),
+   a translucent glow over the storm drawn there, glowing past the frame and flaring with the strikes
+   (--storm-window is 1 once the blind is gone, a quarter while a flash lights its gaps). The fill is
+   clipped off the machine's corner (x < 165 below y 79), which stands in front of the window; the
+   blind's remnants are drawn over it on the front canvas. */
 .prntr-room-window-light {
   position: absolute;
   left: calc(163px * var(--s));
   top: calc(39px * var(--s));
   width: calc(58px * var(--s));
   height: calc(48px * var(--s));
-  box-shadow: 0 0 calc(9px * var(--s)) calc(3px * var(--s)) rgba(140, 16, 12, 0.55);
-  opacity: 0;
-  transition: opacity 1500ms ease-out;
+  box-shadow: 0 0 calc(9px * var(--s)) calc(3px * var(--s)) rgba(170, 200, 240, 0.8);
+  opacity: calc(var(--storm-glow, 0.06) * var(--storm-window, 0) * 1.25);
   pointer-events: none;
 }
 
 .prntr-room-window-fill {
   position: absolute;
   inset: 0;
-  background: radial-gradient(ellipse at 50% 60%, #B01A12 0%, #8A1410 35%, #5A0A0A 75%, #2A0404 100%);
+  background: radial-gradient(ellipse at 50% 60%, rgba(190, 215, 250, 0.35) 0%, rgba(170, 200, 240, 0.15) 50%, rgba(170, 200, 240, 0) 100%);
   clip-path: polygon(0 0, 100% 0, 100% 100%, 3.45% 100%, 3.45% 83.33%, 0 83.33%);
 }
 
-.prntr-room-frame.is-window-open .prntr-room-window-light {
-  opacity: 1;
-}
-
-/* The red from the window reaching the plant, the right wall and the machine's far side; it
-   fades out at its edge, so the rest of the room keeps the light it had. */
-.prntr-room-dread-window {
+/* A near strike reaching into the room: a pale cold wash over everything in the pixel world, its
+   opacity the storm's (--storm-room: the flash by how open the room is); under the HUD and the cross. */
+.prntr-room-storm-wash {
   position: absolute;
   inset: 0;
-  background: radial-gradient(ellipse 45% 62% at 80% 40%, rgba(255, 60, 30, 0.9) 0%, rgba(210, 40, 20, 0.7) 25%, rgba(170, 70, 60, 0.3) 60%, rgba(170, 70, 60, 0) 100%);
-  mix-blend-mode: multiply;
-  opacity: 0;
-  transition: opacity 1500ms ease-out;
+  background: #C8DCFF;
+  opacity: var(--storm-room, 0);
   pointer-events: none;
-}
-
-.prntr-room-frame.is-window-open .prntr-room-dread-window {
-  opacity: 1;
 }
 
 /* The fire's light: an orange glow the size of the flames, set each frame. */
@@ -551,20 +536,6 @@
     0 0 calc(4px * var(--s)) calc(1.5px * var(--s)) rgba(255, 150, 40, 0.35),
     0 0 calc(9px * var(--s)) calc(4px * var(--s)) rgba(255, 90, 20, 0.3);
   pointer-events: none;
-}
-
-.prntr-room-dread {
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(ellipse 48% 68% at 11% 48%, rgba(255, 60, 30, 0.9) 0%, rgba(210, 40, 20, 0.7) 25%, rgba(140, 75, 75, 0.38) 55%, rgba(130, 80, 80, 0.35) 100%);
-  mix-blend-mode: multiply;
-  opacity: 0;
-  transition: opacity 1500ms ease-out;
-  pointer-events: none;
-}
-
-.prntr-room-frame.is-open .prntr-room-dread {
-  opacity: 1;
 }
 
 /* PROTECT YOURSELF. on the wall between the clock and the machine, the binding under it; in over 300 ms with the

@@ -76,6 +76,8 @@ export interface RoomSounds {
   signCrash(): void;
   /** The door creaking open, 1.3 s, faint under everything else. */
   doorCreak(): void;
+  /** The door shot apart: a crack of wood and its planks hitting the carpet. */
+  doorBreak(): void;
   /** The machine shorting out when the water reaches it: one burst of zaps. */
   zap(): void;
   /** The short before the fire: a zap at each of these ms, each its own, with a sizzle between. */
@@ -137,6 +139,7 @@ const SILENT: RoomSounds = {
   signSnap: noop,
   signCrash: noop,
   doorCreak: noop,
+  doorBreak: noop,
   zap: noop,
   short: noop,
   inkSpray: noop,
@@ -522,6 +525,18 @@ export function createRoomSounds(audio: PrntrAudio): RoomSounds {
         g.connect(out);
         o.start(t);
         o.stop(t + 1.32);
+      }
+    },
+    // the door breaking: a wood crack (a short burst and a 90 → 40 Hz thud), a second crack 90 ms
+    // on, and two planks landing at 0.35 and 0.55 s, each a low thud with a knock
+    doorBreak() {
+      const t = now();
+      noise(t, 0.06, { hp: 800, lp: 5000, gain: 0.7, decay: 0.012 });
+      tone(t, 0.14, { f0: 90, f1: 40, gain: 0.6, decay: 0.04 });
+      noise(t + 0.09, 0.05, { hp: 1000, lp: 6000, gain: 0.5, decay: 0.01 });
+      for (const d of [0.35, 0.55]) {
+        noise(t + d, 0.08, { lp: 1500, gain: 0.5, decay: 0.015 });
+        tone(t + d, 0.1, { f0: 160, f1: 70, gain: 0.4, decay: 0.025 });
       }
     },
     // the short: five bursts 90 ms apart of a 60 → 120 Hz square with a crackle on each

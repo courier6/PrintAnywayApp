@@ -5,6 +5,7 @@ import { CLOCK_AT, KIT_AT, MACHINE_AT, MACHINE_PIECES, NOZZLES, SPR, drawFireFro
 import { ART_AT, ART_SUB, renderVictory } from './art';
 import { PAL, type PalKey } from './palette';
 import { createRoomSounds, type FireSound, type Hum } from './sounds';
+import { startStormSound } from '../storm';
 
 // ---------------------------------------------------------------------------
 // Tunables. The attack cycle is "tune freely" (handoff §2.7), slowed down and made
@@ -233,16 +234,37 @@ const EXIT_FLICKER: [number, number][] = [
 const EXIT_FALL_MS = 550;
 const EXIT_WALL = { x: 17, y: 31 };
 const EXIT_FLOOR = { x: 20, y: 108 };
-/** The door: ajar DOOR_AJAR px on black; DOOR_DELAY_MS after the sign hits the
- * floor it creaks open to DOOR_OPEN px over DOOR_OPEN_MS, and the red from inside reaches into
- * the room (.prntr-room-frame.is-open, prntr.css). It never closes again. */
-const DOOR_AJAR = 6;
+/** The door: shut on the storm (PRNTR-PLANNING.md P5). DOOR_DELAY_MS after the sign hits the floor it
+ * cracks open DOOR_CRACK px with the creak; at the DOOR_SWING_SHOTS-th hole in it, it swings open to
+ * DOOR_OPEN px over DOOR_OPEN_MS, sign or no sign; at the DOOR_BREAK_SHOTS-th it breaks apart
+ * (BREAK_POINTS, once) and the doorway is full of storm. It never closes again. */
+const DOOR_CRACK = 2;
 const DOOR_OPEN = 22;
 const DOOR_DELAY_MS = 400;
 const DOOR_OPEN_MS = 1400;
+const DOOR_SWING_SHOTS = 6;
+const DOOR_BREAK_SHOTS = 12;
+/** The storm outside (PRNTR-PLANNING.md P5; the timing is stage 0's storm.ts): a near strike the first
+ * STRIKE_FIRST_MS in and then every STRIKE_MIN–STRIKE_MAX ms, its flash FLASH_MS long with an afterglow
+ * of AFTERGLOW_MS; far lightning the first FAR_FIRST_MS in and then every FAR_MIN–FAR_MAX ms, never within
+ * FAR_GAP_MS of a near strike, FAR_MS long; thunder right behind a near strike, THUNDER_MIN–THUNDER_MAX s
+ * after a far one. The storm's sound is heard through the shut walls at STORM_SHUT, more with every opening. */
+const STRIKE_FIRST_MS = 2500;
+const STRIKE_MIN_MS = 4000;
+const STRIKE_MAX_MS = 9000;
+const FLASH_MS = 220;
+const AFTERGLOW_MS = 600;
+const FAR_FIRST_MS = 4500;
+const FAR_MIN_MS = 3000;
+const FAR_MAX_MS = 7000;
+const FAR_GAP_MS = 1500;
+const FAR_MS = 400;
+const THUNDER_MIN_S = 0.5;
+const THUNDER_MAX_S = 1;
+const STORM_SHUT = 0.12;
 /** A shot that hits nothing to break leaves a hole: dark in the wall and the
- * ceiling, lit red through the door and the window's blind, as if the red behind the door were
- * behind everything. The oldest go past HOLES_MAX. The carpet takes no mark. */
+ * ceiling, the storm showing through the door and the window's blind. The oldest go past HOLES_MAX.
+ * The carpet takes no mark. */
 const HOLES_MAX = 150;
 const DOOR = { x0: 10, y0: 40, x1: 44, y1: 108 };
 const WINDOW = { x0: 160, y0: 36, x1: 224, y1: 90 };
@@ -348,7 +370,7 @@ const HOTSPOTS: Hotspot[] = [
 ];
 
 const ROOM_ALT =
-  'A quiet office: drop ceiling with two fluorescent panels, a door ajar on black with an EXIT sign, a clock, a Simple Products board with notes on it by a window with its blind down and a green first aid kit at its lower right, a water cooler, a plant, one large copier in the middle, and a USB stick on the carpet beside it';
+  'A quiet office: drop ceiling with two fluorescent panels, a door shut under an EXIT sign, a clock, a Simple Products board with notes on it by a window with its blind down on a storm outside and a green first aid kit at its lower right, a water cooler, a plant, one large copier in the middle, and a USB stick on the carpet beside it';
 
 type Phase = 'look' | 'sticker' | 'fight' | 'continue' | 'over' | 'end';
 type AttackKind = 'scan' | 'staples' | 'pages' | 'ink' | 'bolts';
@@ -493,20 +515,19 @@ export const room: Stage = {
     fireLight.hidden = true;
     // The mad machine's slot, lit red like the door (.is-mad on the frame fades it in).
     const slotLight = el('div', 'prntr-room-slot-light');
-    // The red light through the holes in the door and the blind, one box per hole.
+    // The storm's light through the holes in the door and the blind, one box per hole.
     const holeLights = el('div', 'prntr-room-hole-lights');
-    // The window shot open: the red pours through it (a glow, and the fill clipped off the
-    // machine's corner), and reaches that side of the room with a multiply wash of its own.
+    // The window shot open: the storm's light pours through it (a glow, and the fill clipped off the
+    // machine's corner).
     const windowLight = el('div', 'prntr-room-window-light');
     windowLight.append(el('div', 'prntr-room-window-fill'));
-    const dreadWindow = el('div', 'prntr-room-dread-window');
-    // The red that reaches into the room once the door is open: a multiply wash, off until then.
-    const dread = el('div', 'prntr-room-dread');
+    // A near strike reaching into the room: a pale wash over everything, its opacity the storm's.
+    const stormWash = el('div', 'prntr-room-storm-wash');
     const wash = el('div', 'prntr-room-wash');
     // The red glow on everything that can be shot: DOM boxes over the pixel layer,
     // unpixelated like the door's light. One per projectile, pooled.
     const glows = el('div', 'prntr-room-glows');
-    for (const n of [light, spill, fireLight, slotLight, holeLights, windowLight, dread, dreadWindow, wash, glows]) n.setAttribute('aria-hidden', 'true');
+    for (const n of [light, spill, fireLight, slotLight, holeLights, windowLight, stormWash, wash, glows]) n.setAttribute('aria-hidden', 'true');
     const hud = el('div', 'prntr-room-hud');
     const scoreEl = el('div', 'prntr-room-score', 'SCORE 0000');
     const hiEl = el('div', 'prntr-room-hi', 'HI 1337');
@@ -566,7 +587,7 @@ export const room: Stage = {
     const deathEl = el('div', 'prntr-room-death');
     deathEl.setAttribute('aria-hidden', 'true');
     deathEl.hidden = true;
-    frame.append(art, canvas, light, spill, fireLight, slotLight, holeLights, windowLight, front, dread, dreadWindow, wash, glows, hud, cursor, hurtEl, deathEl, continueEl, overEl);
+    frame.append(art, canvas, light, spill, fireLight, slotLight, holeLights, windowLight, front, stormWash, wash, glows, hud, cursor, hurtEl, deathEl, continueEl, overEl);
     wrap.append(frame);
     root.append(wrap);
 
@@ -602,7 +623,9 @@ export const room: Stage = {
       broken: { clock: false, poster: false, tank: false, plant: false, vase: false, kit: false },
       clock: { state: 'up', x: CLOCK_AT.x, y: CLOCK_AT.y, rot: 0 },
       exit: { state: 'up', x: EXIT_WALL.x, y: EXIT_WALL.y, tilt: 0, lit: true },
-      doorGap: DOOR_AJAR,
+      doorGap: 0,
+      doorBroken: false,
+      storm: { t: 0, near: 0, far: 0, bolt: null },
       fire: null,
       shake: { x: 0, y: 0 },
       inkBehind: [],
@@ -614,8 +637,9 @@ export const room: Stage = {
       pieces: [],
       damage: 0,
     };
-    /** Holes in the blind so far. */
+    /** Holes in the blind so far, and in the door. */
     let windowShots = 0;
+    let doorShots = 0;
     /** The red light of each hole through the door or the blind. */
     const holeLightOf = new Map<Hole, HTMLElement>();
     let phase: Phase = 'look';
@@ -712,8 +736,17 @@ export const room: Stage = {
     /** When the door starts to open (set as the sign lands), and when it did. */
     let doorAt: number | null = null;
     let doorOpenAt: number | null = null;
-    /** The width the door's light is drawn at, so the style is set only when it changes. */
-    let lightGap = DOOR_AJAR;
+    /** The width the door's light is drawn at, so the style is set only when it changes (-1: not yet). */
+    let lightGap = -1;
+    /** The gap the door's swing started from. */
+    let doorFrom = 0;
+    /** The storm: the next near strike and the last, its bolt; the next far flicker and the last. */
+    let nextStrike = phaseAt + STRIKE_FIRST_MS;
+    let strikeAt = -Infinity;
+    let bolt = { x: 0, seed: 0 };
+    let nextFar = phaseAt + FAR_FIRST_MS;
+    let farAt = -Infinity;
+    let lastNear = -Infinity;
     const attackGap = () => Math.round((score >= LATE_SCORE ? ATTACK_GAP_LATE_MS : ATTACK_GAP_MS) * Math.pow(RAGE_STEP, rage));
     const scheduleBlink = (from: number, delay: number) => {
       nextBlinkAt = from + delay + Math.random() * (BLINK_MAX_MS - BLINK_MIN_MS);
@@ -725,6 +758,15 @@ export const room: Stage = {
     };
     const clicks = new Map<string, number>();
     const hum: Hum = sounds.hum();
+    // The storm's sound (stage 0's: rain and wind, thunder on request) through a gain of its own, faint
+    // through the shut walls and louder with every opening (poseStorm sets it).
+    const stormGain = audio.context && audio.master ? audio.context.createGain() : null;
+    if (stormGain && audio.master) {
+      stormGain.gain.value = 0;
+      stormGain.connect(audio.master);
+    }
+    const stormSound = stormGain && audio.context ? startStormSound(audio.context, stormGain) : null;
+    let stormLevel = -1;
     /** Set inside the promise at the bottom: stops the loop and resolves `outcome`. */
     let finish: () => void = () => undefined;
 
@@ -1330,14 +1372,15 @@ export const room: Stage = {
         }
         return;
       }
-      // Nothing to hit: the shot marks what it lands on. Into the black of the doorway, nothing.
-      if (x >= 13 && x < 13 + scene.doorGap && y >= 43 && y < DOOR.y1) return;
-      if (x >= DOOR.x0 && x < DOOR.x1 && y >= DOOR.y0 && y < DOOR.y1) addHole('door', x, y);
+      // Nothing to hit: the shot marks what it lands on. Into the storm through the doorway, nothing.
+      if (x >= 13 && x < 41 && y >= 43 && y < DOOR.y1 && (scene.doorBroken || x < 13 + scene.doorGap)) return;
+      if (x >= DOOR.x0 && x < DOOR.x1 && y >= DOOR.y0 && y < DOOR.y1) addHole('door', x, y, now);
       else if (x >= WINDOW.x0 && x < WINDOW.x1 && y >= WINDOW.y0 && y < WINDOW.y1) windowShot(x, y, now);
       else if (y < FLOOR_Y) addHole('wall', x, y);
     };
-    // A hole where the shot landed; through the door or the blind, a red light in it.
-    const addHole = (kind: Hole['kind'], x: number, y: number) => {
+    // A hole where the shot landed; through the door or the blind, the storm's light in it. Every hole in
+    // the door counts toward its swing and its breaking.
+    const addHole = (kind: Hole['kind'], x: number, y: number, now = 0) => {
       const hole: Hole = { x: Math.floor(x), y: Math.floor(y), kind }; // the pixel under the shot
       scene.holes.push(hole);
       if (scene.holes.length > HOLES_MAX) {
@@ -1364,6 +1407,28 @@ export const room: Stage = {
       box.hidden = inDoorway(hole, scene.doorGap);
       holeLightOf.set(hole, box);
       holeLights.append(box);
+      if (kind === 'door') {
+        doorShots++;
+        if (doorShots === DOOR_BREAK_SHOTS) breakDoor(now);
+        else if (doorShots === DOOR_SWING_SHOTS && doorOpenAt === null && scene.doorGap < DOOR_OPEN) swingDoor(now);
+      }
+    };
+    // The sixth hole: the door swings in to DOOR_OPEN from where it is, with the creak.
+    const swingDoor = (now: number) => {
+      doorFrom = scene.doorGap;
+      doorOpenAt = now;
+      sounds.doorCreak();
+      frame.classList.add('is-open');
+    };
+    // The twelfth hole: the door breaks apart; its holes go with it; the doorway is the storm.
+    const breakDoor = (now: number) => {
+      scene.doorBroken = true;
+      doorOpenAt = null;
+      scene.doorGap = DOOR_OPEN;
+      for (const [hole, box] of holeLightOf) if (hole.kind === 'door') box.hidden = true;
+      frame.classList.add('is-open');
+      sounds.doorBreak();
+      addScore(BREAK_POINTS, now);
     };
     // A mark on the glass where a thrown thing landed; the oldest go past the cap. (Cover, when it
     // comes: a thing that lands while the player is covered clanks off and leaves nothing.)
@@ -1717,6 +1782,12 @@ export const room: Stage = {
         attackGap,
         exit: (): ExitSign['state'] => scene.exit.state,
         doorGap: () => scene.doorGap,
+        door: () => (scene.doorBroken ? 'broken' : scene.doorGap >= DOOR_OPEN ? 'open' : scene.doorGap > 0 ? 'cracked' : 'closed'),
+        doorShots: () => doorShots,
+        /** The storm this frame, and a near strike now. */
+        storm: () => ({ ...scene.storm }),
+        stormLevel: () => stormLevel,
+        strike: () => strike(performance.now()),
         short: () => shortAt !== null,
         fire: () => fireAt !== null,
         fireU: () => fireU(performance.now()),
@@ -1869,10 +1940,11 @@ export const room: Stage = {
       }
       if (doorAt !== null && now >= doorAt) {
         doorAt = null;
-        doorOpenAt = now;
-        sounds.doorCreak();
-        frame.classList.add('is-open');
+        crackDoor();
       }
+      // The storm: a near strike now and then, far lightning between.
+      if (now >= nextStrike) strike(now);
+      if (now >= nextFar) farStrike(now);
       // The clock: lands, comes to rest, catches fire by the burning cooler, rolls out (not while frozen).
       if (frozenAt === null) {
         const ck = scene.clock;
@@ -2063,11 +2135,18 @@ export const room: Stage = {
         ck.rot = clockRot0 - Math.floor((clockX0 - ck.x) / CLOCK_ROLL_PX);
       }
     };
-    // The door swings in, easing out, a pixel at a time; the light in it is drawn as wide.
+    // The sign down: the door cracks open with the creak (unless the shots already swung it).
+    const crackDoor = () => {
+      if (scene.doorBroken || scene.doorGap > 0) return;
+      scene.doorGap = DOOR_CRACK;
+      sounds.doorCreak();
+    };
+    // The door swings in from where it stands, easing out, a pixel at a time; the light in it is drawn as wide.
     const poseDoor = (now: number) => {
-      if (doorOpenAt === null) return;
-      const u = reduced ? 1 : Math.min(1, (now - doorOpenAt) / DOOR_OPEN_MS);
-      scene.doorGap = DOOR_AJAR + Math.floor((DOOR_OPEN - DOOR_AJAR) * (1 - (1 - u) * (1 - u)));
+      if (doorOpenAt !== null) {
+        const u = reduced ? 1 : Math.min(1, (now - doorOpenAt) / DOOR_OPEN_MS);
+        scene.doorGap = doorFrom + Math.floor((DOOR_OPEN - doorFrom) * (1 - (1 - u) * (1 - u)));
+      }
       if (scene.doorGap !== lightGap) {
         lightGap = scene.doorGap;
         light.style.width = `calc(${lightGap}px * var(--s))`;
@@ -2093,10 +2172,61 @@ export const room: Stage = {
       fireLight.style.height = `${(r.y1 - r.y0) * scale}px`;
       fireLight.style.opacity = reduced ? '0.8' : String(0.65 + 0.35 * Math.abs(Math.sin(now / 90)));
     };
+    // The storm outside: a near strike (its bolt in the door's or the window's view), far lightning
+    // between, and what the room sees of it this frame.
+    const strike = (now: number) => {
+      strikeAt = now;
+      lastNear = now;
+      bolt = { x: Math.random() < 0.5 ? 16 + Math.floor(Math.random() * 22) : 166 + Math.floor(Math.random() * 52), seed: Math.floor(now) };
+      nextStrike = now + STRIKE_MIN_MS + Math.random() * (STRIKE_MAX_MS - STRIKE_MIN_MS);
+      if (nextFar < now + FAR_GAP_MS) nextFar = now + FAR_GAP_MS;
+      stormSound?.thunder(0.15, true);
+    };
+    const farStrike = (now: number) => {
+      if (now - lastNear < FAR_GAP_MS) {
+        nextFar = lastNear + FAR_GAP_MS;
+        return;
+      }
+      farAt = now;
+      nextFar = now + FAR_MIN_MS + Math.random() * (FAR_MAX_MS - FAR_MIN_MS);
+      stormSound?.thunder(THUNDER_MIN_S + Math.random() * (THUNDER_MAX_S - THUNDER_MIN_S), false);
+    };
+    const poseStorm = (now: number) => {
+      const st = now - strikeAt;
+      const u = st / FLASH_MS;
+      const near = reduced ? (st < 20 ? 1 : 0) : u < 0.15 ? 1 : u < 1 ? 1 - u : st < FLASH_MS + AFTERGLOW_MS ? 0.12 * (1 - (st - FLASH_MS) / AFTERGLOW_MS) : 0;
+      const fu = (now - farAt) / FAR_MS;
+      const far = reduced ? 0 : fu < 0.2 ? 1 : fu < 0.35 ? 0.4 : fu < 0.5 ? 0.9 : fu < 1 ? 1 - fu : 0;
+      scene.storm = { t: reduced ? 0 : now, near, far, bolt: near > 0.25 ? bolt : null };
+      // the light into the room: the glow of the light boxes, how open each opening is, and the pale
+      // wash of a near flash by how open the room is (no flare under reduced motion)
+      const glow = reduced ? 0.06 : Math.max(near * 0.8, far * 0.18, 0.06);
+      setVar('--storm-glow', glow);
+      setVar('--storm-door', scene.doorBroken || scene.doorGap >= DOOR_OPEN ? 1 : scene.doorGap > 0 ? 0.5 : 0);
+      setVar('--storm-window', scene.windowOpen ? 1 : near > 0.3 ? 0.25 : 0);
+      setVar('--storm-room', !reduced && near > 0.3 ? 0.18 * near * openness() : 0);
+      // its sound: through the walls when shut, more with every opening
+      const level = Math.max(STORM_SHUT, openness());
+      if (level !== stormLevel) {
+        stormLevel = level;
+        if (stormGain && audio.context) stormGain.gain.setTargetAtTime(level, audio.context.currentTime, 0.3);
+      }
+    };
+    /** How open the room is to the storm, 0..1: the door's state and the window's. Its light scales with it. */
+    const openness = () => Math.min(1, (scene.doorBroken ? 1 : scene.doorGap >= DOOR_OPEN ? 0.6 : scene.doorGap > 0 ? 0.3 : 0) + (scene.windowOpen ? 0.4 : 0));
+    /** A CSS variable on the frame, set only when its value (to two decimals) changes. */
+    const vars = new Map<string, string>();
+    const setVar = (name: string, v: number) => {
+      const s = v.toFixed(2);
+      if (vars.get(name) === s) return;
+      vars.set(name, s);
+      frame.style.setProperty(name, s);
+    };
     const render = (now: number) => {
       poseSign(now);
       poseClock(now);
       poseDoor(now);
+      poseStorm(now);
       poseFire(now);
       scene.flashWhite = flashFrames > 0;
       scene.damage = score / HI;
@@ -2261,6 +2391,8 @@ export const room: Stage = {
         cancelAnimationFrame(raf);
         hum.stop();
         fireSound?.stop();
+        stormSound?.stop(0.5);
+        window.setTimeout(() => stormGain?.disconnect(), 1000);
       };
       // On abort the host removes the root. On finish the frame stays painted until
       // the host's drop (sky or Tetris) has covered it (PRNTR-STAGE-1.md §4.10).
