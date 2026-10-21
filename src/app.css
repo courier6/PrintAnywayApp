@@ -65,6 +65,7 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
   --ink-5: color-mix(in oklab, var(--ink) 5%, white);
   --ink-4: color-mix(in oklab, var(--ink) 4%, white);
   min-height: 100vh;
+  min-height: 100dvh; /* iOS: the visible height, not the height with the toolbars hidden */
   display: flex;
   flex-direction: column;
   background: #ffffff;
@@ -76,6 +77,79 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
   display: flex;
   flex-direction: column;
   flex: 1;
+}
+
+/* The sky drop (PRNTR-STAGE-1.md §4.10): when Prntr's room is cleared, the whole UI
+   falls into place from above the viewport over Prntr's frozen last frame, in one
+   piece, with one small settle. Reduced motion never gets here (App.tsx cuts). */
+@keyframes sky-drop {
+  0% {
+    transform: translateY(-100vh);
+    animation-timing-function: cubic-bezier(0.5, 0, 1, 0.9);
+  }
+  70% {
+    transform: translateY(0);
+    animation-timing-function: ease-out;
+  }
+  85% {
+    transform: translateY(-8px);
+    animation-timing-function: ease-in;
+  }
+  100% {
+    transform: translateY(0);
+  }
+}
+
+.no-print.is-sky-drop {
+  z-index: 101;
+  min-height: 100vh;
+  min-height: 100dvh;
+  background: #ffffff;
+  animation: sky-drop 700ms both;
+}
+
+/* The Tetris drop (PRNTR-STAGE-1.md §4.10): after a game over the UI's blocks fall in
+   one after another, bottom of the stack first, in discrete steps, and lock with no
+   settle. The frozen room shows between them until they land. Reduced motion never
+   gets here either (App.tsx cuts). The header lands last: App.tsx listens for it. */
+@keyframes tetris-piece {
+  from {
+    transform: translateY(-100vh);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+.no-print.is-tetris-drop {
+  z-index: 101;
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+.no-print.is-tetris-drop :is(.header, .toolbar, .preview-stage, .sidebar, .state-pad) {
+  animation: tetris-piece 600ms steps(12, end) both;
+}
+
+/* .preview-stage keeps its own tinted background. */
+.no-print.is-tetris-drop :is(.header, .toolbar, .sidebar, .state-pad) {
+  background: #ffffff;
+}
+
+.no-print.is-tetris-drop .sidebar {
+  animation-delay: 0ms;
+}
+
+.no-print.is-tetris-drop :is(.preview-stage, .state-pad) {
+  animation-delay: 150ms;
+}
+
+.no-print.is-tetris-drop .toolbar {
+  animation-delay: 300ms;
+}
+
+.no-print.is-tetris-drop .header {
+  animation-delay: 450ms;
 }
 
 /* ---------- Header ---------- */
@@ -121,7 +195,7 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
 
 .header-formats {
   font-size: 12.5px;
-  color: var(--ink-55);
+  color: var(--ink-70);
   flex: none;
 }
 
@@ -144,12 +218,15 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
 }
 
 .lang-nav a {
-  color: var(--ink-55);
+  color: var(--ink-70);
   text-decoration: none;
 }
 
-.lang-nav a:hover {
-  text-decoration: underline;
+/* Hover only where there is a pointer that hovers: on a phone a tap would leave it stuck. */
+@media (hover: hover) {
+  .lang-nav a:hover {
+    text-decoration: underline;
+  }
 }
 
 .lang-nav a[aria-current='page'] {
@@ -169,8 +246,10 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
   cursor: pointer;
 }
 
-.btn-primary:hover:not(:disabled) {
-  opacity: 0.9;
+@media (hover: hover) {
+  .btn-primary:hover:not(:disabled) {
+    opacity: 0.9;
+  }
 }
 
 .btn-primary:disabled {
@@ -298,7 +377,7 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
 
 .hero-formats {
   font-size: 13px;
-  color: var(--ink-55);
+  color: var(--ink-70);
 }
 
 .below-zone {
@@ -309,14 +388,14 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
 
 .privacy-line {
   font-size: 12.5px;
-  color: var(--ink-50);
+  color: var(--ink-70);
 }
 
 /* One quiet line under the privacy note; opens to the per-brand tips. */
 .printer-tips {
   padding-top: 8px;
   font-size: 12.5px;
-  color: var(--ink-50);
+  color: var(--ink-70);
   text-align: center;
 }
 
@@ -355,7 +434,7 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
 .printer-tips-list dd {
   margin: 2px 0 0;
   line-height: 1.5;
-  color: var(--ink-65);
+  color: var(--ink-70);
 }
 
 .error-card {
@@ -379,7 +458,7 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
 .error-body {
   font-size: 14px;
   line-height: 1.5;
-  color: var(--ink-65);
+  color: var(--ink-70);
 }
 
 .error-actions {
@@ -397,7 +476,7 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
 .error-code {
   margin-top: 10px;
   font-size: 12px;
-  color: var(--ink-40);
+  color: var(--ink-70);
 }
 
 /* ---------- Processing ---------- */
@@ -411,17 +490,6 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
   gap: 24px;
   padding: 36px;
   background: var(--ink-4);
-}
-
-.processing-page {
-  width: 290px;
-  max-width: 100%;
-  box-shadow: 0 10px 30px color-mix(in oklab, var(--ink) 18%, transparent);
-}
-
-.processing-page canvas {
-  width: 100%;
-  display: block;
 }
 
 .progress-unit {
@@ -449,12 +517,6 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
   font-size: 14.5px;
   font-weight: 700;
   color: var(--ink);
-}
-
-.progress-sub {
-  font-size: 12.5px;
-  color: var(--ink-55);
-  text-align: center;
 }
 
 /* ---------- Preview toolbar ---------- */
@@ -504,7 +566,7 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
 
 .file-chip {
   font-size: 13px;
-  color: var(--ink-60);
+  color: var(--ink-70);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -515,6 +577,16 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
   display: flex;
   align-items: center;
   gap: 10px;
+}
+
+.preview-progress {
+  margin-top: -8px;
+  font-size: 12.5px;
+  color: var(--ink-75);
+}
+
+.preview-progress.is-done {
+  visibility: hidden;
 }
 
 .pager-btn {
@@ -569,7 +641,7 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
   font: 700 10.5px ui-monospace, Menlo, monospace;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--ink-60);
+  color: var(--ink-75);
 }
 
 .page-stack {
@@ -629,7 +701,7 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
   align-items: center;
   justify-content: center;
   font-size: 13px;
-  color: var(--ink-55);
+  color: var(--ink-75);
 }
 
 .pill-btn {
@@ -665,7 +737,7 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
   font: 700 11px ui-monospace, Menlo, monospace;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--ink-55);
+  color: var(--ink-70);
   margin-bottom: 12px;
 }
 
@@ -683,6 +755,14 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
   padding: 0;
   cursor: pointer;
   flex: none;
+  position: relative;
+}
+
+/* A bigger target than the dot for a finger: 36 × 44 px, short of the next swatch. */
+.swatch::before {
+  content: '';
+  position: absolute;
+  inset: -9px -5px;
 }
 
 .ink-name {
@@ -696,7 +776,7 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
   margin: 0;
   font-size: 12.5px;
   line-height: 1.55;
-  color: var(--ink-60);
+  color: var(--ink-70);
 }
 
 .help-section {
@@ -727,8 +807,86 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
 .help-body {
   font-size: 12.5px;
   line-height: 1.5;
-  color: var(--ink-65);
+  color: var(--ink-70);
   padding-top: 6px;
+}
+
+.help-body p {
+  margin: 0 0 8px;
+}
+
+.help-body p:last-child {
+  margin-bottom: 0;
+}
+
+/* The way into Prntr: words in the sentence, in the chosen ink, no underline.
+   The colour is set inline from the ink swatch. */
+.help-link {
+  border: none;
+  background: none;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.help-link:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* The way into Prntr looks like plain text until it has the pointer or the focus; then glyphs rise above it
+   and sink below it (RisingGlyphs): superscripts, subscripts and ASCII in the ink colour, absolutely placed so
+   the words never move, each fading in and out over its own life. Some are split red and cyan, as Prntr's own
+   glitches are. The wrapper is an inline block so the two words stay on one line and the glyphs have a box. */
+.help-omen {
+  position: relative;
+  display: inline-block;
+}
+
+.omen-glyph {
+  position: absolute;
+  z-index: 1;
+  top: -4px;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  opacity: 0;
+  pointer-events: none;
+  animation: omen-rise 1s ease-out forwards;
+}
+
+.omen-glyph.is-down {
+  top: auto;
+  bottom: -4px;
+  animation-name: omen-sink;
+}
+
+.omen-glyph.is-split {
+  text-shadow:
+    -1px 0 rgba(255, 0, 70, 0.75),
+    1px 0 rgba(0, 190, 255, 0.75);
+}
+
+@keyframes omen-rise {
+  0% { transform: translate(-50%, 0); opacity: 0; }
+  20% { opacity: 1; }
+  100% { transform: translate(-50%, -22px); opacity: 0; }
+}
+
+@keyframes omen-sink {
+  0% { transform: translate(-50%, 0); opacity: 0; }
+  20% { opacity: 1; }
+  100% { transform: translate(-50%, 22px); opacity: 0; }
+}
+
+/* Reduced motion: the glyphs still come and go, a little above and below the words, but hold still. */
+@keyframes omen-still {
+  0% { opacity: 0; }
+  30% { opacity: 1; }
+  100% { opacity: 0; }
 }
 
 /* ---------- Print reminder overlay ---------- */
@@ -755,6 +913,13 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
   font-size: 13.5px;
   line-height: 1.5;
   color: var(--ink);
+}
+
+.export-error-code {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--ink-70);
 }
 
 /* ---------- Print output ---------- */
@@ -799,7 +964,7 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
 
 .drag-overlay-subline {
   font-size: 14px;
-  color: var(--ink-65);
+  color: var(--ink-70);
 }
 
 @media print {
@@ -811,10 +976,45 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
     display: block;
   }
 
+  /* One sheet per page: as wide as the sheet allows, never taller than it (an A4
+     page on Letter, a phone screenshot), scaled to fit rather than split. */
   .print-root img {
     display: block;
     width: 100%;
-    break-after: page;
+    height: auto;
+    max-height: 100vh;
+    object-fit: contain;
+    break-inside: avoid;
+  }
+
+  .print-root img + img {
+    break-before: page;
+  }
+
+  /* Printed from the browser's menu before the Print button: the page on screen,
+     not the app around it. */
+  .app:not(.has-print-pages) .no-print :is(.header, .toolbar, .pager, .preview-progress, .pill-btn, .sidebar, .compare-caption, .print-reminder, .page-original, .page-flash, .drag-overlay) {
+    display: none !important;
+  }
+
+  .app:not(.has-print-pages) :is(.preview-grid, .preview-stage, .page-stack) {
+    display: block;
+    width: auto;
+    max-width: none;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    box-shadow: none;
+    background: none;
+    min-height: 0;
+  }
+
+  .app:not(.has-print-pages) .page-stack canvas {
+    display: block;
+    width: 100%;
+    height: auto;
+    max-height: 100vh;
+    object-fit: contain;
   }
 }
 
@@ -832,6 +1032,16 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
 
   .btn-shimmer::after {
     content: none;
+  }
+
+  .omen-glyph {
+    animation-name: omen-still;
+    transform: translate(-50%, -10px);
+  }
+
+  .omen-glyph.is-down {
+    animation-name: omen-still;
+    transform: translate(-50%, 10px);
   }
 }
 

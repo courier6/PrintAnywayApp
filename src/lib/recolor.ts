@@ -41,6 +41,58 @@ function mix(from: number, to: number, t: number): number {
 
 const lutCache = new Map<string, Uint8Array>();
 
+/**
+ * Gold (src/lib/inks.ts GOLD_INK) is not one colour: its ramp runs paper → pale gold → gold →
+ * deep gold, and a sheen sweeps across the page, so the ink shifts between the two ramps below
+ * along diagonal bands SHEEN_PERIOD px wide. Unrealistic on purpose.
+ */
+const GOLD_HEX = '#c9a227';
+const GOLD_RAMPS: [string, string, string][] = [
+  ['#fff1b3', '#e2b53a', '#7a5a10'],
+  ['#fff8d6', '#f7d262', '#a8821c'],
+];
+const SHEEN_PERIOD = 420;
+
+function goldLut(ramp: [string, string, string]): Uint8Array {
+  const key = `gold:${ramp.join(',')}`;
+  const cached = lutCache.get(key);
+  if (cached) return cached;
+  const stops = [{ r: 255, g: 255, b: 255 }, ...ramp.map(hexToRgb)];
+  const lut = new Uint8Array(256 * 3);
+  for (let v = 0; v < 256; v++) {
+    const lum = v / 255;
+    let t = lum >= WHITE_CLAMP ? 0 : lum <= BLACK_CLAMP ? 1 : Math.pow((WHITE_CLAMP - lum) / (WHITE_CLAMP - BLACK_CLAMP), CONTRAST);
+    // t 0 → paper, 0.35 → pale, 0.7 → gold, 1 → deep
+    const seg = t <= 0.35 ? 0 : t <= 0.7 ? 1 : 2;
+    const k = seg === 0 ? t / 0.35 : seg === 1 ? (t - 0.35) / 0.35 : (t - 0.7) / 0.3;
+    t = k;
+    lut[v * 3] = mix(stops[seg].r, stops[seg + 1].r, t);
+    lut[v * 3 + 1] = mix(stops[seg].g, stops[seg + 1].g, t);
+    lut[v * 3 + 2] = mix(stops[seg].b, stops[seg + 1].b, t);
+  }
+  lutCache.set(key, lut);
+  return lut;
+}
+
+const lut32Cache = new Map<string, Uint32Array>();
+// ImageData bytes are R, G, B, A in memory; a Uint32 view reads them in the
+// platform's byte order (little-endian on every browser that ships today).
+const LITTLE_ENDIAN = new Uint8Array(new Uint32Array([1]).buffer)[0] === 1;
+
+/** inkLut packed as one RGBA word per luminance, for writing a pixel in one store. */
+function inkLut32(inkHex: string): Uint32Array {
+  const cached = lut32Cache.get(inkHex);
+  if (cached) return cached;
+  const lut = inkLut(inkHex);
+  const packed = new Uint32Array(256);
+  for (let v = 0; v < 256; v++) {
+    const [r, g, b] = [lut[v * 3], lut[v * 3 + 1], lut[v * 3 + 2]];
+    packed[v] = LITTLE_ENDIAN ? ((255 << 24) | (b << 16) | (g << 8) | r) >>> 0 : ((r << 24) | (g << 16) | (b << 8) | 255) >>> 0;
+  }
+  lut32Cache.set(inkHex, packed);
+  return packed;
+}
+
 /** 256-entry luminance→RGB lookup table for one ink. */
 function inkLut(inkHex: string): Uint8Array {
   const cached = lutCache.get(inkHex);
@@ -76,21 +128,35 @@ export function recolorToCanvas(
   inkHex: string,
   target?: HTMLCanvasElement,
 ): HTMLCanvasElement {
-  const lut = inkLut(inkHex);
   const canvas = target ?? document.createElement('canvas');
-  canvas.width = width;
-  canvas.height = height;
+  // Assigning a size, even the same one, reallocates and clears the canvas.
+  if (canvas.width !== width) canvas.width = width;
+  if (canvas.height !== height) canvas.height = height;
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('Canvas 2D context unavailable');
   const img = ctx.createImageData(width, height);
   const d = img.data;
-  for (let p = 0, i = 0; p < lum.length; p++, i += 4) {
-    const v = lum[p] * 3;
-    d[i] = lut[v];
-    d[i + 1] = lut[v + 1];
-    d[i + 2] = lut[v + 2];
-    d[i + 3] = 255;
+  if (inkHex === GOLD_HEX) {
+    // the sheen: a blend of the two gold ramps that sweeps diagonally across the page
+    const a = goldLut(GOLD_RAMPS[0]);
+    const b = goldLut(GOLD_RAMPS[1]);
+    const period = Math.max(60, Math.round((SHEEN_PERIOD * width) / 1224));
+    for (let y = 0, p = 0, i = 0; y < height; y++) {
+      for (let x = 0; x < width; x++, p++, i += 4) {
+        const w = 0.5 + 0.5 * Math.sin(((x + y) / period) * 2 * Math.PI);
+        const v = lum[p] * 3;
+        d[i] = Math.round(a[v] + (b[v] - a[v]) * w);
+        d[i + 1] = Math.round(a[v + 1] + (b[v + 1] - a[v + 1]) * w);
+        d[i + 2] = Math.round(a[v + 2] + (b[v + 2] - a[v + 2]) * w);
+        d[i + 3] = 255;
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+    return canvas;
   }
+  const lut = inkLut32(inkHex);
+  const out = new Uint32Array(d.buffer, d.byteOffset, lum.length);
+  for (let p = 0; p < lum.length; p++) out[p] = lut[lum[p]];
   ctx.putImageData(img, 0, 0);
   return canvas;
 }

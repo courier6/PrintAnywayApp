@@ -31,6 +31,14 @@ export class ImageDecodeError extends Error {
   }
 }
 
+/** A PDF that parses but has no pages: as good as damaged. */
+export class EmptyPdfError extends Error {
+  constructor() {
+    super('PDF has no pages');
+    this.name = 'EmptyPdfError';
+  }
+}
+
 // pdf.js rejections are matched by name rather than instanceof so its
 // exception classes never need to be imported on the happy path.
 export function classifyError(err: unknown): ErrorCode {
@@ -41,14 +49,17 @@ export function classifyError(err: unknown): ErrorCode {
   // on anything object-shaped.
   const name = (err as { name?: unknown } | null)?.name;
   if (name === 'PasswordException') return 'PA-102';
-  if (name === 'InvalidPDFException') return 'PA-103';
+  if (name === 'InvalidPDFException' || err instanceof EmptyPdfError) return 'PA-103';
   if (
     (err instanceof Error && err.message === 'Canvas 2D context unavailable') ||
     err instanceof RangeError ||
-    err instanceof DOMException
+    (err instanceof DOMException && err.name === 'QuotaExceededError')
   ) {
     return 'PA-106';
   }
+  // Any other DOMException is not memory: a file moved or deleted since it was
+  // picked, or a cloud placeholder not downloaded yet (NotReadableError,
+  // NotFoundError) reads fine on a second try.
   return 'PA-100';
 }
 

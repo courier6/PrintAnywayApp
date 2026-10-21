@@ -1,17 +1,21 @@
 import { useEffect, useRef, useState, type ChangeEvent, type CSSProperties } from 'react';
+import { flushSync } from 'react-dom';
 import { Header } from './components/Header';
 import { EmptyState } from './components/EmptyState';
 import { ProcessingState } from './components/ProcessingState';
 import { PreviewState } from './components/PreviewState';
+import { PrntrHost, prefetchPrntr } from './components/PrntrHost';
+import { prntrAudioContext } from './components/prntrAudio';
+import type { Certificate } from './prntr/types';
 import { ErrorState, type ErrorKind } from './components/ErrorState';
 import { t, useLocale } from './i18n';
-import { INKS } from './lib/inks';
-import { fileKind, loadDocument } from './lib/loadDocument';
+import { GOLD_INK, INKS } from './lib/inks';
+import { fileKind, loadDocument, prefetchPdfjs, type SourceDocument } from './lib/loadDocument';
 import { classifyError, logAppError, type ErrorCode } from './lib/errors';
-import { PageStore } from './lib/pageStore';
-import { exportFormat, exportRecolored, type ExportFormat } from './lib/exportFile';
+import { DocumentReplacedError, PageStore } from './lib/pageStore';
+import { exportFormat, exportRecolored, type ExportFormat, type ExportPage } from './lib/exportFile';
 
-type AppState = 'empty' | 'processing' | 'preview' | 'error';
+type AppState = 'empty' | 'processing' | 'preview' | 'error' | 'prntr';
 
 const KIND_BY_CODE: Record<ErrorCode, ErrorKind> = {
   'PA-100': 'processing',
@@ -22,6 +26,9 @@ const KIND_BY_CODE: Record<ErrorCode, ErrorKind> = {
   'PA-105': 'image',
   'PA-106': 'memory',
 };
+
+/** Print waits this long at most for the print pages to decode, then prints what has. */
+const PRINT_DECODE_MS = 5000;
 
 const scheduleIdle: (cb: () => void) => number =
   typeof window.requestIdleCallback === 'function'
@@ -41,6 +48,9 @@ export default function App() {
     kind: 'processing',
   });
   const [inkIndex, setInkIndex] = useState(0);
+  // Gold, the secret ink, is on offer once Prntr's room has been won, until the page is reloaded.
+  const [goldUnlocked, setGoldUnlocked] = useState(false);
+  const inks = goldUnlocked ? [...INKS, GOLD_INK] : INKS;
   const [fileName, setFileName] = useState('');
   const [format, setFormat] = useState<ExportFormat>('pdf');
   const [pageCount, setPageCount] = useState(0);
@@ -50,28 +60,45 @@ export default function App() {
   const [showPrintReminder, setShowPrintReminder] = useState(false);
   const [printImages, setPrintImages] = useState<string[]>([]);
   const [busy, setBusy] = useState<'print' | 'download' | null>(null);
+  // A print or download that failed (not one stopped by a new document).
+  const [exportError, setExportError] = useState<ErrorCode | null>(null);
   const [dragging, setDragging] = useState(false);
   const [, setPagesVersion] = useState(0);
+  const [prntrStage, setPrntrStage] = useState(0);
+  const prntrPage = useRef<{ source: HTMLCanvasElement; recolored: HTMLCanvasElement } | null>(null);
+  const prntrAudio = useRef<AudioContext | null>(null);
+  const prntrReturn = useRef<AppState>('preview');
+  // Set while the app's UI falls back into place over Prntr's last frame: the sky
+  // drop after the room is cleared, the Tetris drop after a game over.
+  const [prntrDrop, setPrntrDrop] = useState<'sky' | 'tetris' | null>(null);
 
   const storeRef = useRef(new PageStore());
   const store = storeRef.current;
   const inkRef = useRef(INKS[0].hex);
   const runToken = useRef(0);
   const lastFile = useRef<File | null>(null);
+  const docRef = useRef<SourceDocument | null>(null);
   const idleHandle = useRef<number | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
+  const printRoot = useRef<HTMLDivElement>(null);
   const handleFileRef = useRef<(file: File) => void>(() => {});
   handleFileRef.current = (file) => void handleFile(file);
+  // Prntr has the screen: a file dragged over it is not taken (it would end the game
+  // and replace the document unseen). Nor while the app's UI is still dropping back in
+  // over its last frame: the state is back already, but Prntr is still mounted.
+  const inPrntr = useRef(false);
+  inPrntr.current = appState === 'prntr' || prntrDrop !== null;
 
-  // Window-level drag-and-drop: dropping a file anywhere, in any state,
-  // replaces the loaded document without confirmation. The depth counter
+  // Window-level drag-and-drop: dropping a file anywhere, in any state but
+  // Prntr, replaces the loaded document without confirmation. The depth counter
   // keeps the overlay from flickering as the drag crosses child elements.
   useEffect(() => {
     const depth = { current: 0 };
     const isFileDrag = (e: globalThis.DragEvent) =>
       Array.from(e.dataTransfer?.types ?? []).includes('Files');
     const onDragEnter = (e: globalThis.DragEvent) => {
-      if (!isFileDrag(e)) return;
+      if (!isFileDrag(e) || inPrntr.current) return;
+      prefetchPdfjs();
       depth.current++;
       setDragging(true);
     };
@@ -87,6 +114,10 @@ export default function App() {
       depth.current = 0;
       setDragging(false);
       if (!isFileDrag(e)) return;
+      if (inPrntr.current) {
+        e.preventDefault(); // nor may the browser open the file in place of the app
+        return;
+      }
       // The empty/error DropZone handles its own drops (and prevents default);
       // don't process the same file twice.
       if (e.defaultPrevented) return;
@@ -109,7 +140,8 @@ export default function App() {
   // While a document is loaded, a refresh or tab close asks first: the file
   // lives only in memory, so leaving drops it. The browser shows its own
   // wording. iOS Safari never fires beforeunload, so this covers desktop only.
-  const hasDocument = appState === 'processing' || appState === 'preview';
+  const hasDocument =
+    appState === 'processing' || appState === 'preview' || (appState === 'prntr' && prntrReturn.current === 'preview');
   useEffect(() => {
     if (!hasDocument) return;
     const onBeforeUnload = (e: BeforeUnloadEvent) => {
@@ -120,7 +152,56 @@ export default function App() {
     return () => window.removeEventListener('beforeunload', onBeforeUnload);
   }, [hasDocument]);
 
+  // Cmd/Ctrl+P on a document is the Print button: every page, in the ink chosen,
+  // rather than the browser printing the app itself.
+  const printRef = useRef<() => void>(() => {});
+  printRef.current = () => void handlePrint();
+  useEffect(() => {
+    if (appState !== 'preview') return;
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 'p') {
+        e.preventDefault();
+        printRef.current();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [appState]);
+
+  // Dev-only entrance: ?prntr=N opens Prntr at stage N as soon as the app loads,
+  // with a stand-in page so nothing has to be uploaded first.
+  // import.meta.env.DEV is a build-time constant, so builds drop this whole block;
+  // vite.config.ts fails the build if its marker string survives.
+  const devSkipUsed = useRef(false);
+  useEffect(() => {
+    if (import.meta.env.DEV) {
+      if (appState !== 'empty' || devSkipUsed.current) return;
+      const raw = new URLSearchParams(location.search).get('prntr');
+      if (raw === null) return;
+      const n = Number(raw);
+      if (!Number.isInteger(n) || n < 0) return;
+      devSkipUsed.current = true;
+      console.info('prntr-dev-skip', n);
+      // A letter-size page of "text" lines: black for the source, the ink for the recolored copy.
+      const standIn = (ink: string) => {
+        const canvas = document.createElement('canvas');
+        canvas.width = 612;
+        canvas.height = 792;
+        const g = canvas.getContext('2d');
+        if (!g) return canvas;
+        g.fillStyle = '#ffffff';
+        g.fillRect(0, 0, 612, 792);
+        g.fillStyle = ink;
+        g.fillRect(72, 80, 300, 28);
+        for (let y = 140; y < 700; y += 24) g.fillRect(72, y, 300 + ((y * 7) % 170), 10);
+        return canvas;
+      };
+      enterPrntr(n, { source: standIn('#000000'), recolored: standIn(inkRef.current) });
+    }
+  }, [appState]);
+
   function openPicker() {
+    prefetchPdfjs();
     fileInput.current?.click();
   }
 
@@ -130,28 +211,46 @@ export default function App() {
     if (file) void handleFile(file);
   }
 
-  async function handleFile(file: File) {
+  // What every new document replaces, a file or the certificate: work still running
+  // for the old one (the token tells it to stop), its parsed file, its print pages.
+  function startDocument(name: string, exportAs: ExportFormat | null): number {
     const token = ++runToken.current;
-    lastFile.current = file;
+    if (idleHandle.current !== null) {
+      cancelIdle(idleHandle.current);
+      idleHandle.current = null;
+    }
+    releaseDocument();
     setShowPrintReminder(false);
     setPrintImages([]);
     setHolding(false);
-    setFileName(file.name);
+    setBusy(null);
+    setExportError(null);
+    setFileName(name);
+    if (exportAs) setFormat(exportAs);
+    setCurrentPage(0);
+    return token;
+  }
+
+  async function handleFile(file: File) {
+    lastFile.current = file;
     const kind = fileKind(file);
-    if (kind) setFormat(exportFormat(kind));
+    const token = startDocument(file.name, kind && exportFormat(kind));
     setPageCount(0);
     setProcessedCount(0);
-    setCurrentPage(0);
     setAppState('processing');
     try {
       const doc = await loadDocument(file);
-      if (token !== runToken.current) return;
+      if (token !== runToken.current) {
+        doc.destroy();
+        return;
+      }
+      docRef.current = doc;
       store.reset(doc.pageCount);
       setPageCount(doc.pageCount);
       for (let i = 0; i < doc.pageCount; i++) {
-        const source = await doc.renderPage(i);
+        const { canvas, sizePt } = await doc.renderPage(i);
         if (token !== runToken.current) return;
-        store.setSource(i, source);
+        store.setSource(i, canvas, sizePt);
         store.ensureRecolored(i, inkRef.current);
         setProcessedCount(i + 1);
         setPagesVersion((v) => v + 1);
@@ -162,6 +261,8 @@ export default function App() {
       }
     } catch (err) {
       if (token !== runToken.current) return;
+      // A print or download waiting on the pages that will never come gives up.
+      store.reset(0);
       const code = classifyError(err);
       logAppError(code, err, lastFile.current);
       setErrorInfo({ code, kind: KIND_BY_CODE[code] });
@@ -169,9 +270,17 @@ export default function App() {
     }
   }
 
+  // The pages already rendered stay in the store; only the parsed file goes.
+  function releaseDocument() {
+    docRef.current?.destroy();
+    docRef.current = null;
+  }
+
   function selectInk(index: number) {
     setInkIndex(index);
-    const hex = INKS[index].hex;
+    // The print pages are in the old ink; the next Print makes them again.
+    setPrintImages([]);
+    const hex = inks[index].hex;
     inkRef.current = hex;
     // Visible page synchronously; the rest catch up in idle time.
     store.ensureRecolored(currentPage, hex);
@@ -200,40 +309,149 @@ export default function App() {
     setCurrentPage(clamped);
   }
 
-  async function collectAllRecolored(): Promise<HTMLCanvasElement[]> {
-    const out: HTMLCanvasElement[] = [];
+  // Prntr takes over the viewport with the page shown now (or a page it is handed,
+  // which only the dev entrance does); see PRNTR-ARCHITECTURE.md.
+  function enterPrntr(stage: number, page?: { source: HTMLCanvasElement; recolored: HTMLCanvasElement }) {
+    if (!page) {
+      if (appState !== 'preview') return;
+      const recolored = store.ensureRecolored(currentPage, inkRef.current);
+      const source = store.getSource(currentPage);
+      if (!recolored || !source) return;
+      page = { source, recolored };
+    }
+    prntrReturn.current = appState;
+    prntrAudio.current = prntrAudioContext();
+    setHolding(false);
+    prntrPage.current = page;
+    setPrntrStage(stage);
+    setAppState('prntr');
+  }
+
+  function exitPrntr() {
+    prntrPage.current = null; // the page it was handed goes with it
+    setAppState(prntrReturn.current);
+  }
+
+  // The drop has landed (or its safety net fired): Prntr unmounts, and its page goes.
+  function landPrntrDrop() {
+    prntrPage.current = null;
+    setPrntrDrop(null);
+  }
+
+  // The drops (PRNTR-STAGE-1.md §4.10): after the room is cleared the app's UI falls
+  // into place from the sky in one piece; after a game over its blocks fall in one by
+  // one like Tetris pieces. Either way over the frozen last frame of Prntr, which stays
+  // mounted until the drop has landed. Reduced motion is a plain cut, as is any exit.
+  // The room cleared, the page the app comes back to is the certificate of completion,
+  // in place of whatever document it had.
+  function finishPrntr(outcome: 'cleared' | 'over', certificate?: Certificate) {
+    if (certificate) {
+      try {
+        loadCertificate(certificate);
+      } catch (err) {
+        // The old document is already gone: say so on the error card rather than
+        // drop back onto an empty preview.
+        const code = classifyError(err);
+        logAppError(code, err, null);
+        setErrorInfo({ code, kind: KIND_BY_CODE[code] });
+        setAppState('error');
+        return;
+      }
+    }
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      exitPrntr();
+      return;
+    }
+    setPrntrDrop(outcome === 'over' ? 'tetris' : 'sky');
+    setAppState(prntrReturn.current);
+  }
+
+  // The certificate becomes the loaded document: one page, a PDF to download, recoloured
+  // in the chosen ink like any other. A document still processing is dropped.
+  function loadCertificate({ id, page }: Certificate) {
+    lastFile.current = null;
+    startDocument(`prntr-certificate-${id.slice(-9).replace('-', '')}.pdf`, 'pdf');
+    // the certificate comes up in gold, the secret ink, which stays on offer from here on
+    setGoldUnlocked(true);
+    setInkIndex(INKS.length);
+    inkRef.current = GOLD_INK.hex;
+    store.reset(1);
+    store.setSource(0, page, { width: 612, height: 792 }); // US Letter
+    store.ensureRecolored(0, inkRef.current);
+    setPageCount(1);
+    setProcessedCount(1);
+    setPagesVersion((v) => v + 1);
+    prntrReturn.current = 'preview';
+  }
+
+  // Safety net: Prntr never stays mounted if the drop's animationend does not arrive.
+  useEffect(() => {
+    if (!prntrDrop) return;
+    const id = window.setTimeout(landPrntrDrop, prntrDrop === 'tetris' ? 2000 : 1200);
+    return () => window.clearTimeout(id);
+  }, [prntrDrop]);
+
+  // Throws DocumentReplacedError once the document it started on is replaced.
+  async function collectAllRecolored(token: number): Promise<ExportPage[]> {
+    const out: ExportPage[] = [];
     for (let i = 0; i < store.pageCount; i++) {
       await store.whenSourceReady(i);
+      if (token !== runToken.current) throw new DocumentReplacedError();
       const canvas = store.ensureRecolored(i, inkRef.current);
-      if (canvas) out.push(canvas);
+      if (canvas) out.push({ canvas, sizePt: store.getSizePt(i) });
     }
     return out;
   }
 
   async function handlePrint() {
     if (busy) return;
+    const token = runToken.current;
     setShowPrintReminder(true);
+    setExportError(null);
     setBusy('print');
     try {
-      const canvases = await collectAllRecolored();
-      setPrintImages(canvases.map((c) => c.toDataURL('image/png')));
-      // Let React commit the print pages before opening the dialog.
-      await new Promise((r) => setTimeout(r, 60));
+      const pages = await collectAllRecolored(token);
+      flushSync(() => setPrintImages(pages.map((p) => p.canvas.toDataURL('image/png'))));
+      // The dialog snapshots the page: every image must be decoded by then, or it prints blank.
+      // A decode that never settles would otherwise hold both buttons until the next file.
+      const images = Array.from(printRoot.current?.querySelectorAll('img') ?? []);
+      await Promise.race([
+        Promise.all(images.map((img) => img.decode().catch(() => undefined))),
+        new Promise((resolve) => setTimeout(resolve, PRINT_DECODE_MS)),
+      ]);
+      if (token !== runToken.current) return;
       window.print();
+    } catch (err) {
+      if (token !== runToken.current || err instanceof DocumentReplacedError) return;
+      setShowPrintReminder(false);
+      reportExportError(err);
     } finally {
-      setBusy(null);
+      // A new document has already reset busy, and may be exporting itself.
+      if (token === runToken.current) setBusy(null);
     }
   }
 
   async function handleDownload() {
     if (busy) return;
+    const token = runToken.current;
+    setExportError(null);
     setBusy('download');
     try {
-      const canvases = await collectAllRecolored();
-      await exportRecolored(canvases, fileName || 'document', format);
+      const pages = await collectAllRecolored(token);
+      await exportRecolored(pages, fileName || 'document', format);
+    } catch (err) {
+      if (token !== runToken.current || err instanceof DocumentReplacedError) return;
+      reportExportError(err);
     } finally {
-      setBusy(null);
+      if (token === runToken.current) setBusy(null);
     }
+  }
+
+  // An encoder out of memory, a canvas too large to export, a chunk that would not load.
+  function reportExportError(err: unknown) {
+    const code = classifyError(err);
+    logAppError(code, err, lastFile.current);
+    setExportError(code);
   }
 
   function handleRetry() {
@@ -241,31 +459,39 @@ export default function App() {
     else setAppState('empty');
   }
 
-  const inkHex = INKS[inkIndex].hex;
+  const inkHex = inks[inkIndex].hex;
   const recoloredCanvas = appState === 'preview' ? store.getRecolored(currentPage, inkHex) : null;
   const sourceCanvas = appState === 'preview' ? store.getSource(currentPage) : null;
-  const firstPage = appState === 'processing' ? store.getRecolored(0, inkHex) : null;
 
   return (
     <div
       className={'app' + (printImages.length > 0 ? ' has-print-pages' : '')}
       style={{ '--ink': INKS[0].hex } as CSSProperties}
     >
-      <div className="no-print">
+      <div
+        className={'no-print' + (prntrDrop === 'sky' ? ' is-sky-drop' : prntrDrop === 'tetris' ? ' is-tetris-drop' : '')}
+        onAnimationEnd={(e) => {
+          // The sky drop animates .no-print itself; the Tetris drop's last piece is the header.
+          const landed = prntrDrop === 'tetris' ? (e.target as HTMLElement).classList.contains('header') : e.target === e.currentTarget;
+          if (landed) landPrntrDrop();
+        }}
+      >
         <Header />
         {appState === 'empty' && (
           <EmptyState onFile={(f) => void handleFile(f)} onChoose={openPicker} />
         )}
         {appState === 'processing' && (
-          <ProcessingState firstPage={firstPage} done={processedCount} total={pageCount} />
+          <ProcessingState done={processedCount} total={pageCount} />
         )}
         {appState === 'preview' && (
           <PreviewState
             fileName={fileName}
             downloadFormat={format}
             pageCount={pageCount}
+            renderedCount={processedCount}
             currentPage={currentPage}
             onPageChange={goToPage}
+            inks={inks}
             inkIndex={inkIndex}
             onSelectInk={selectInk}
             onChooseFile={openPicker}
@@ -276,8 +502,12 @@ export default function App() {
             onPrint={() => void handlePrint()}
             onDownload={() => void handleDownload()}
             busy={busy}
+            exportError={exportError && { code: exportError, kind: KIND_BY_CODE[exportError] }}
+            onDismissExportError={() => setExportError(null)}
             showReminder={showPrintReminder}
             onDismissReminder={() => setShowPrintReminder(false)}
+            onOpenPrntr={() => enterPrntr(0)}
+            onPrefetchPrntr={prefetchPrntr}
           />
         )}
         {appState === 'error' && (
@@ -299,6 +529,19 @@ export default function App() {
           </div>
         )}
       </div>
+      {/* Outside .no-print: the sky drop transforms .no-print, which would carry the fixed
+          Prntr layer along with it. */}
+      {(appState === 'prntr' || prntrDrop !== null) && prntrPage.current && (
+        <PrntrHost
+          source={prntrPage.current.source}
+          recolored={prntrPage.current.recolored}
+          inkHex={inkHex}
+          stage={prntrStage}
+          audioContext={prntrAudio.current}
+          onExit={exitPrntr}
+          onDone={finishPrntr}
+        />
+      )}
       <input
         ref={fileInput}
         type="file"
@@ -306,7 +549,7 @@ export default function App() {
         style={{ display: 'none' }}
         onChange={onInputChange}
       />
-      <div className="print-root" aria-hidden="true">
+      <div className="print-root" ref={printRoot} aria-hidden="true">
         {printImages.map((src, i) => (
           <img key={i} src={src} alt="" />
         ))}
