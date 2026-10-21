@@ -327,14 +327,14 @@ const KIT_HIT = { x0: KIT_AT.x - 3, y0: KIT_AT.y - 3, x1: KIT_AT.x + 16, y1: KIT
 const CLOCK_HIT = { x0: CLOCK_AT.x - 4, y0: CLOCK_AT.y - 4, x1: CLOCK_AT.x + 20, y1: CLOCK_AT.y + 19 };
 const BOARD_HIT = { x0: 132, y0: 42, x1: 160, y1: 68 };
 /** What the gun can break and where (virtual px, half-open rects): the clock and the board (the
- * poster) as their hotspots; the cooler's bottle (COOLER rows 0–7 at 2×), the plant's leaves (PLANT
- * rows 0–9 at 2×) and its pot (rows 10–15), each with a 2 px margin. Not the door, not the machine. */
+ * poster) as their hotspots; the cooler's bottle (COOLER_AT, scene.ts, its top 18 rows), the monstera's
+ * leaves and its pot (MONSTERA_AT, scene.ts), about a px of margin. Not the door, not the machine. */
 const BREAKABLES: { id: keyof Broken; x0: number; y0: number; x1: number; y1: number; sound: 'shatter' | 'tear' | 'rustle' | 'knock' }[] = [
   { id: 'clock', ...CLOCK_HIT, sound: 'knock' },
   { id: 'poster', ...BOARD_HIT, sound: 'tear' },
   { id: 'tank', x0: 48, y0: 90, x1: 76, y1: 108, sound: 'shatter' },
-  { id: 'plant', x0: 198, y0: 101, x1: 230, y1: 123, sound: 'rustle' },
-  { id: 'vase', x0: 204, y0: 123, x1: 224, y1: 137, sound: 'shatter' },
+  { id: 'plant', x0: 190, y0: 93, x1: 239, y1: 119, sound: 'rustle' },
+  { id: 'vase', x0: 203, y0: 119, x1: 226, y1: 136, sound: 'shatter' },
 ];
 /** The clock shot: it falls off the wall over CLOCK_FALL_MS, drifting to
  * CLOCK_LAND_X, to the floor in front of the cooler (its top at CLOCK_FLOOR_Y, its bottom at 140,
@@ -393,7 +393,7 @@ const HOTSPOTS: Hotspot[] = [
   { id: 'art', x0: ART_AT.x - 4, y0: ART_AT.y - 4, x1: ART_AT.x + ART_AT.w + 4, y1: ART_AT.y + ART_AT.h + 4, captions: ['THE WINGED VICTORY. A PRINT.', 'SHE HAS NO HEAD.'] },
   { id: 'window', x0: 156, y0: 32, x1: 228, y1: 94, captions: ['UNABLE TO OPEN.', 'STILL UNABLE TO OPEN.'] },
   { id: 'cooler', x0: 46, y0: 88, x1: 78, y1: 140, captions: ['WATER COOLER. FULL.', 'STILL FULL.'] },
-  { id: 'plant', x0: 196, y0: 99, x1: 232, y1: 139, captions: ["A PLANT. IT'S REAL.", "A PLANT. IT'S REAL."] },
+  { id: 'plant', x0: 190, y0: 92, x1: 240, y1: 138, captions: ["A PLANT. IT'S REAL.", "A PLANT. IT'S REAL."] },
 ];
 
 const ROOM_ALT =

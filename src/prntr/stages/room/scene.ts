@@ -1,6 +1,6 @@
 import { ART_AT } from './art';
 import { SPRITES, type PalKey } from './palette';
-import { H, Pix, W, parseSprite, rotateSprite, sliceRect, sliceRows, type Sprite } from './pixels';
+import { H, Pix, W, parseSprite, rotateSprite, sliceRect, type Sprite } from './pixels';
 
 export const SPR = {
   INFO: parseSprite(SPRITES.INFO),
@@ -12,7 +12,7 @@ export const SPR = {
   NUT: parseSprite(SPRITES.NUT),
   BOLT: parseSprite(SPRITES.BOLT),
   COOLER: parseSprite(SPRITES.COOLER),
-  PLANT: parseSprite(SPRITES.PLANT),
+  MONSTERA: parseSprite(SPRITES.MONSTERA),
   POSTER: parseSprite(SPRITES.POSTER),
   CLOCK: parseSprite(SPRITES.CLOCK),
   EXIT: parseSprite(SPRITES.EXIT),
@@ -20,8 +20,8 @@ export const SPR = {
   PAGE_PRINTED: parseSprite(SPRITES.PAGE_PRINTED),
   POSTER_TORN: parseSprite(SPRITES.POSTER_TORN),
   COOLER_SHOT: parseSprite(SPRITES.COOLER_SHOT),
-  PLANT_BARE: parseSprite(SPRITES.PLANT_BARE),
-  POT_BROKEN: parseSprite(SPRITES.POT_BROKEN),
+  MONSTERA_BARE: parseSprite(SPRITES.MONSTERA_BARE),
+  MONSTERA_DOWN: parseSprite(SPRITES.MONSTERA_DOWN),
   EXIT_BROKEN: parseSprite(SPRITES.EXIT_BROKEN),
   SPLAT: parseSprite(SPRITES.SPLAT),
   TUBE_HEAD: parseSprite(SPRITES.TUBE_HEAD),
@@ -31,10 +31,6 @@ export const SPR = {
 /** The clock at each quarter turn, for rolling. */
 const CLOCK_ROT = [0, 1, 2, 3].map((q) => rotateSprite(SPR.CLOCK, q));
 /** The cooler below its bottle, the plant's leaves and its pot, so each half can break alone. */
-const PLANT_TOP = sliceRows(SPR.PLANT, 0, 10);
-const PLANT_POT = sliceRows(SPR.PLANT, 10, 16);
-/** The bare plant lying on the carpet, its top to the left: the pot shot from under it. */
-const PLANT_FALLEN = rotateSprite(SPR.PLANT_BARE, 3);
 
 /** What the gun has broken: each stays broken for the rest of the stage. */
 export interface Broken {
@@ -262,6 +258,8 @@ export const BOARD_AT = { x: 136, y: 46 };
 /** The water cooler (22×46), and with its bottle shot (22×33): at the room's own resolution. */
 export const COOLER_AT = { x: 51, y: 90 };
 export const COOLER_SHOT_AT = { x: 51, y: 103 };
+/** The monstera by the window, whole, its leaves shot off, and down with its pot shot: at the room's own resolution. */
+export const MONSTERA_AT = { whole: { x: 191, y: 94 }, bare: { x: 194, y: 101 }, down: { x: 183, y: 125 } };
 /** The USB stick on the carpet, its lanyard and its shadow (39×8, at the room's own resolution). */
 export const USB_AT = { x: 157, y: 138 };
 /** The first aid kit (13×10), a green pouch hanging on the wall at the lower right of the window. */
@@ -999,17 +997,10 @@ export function drawRoom(p: Pix, s: SceneState): void {
   }
   if (s.fire) drawFire(p, s.fire, 'mid');
   p.rect(190, 132, 206, 135, 'X');
-  // the plant in its pot; its leaves shot off, bare stems; the pot shot, the stems lie on the carpet
-  if (s.broken.vase) p.blit(182, 121, PLANT_FALLEN, 2);
-  else p.blit(200, 103, s.broken.plant ? SPR.PLANT_BARE : PLANT_TOP, 2);
-  p.blit(200, 123, s.broken.vase ? SPR.POT_BROKEN : PLANT_POT, 2);
-  if (s.broken.plant) {
-    // leaves on the carpet
-    p.rect(194, 134, 196, 136, 'v');
-    p.rect(198, 136, 200, 138, 'V');
-    p.rect(230, 133, 232, 135, 'V');
-    p.rect(226, 136, 228, 138, 'v');
-  }
+  // the monstera in its pot; its leaves shot off, the bare stalks; the pot shot, the plant lies on the carpet
+  if (s.broken.vase) p.blit(MONSTERA_AT.down.x, MONSTERA_AT.down.y, SPR.MONSTERA_DOWN);
+  else if (s.broken.plant) p.blit(MONSTERA_AT.bare.x, MONSTERA_AT.bare.y, SPR.MONSTERA_BARE);
+  else p.blit(MONSTERA_AT.whole.x, MONSTERA_AT.whole.y, SPR.MONSTERA);
   // the ink tubes up from behind the machine: a ribbed hose (row by row, so it can snake), its
   // head, the ink in its mouth; the machine covers the hose's foot, the ink in the air is drawn over
   // them. They are attached to the machine, so they shake with it (PRNTR-PLANNING.md P3).
