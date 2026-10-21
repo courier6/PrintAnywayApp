@@ -11,7 +11,7 @@ import { t, useLocale } from './i18n';
 import { GOLD_INK, INKS } from './lib/inks';
 import { fileKind, loadDocument, prefetchPdfjs, type SourceDocument } from './lib/loadDocument';
 import { classifyError, logAppError, type ErrorCode } from './lib/errors';
-import { PageStore } from './lib/pageStore';
+import { DocumentReplacedError, PageStore } from './lib/pageStore';
 import { exportFormat, exportRecolored, type ExportFormat } from './lib/exportFile';
 
 type AppState = 'empty' | 'processing' | 'preview' | 'error' | 'prntr';
@@ -191,6 +191,7 @@ export default function App() {
     setShowPrintReminder(false);
     setPrintImages([]);
     setHolding(false);
+    setBusy(null);
     setFileName(name);
     if (exportAs) setFormat(exportAs);
     setCurrentPage(0);
@@ -227,6 +228,8 @@ export default function App() {
       }
     } catch (err) {
       if (token !== runToken.current) return;
+      // A print or download waiting on the pages that will never come gives up.
+      store.reset(0);
       const code = classifyError(err);
       logAppError(code, err, lastFile.current);
       setErrorInfo({ code, kind: KIND_BY_CODE[code] });
@@ -334,10 +337,12 @@ export default function App() {
     return () => window.clearTimeout(id);
   }, [prntrDrop]);
 
-  async function collectAllRecolored(): Promise<HTMLCanvasElement[]> {
+  // Throws DocumentReplacedError once the document it started on is replaced.
+  async function collectAllRecolored(token: number): Promise<HTMLCanvasElement[]> {
     const out: HTMLCanvasElement[] = [];
     for (let i = 0; i < store.pageCount; i++) {
       await store.whenSourceReady(i);
+      if (token !== runToken.current) throw new DocumentReplacedError();
       const canvas = store.ensureRecolored(i, inkRef.current);
       if (canvas) out.push(canvas);
     }
@@ -346,27 +351,35 @@ export default function App() {
 
   async function handlePrint() {
     if (busy) return;
+    const token = runToken.current;
     setShowPrintReminder(true);
     setBusy('print');
     try {
-      const canvases = await collectAllRecolored();
+      const canvases = await collectAllRecolored(token);
       setPrintImages(canvases.map((c) => c.toDataURL('image/png')));
       // Let React commit the print pages before opening the dialog.
       await new Promise((r) => setTimeout(r, 60));
+      if (token !== runToken.current) return;
       window.print();
+    } catch (err) {
+      if (!(err instanceof DocumentReplacedError)) throw err;
     } finally {
-      setBusy(null);
+      // A new document has already reset busy, and may be exporting itself.
+      if (token === runToken.current) setBusy(null);
     }
   }
 
   async function handleDownload() {
     if (busy) return;
+    const token = runToken.current;
     setBusy('download');
     try {
-      const canvases = await collectAllRecolored();
+      const canvases = await collectAllRecolored(token);
       await exportRecolored(canvases, fileName || 'document', format);
+    } catch (err) {
+      if (!(err instanceof DocumentReplacedError)) throw err;
     } finally {
-      setBusy(null);
+      if (token === runToken.current) setBusy(null);
     }
   }
 
