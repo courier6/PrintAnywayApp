@@ -157,6 +157,14 @@ export interface Hole {
   kind: 'wall' | 'door' | 'window';
 }
 
+/** A mark on the glass, the player's side: a staple that punched in and stayed, or a bolt that stuck
+ * point first (PRNTR-PLANNING.md P1.A, P1.C). Drawn on the front layer; the oldest go past the cap. */
+export interface Mark {
+  kind: 'staple' | 'bolt';
+  x: number;
+  y: number;
+}
+
 /** A hole in the door that the open door has swung away from: it is in the black doorway now. */
 export function inDoorway(h: Hole, doorGap: number): boolean {
   return h.kind === 'door' && h.x + 1 > 13 && h.x - 1 <= 13 + doorGap;
@@ -207,6 +215,8 @@ export interface SceneState {
   stubs: number[];
   /** The bullet holes, oldest first. */
   holes: Hole[];
+  /** The marks on the glass (staples stuck in, bolts stuck point first), oldest first; the front layer. */
+  marks: Mark[];
   /** The window's blind shot to pieces: a gaping hole, the red behind it. */
   windowOpen: boolean;
   /** The burst machine's pieces, where they are this frame (printer `wreck`). */
@@ -325,8 +335,35 @@ export function drawWindowWreck(p: Pix): void {
   p.rect(196, 85, 221, 86, 'a');
 }
 
+/**
+ * The marks on the glass (the front layer). A staple stuck in: the crown proud at 4× (32×8) with its
+ * bright edge, the two legs' holes dark, a short crack off each. A bolt stuck point first: its head
+ * end-on at 4× (the nut's shape in dark steel) with a slot, and a star of five cracks.
+ */
+export function drawMarks(p: Pix, marks: Mark[]): void {
+  for (const m of marks) {
+    const cx = Math.floor(m.x);
+    const cy = Math.floor(m.y);
+    if (m.kind === 'staple') {
+      const x = cx - 16;
+      const y = cy - 4;
+      p.rect(x, y, x + 32, y + 8, 'G');
+      p.rect(x + 4, y + 2, x + 28, y + 4, 'W');
+      p.rect(x - 1, y + 8, x + 5, y + 12, 'K');
+      p.rect(x + 27, y + 8, x + 33, y + 12, 'K');
+      line(p, x - 1, y + 12, x - 7, y + 18, 'K');
+      line(p, x + 32, y + 12, x + 38, y + 17, 'K');
+      line(p, x + 32, y + 12, x + 35, y + 21, 'K');
+    } else {
+      p.blit(cx - 14, cy - 14, SPR.NUT, 4, { remap: { g: 'G' } });
+      p.rect(cx - 6, cy - 2, cx + 6, cy + 2, 'K');
+      for (const [dx, dy] of [[-18, -8], [16, -12], [14, 14], [-12, 16], [-20, 4]] as const) line(p, cx, cy, cx + dx, cy + dy, 'K');
+    }
+  }
+}
+
 /** A one-pixel line from (x0,y0) to (x1,y1). */
-function line(p: Pix, x0: number, y0: number, x1: number, y1: number, key: PalKey): void {
+export function line(p: Pix, x0: number, y0: number, x1: number, y1: number, key: PalKey): void {
   const n = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0), 1);
   for (let i = 0; i <= n; i++) p.set(Math.round(x0 + ((x1 - x0) * i) / n), Math.round(y0 + ((y1 - y0) * i) / n), key);
 }

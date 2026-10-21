@@ -1,7 +1,7 @@
 import { reducedMotion, wait } from '../../anim';
 import type { Handoff, Stage } from '../../types';
 import { H, Pix, W, rotateSprite } from './pixels';
-import { CLOCK_AT, KIT_AT, MACHINE_AT, MACHINE_PIECES, NOZZLES, SPR, drawFireFront, drawFlame, drawRoom, drawWindowWreck, fireRect, inDoorway, lampX, tubeX, type Broken, type ExitSign, type Hole, type SceneState, type Tube } from './scene';
+import { CLOCK_AT, KIT_AT, MACHINE_AT, MACHINE_PIECES, NOZZLES, SPR, drawFireFront, drawFlame, drawMarks, drawRoom, drawWindowWreck, fireRect, inDoorway, lampX, tubeX, type Broken, type ExitSign, type Hole, type Mark, type SceneState, type Tube } from './scene';
 import { ART_AT, ART_SUB, renderVictory } from './art';
 import { PAL, type PalKey } from './palette';
 import { createRoomSounds, type FireSound, type Hum } from './sounds';
@@ -89,6 +89,10 @@ const STAPLE_MS = 1500;
 const STAPLE_STAGGER_MS = 500;
 /** The staple's hit box: its sprite at the current scale, plus this many virtual px around. */
 const STAPLE_HIT_PAD = 3;
+/** A staple tumbles a quarter turn every STAPLE_SPIN_MS in flight (a nut or a bolt every BOLT_SPIN_MS). */
+const STAPLE_SPIN_MS = 180;
+/** The marks on the glass (a staple stuck in, a bolt stuck point first): the oldest go past this many. */
+const GLASS_MARKS_MAX = 40;
 /** At half health or less the machine throws nuts and bolts too: out of the
  * slot and at the camera like the staples, spinning, a little quicker, twice a page's damage
  * (HIT_DAMAGE), BOLT_POINTS when shot. */
@@ -583,6 +587,7 @@ export const room: Stage = {
       tubes: [],
       stubs: [],
       holes: [],
+      marks: [],
       windowOpen: false,
       pieces: [],
       damage: 0,
@@ -1035,14 +1040,15 @@ export const room: Stage = {
       const y = y0 + (p.y1 - y0) * v;
       return { x: Math.floor(x - 5 * sc), y: Math.floor(y - 6.5 * sc), w: 10 * sc, h: 13 * sc };
     };
-    /** A thrown thing's sprite: a nut or a bolt spins a quarter turn every BOLT_SPIN_MS. */
+    /** A thrown thing's sprite: a staple tumbles a quarter turn every STAPLE_SPIN_MS, a nut or a bolt every BOLT_SPIN_MS. */
     const thrownSprite = (s: Staple, now: number) => {
       const spr = SPR[THROWN_SPR[s.kind]];
-      if (s.kind === 'staple' || reduced) return spr;
-      return rotateSprite(spr, Math.floor((now - s.at) / BOLT_SPIN_MS) % 4);
+      if (reduced) return spr;
+      return rotateSprite(spr, Math.floor((now - s.at) / (s.kind === 'staple' ? STAPLE_SPIN_MS : BOLT_SPIN_MS)) % 4);
     };
     // A staple (or a nut or a bolt) punches up out of the slot at 1× for the first part of its
-    // flight (the rect is the rows showing), then flies out of it at the camera: 1× → 2× → 4×.
+    // flight (the rect is the rows showing), then flies out of it at the camera: 1× → 2× → 3× → 4×,
+    // in four equal steps.
     const staplePose = (s: Staple, now: number) => {
       const spr = thrownSprite(s, now);
       const hw = spr.w / 2;
@@ -1053,7 +1059,7 @@ export const room: Stage = {
         return { x: Math.floor(s.x0 - hw), y: SLOT.y - rows, w: spr.w, h: rows };
       }
       const v = (u - STAPLE_EJECT) / (1 - STAPLE_EJECT);
-      const sc = v < 1 / 3 ? 1 : v < 2 / 3 ? 2 : 4;
+      const sc = 1 + Math.min(3, Math.floor(v * 4));
       const y0 = SLOT.y - hh;
       const x = s.x0 + (s.x - s.x0) * v;
       const y = y0 + (s.y - y0) * v;
@@ -1304,6 +1310,12 @@ export const room: Stage = {
       box.hidden = inDoorway(hole, scene.doorGap);
       holeLightOf.set(hole, box);
       holeLights.append(box);
+    };
+    // A mark on the glass where a thrown thing landed; the oldest go past the cap. (Cover, when it
+    // comes: a thing that lands while the player is covered clanks off and leaves nothing.)
+    const addMark = (kind: Mark['kind'], x: number, y: number) => {
+      scene.marks.push({ kind, x, y });
+      if (scene.marks.length > GLASS_MARKS_MAX) scene.marks.shift();
     };
     // Shot open, the window takes no more holes: the shots go into the red.
     const windowShot = (x: number, y: number, now: number) => {
@@ -1668,6 +1680,7 @@ export const room: Stage = {
         sprays: () => sprays.length,
         tubes: () => scene.tubes.map((t) => ({ ...t })),
         holes: () => scene.holes.map((h) => h.kind),
+        marks: () => scene.marks.map((m) => ({ ...m })),
         ghosts: () => ghosts.length,
         name: () => lifeName.textContent,
         clock: () => ({ ...scene.clock }),
@@ -1889,6 +1902,8 @@ export const room: Stage = {
             if (s.kind === 'staple') sounds.stapleHit();
             else sounds.boltHit();
             hurt(s.kind, now);
+            // the mark it leaves: a staple sticks in the glass
+            if (s.kind === 'staple') addMark('staple', s.x, s.y);
           }
         }
         staples = staples.filter((s) => !s.hit && !s.shot);
@@ -2071,6 +2086,8 @@ export const room: Stage = {
       fpix.clear();
       if (scene.windowOpen) drawWindowWreck(fpix);
       if (scene.fire) drawFireFront(fpix, scene.fire);
+      // The marks on the glass, under the things in flight, the landed pages and the ink.
+      drawMarks(fpix, scene.marks);
       // Out of the slot: only the top rows of the sprite so far, then the whole thing.
       for (const s of staples) {
         if (now < s.at || s.hit || s.shot) continue;
