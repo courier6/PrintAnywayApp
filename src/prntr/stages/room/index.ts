@@ -1777,7 +1777,8 @@ export const room: Stage = {
           sounds.scanBurst();
         },
       ],
-      [SCAN_TOTAL_MS - 60, () => sounds.lidShut()],
+      // the thunk as the lid lands: 60 ms before the fall ends, or at the cut under reduced motion
+      [reduced ? LID_MS + SWEEP_MS + WASH_MS : SCAN_TOTAL_MS - 60, () => sounds.lidShut()],
     ];
     /** The machine's lid, lamp and flash from where the scan is; shut and dark when there is none. */
     const poseScan = (now: number) => {
@@ -1815,7 +1816,8 @@ export const room: Stage = {
           scheduleTears(performance.now());
         },
       ],
-      [SLAM_TOTAL_MS - 60, () => sounds.lidShut()],
+      // the thunk as the lid lands: 60 ms before the fall ends, or at the cut under reduced motion
+      [reduced ? SLAM_IMPACT_MS + SLAM_OPEN_MS : SLAM_TOTAL_MS - 60, () => sounds.lidShut()],
     ];
     /** The slam this frame: the lid, the lift, and the machine's offset (up as it lifts, the landing's shake),
      * or null when the slam is not moving it. Under reduced motion it does not move: the lid cuts open and shut. */
