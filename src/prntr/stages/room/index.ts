@@ -5,6 +5,7 @@ import { CLOCK_AT, KIT_AT, MACHINE_AT, MACHINE_PIECES, NOZZLES, SPR, drawFireFro
 import { ART_AT, ART_SUB, renderVictory } from './art';
 import { PAL, type PalKey } from './palette';
 import { createRoomSounds, type FireSound, type Hum } from './sounds';
+import { startStormSound } from '../storm';
 
 // ---------------------------------------------------------------------------
 // Tunables. The attack cycle is "tune freely" (handoff §2.7), slowed down and made
@@ -246,7 +247,8 @@ const DOOR_BREAK_SHOTS = 12;
 /** The storm outside (PRNTR-PLANNING.md P5; the timing is stage 0's storm.ts): a near strike the first
  * STRIKE_FIRST_MS in and then every STRIKE_MIN–STRIKE_MAX ms, its flash FLASH_MS long with an afterglow
  * of AFTERGLOW_MS; far lightning the first FAR_FIRST_MS in and then every FAR_MIN–FAR_MAX ms, never within
- * FAR_GAP_MS of a near strike, FAR_MS long. */
+ * FAR_GAP_MS of a near strike, FAR_MS long; thunder right behind a near strike, THUNDER_MIN–THUNDER_MAX s
+ * after a far one. The storm's sound is heard through the shut walls at STORM_SHUT, more with every opening. */
 const STRIKE_FIRST_MS = 2500;
 const STRIKE_MIN_MS = 4000;
 const STRIKE_MAX_MS = 9000;
@@ -257,6 +259,9 @@ const FAR_MIN_MS = 3000;
 const FAR_MAX_MS = 7000;
 const FAR_GAP_MS = 1500;
 const FAR_MS = 400;
+const THUNDER_MIN_S = 0.5;
+const THUNDER_MAX_S = 1;
+const STORM_SHUT = 0.12;
 /** A shot that hits nothing to break leaves a hole: dark in the wall and the
  * ceiling, the storm showing through the door and the window's blind. The oldest go past HOLES_MAX.
  * The carpet takes no mark. */
@@ -753,6 +758,15 @@ export const room: Stage = {
     };
     const clicks = new Map<string, number>();
     const hum: Hum = sounds.hum();
+    // The storm's sound (stage 0's: rain and wind, thunder on request) through a gain of its own, faint
+    // through the shut walls and louder with every opening (poseStorm sets it).
+    const stormGain = audio.context && audio.master ? audio.context.createGain() : null;
+    if (stormGain && audio.master) {
+      stormGain.gain.value = 0;
+      stormGain.connect(audio.master);
+    }
+    const stormSound = stormGain && audio.context ? startStormSound(audio.context, stormGain) : null;
+    let stormLevel = -1;
     /** Set inside the promise at the bottom: stops the loop and resolves `outcome`. */
     let finish: () => void = () => undefined;
 
@@ -1772,6 +1786,7 @@ export const room: Stage = {
         doorShots: () => doorShots,
         /** The storm this frame, and a near strike now. */
         storm: () => ({ ...scene.storm }),
+        stormLevel: () => stormLevel,
         strike: () => strike(performance.now()),
         short: () => shortAt !== null,
         fire: () => fireAt !== null,
@@ -2165,6 +2180,7 @@ export const room: Stage = {
       bolt = { x: Math.random() < 0.5 ? 16 + Math.floor(Math.random() * 22) : 166 + Math.floor(Math.random() * 52), seed: Math.floor(now) };
       nextStrike = now + STRIKE_MIN_MS + Math.random() * (STRIKE_MAX_MS - STRIKE_MIN_MS);
       if (nextFar < now + FAR_GAP_MS) nextFar = now + FAR_GAP_MS;
+      stormSound?.thunder(0.15, true);
     };
     const farStrike = (now: number) => {
       if (now - lastNear < FAR_GAP_MS) {
@@ -2173,6 +2189,7 @@ export const room: Stage = {
       }
       farAt = now;
       nextFar = now + FAR_MIN_MS + Math.random() * (FAR_MAX_MS - FAR_MIN_MS);
+      stormSound?.thunder(THUNDER_MIN_S + Math.random() * (THUNDER_MAX_S - THUNDER_MIN_S), false);
     };
     const poseStorm = (now: number) => {
       const st = now - strikeAt;
@@ -2188,6 +2205,12 @@ export const room: Stage = {
       setVar('--storm-door', scene.doorBroken || scene.doorGap >= DOOR_OPEN ? 1 : scene.doorGap > 0 ? 0.5 : 0);
       setVar('--storm-window', scene.windowOpen ? 1 : near > 0.3 ? 0.25 : 0);
       setVar('--storm-room', !reduced && near > 0.3 ? 0.18 * near * openness() : 0);
+      // its sound: through the walls when shut, more with every opening
+      const level = Math.max(STORM_SHUT, openness());
+      if (level !== stormLevel) {
+        stormLevel = level;
+        if (stormGain && audio.context) stormGain.gain.setTargetAtTime(level, audio.context.currentTime, 0.3);
+      }
     };
     /** How open the room is to the storm, 0..1: the door's state and the window's. Its light scales with it. */
     const openness = () => Math.min(1, (scene.doorBroken ? 1 : scene.doorGap >= DOOR_OPEN ? 0.6 : scene.doorGap > 0 ? 0.3 : 0) + (scene.windowOpen ? 0.4 : 0));
@@ -2368,6 +2391,8 @@ export const room: Stage = {
         cancelAnimationFrame(raf);
         hum.stop();
         fireSound?.stop();
+        stormSound?.stop(0.5);
+        window.setTimeout(() => stormGain?.disconnect(), 1000);
       };
       // On abort the host removes the root. On finish the frame stays painted until
       // the host's drop (sky or Tetris) has covered it (PRNTR-STAGE-1.md §4.10).
