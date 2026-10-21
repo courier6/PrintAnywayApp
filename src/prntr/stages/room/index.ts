@@ -2168,6 +2168,8 @@ export const room: Stage = {
         /** The pages on the glass: where each landed, and whether it is sliding off yet. */
         landed: () => pages.filter((p) => p.landedAt !== null).map((p) => ({ x: p.x1, y: p.y1, sliding: performance.now() - p.landedAt! >= PAGE_LANDED_MS })),
         thrown: () => staples.map((s) => ({ kind: s.kind, x: s.x, y: s.y, at: s.at, shot: s.shot, hit: s.hit })),
+        /** How many things in flight have been shot down (staples, nuts, bolts, pages): a shot one of them took. */
+        shotDown: () => staples.filter((s) => s.shot).length + pages.filter((p) => p.shot).length,
         ghosts: () => ghosts.length,
         name: () => lifeName.textContent,
         clock: () => ({ ...scene.clock }),
