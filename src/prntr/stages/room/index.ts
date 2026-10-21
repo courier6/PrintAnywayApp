@@ -1,7 +1,7 @@
 import { reducedMotion, wait } from '../../anim';
 import type { Handoff, Stage } from '../../types';
 import { H, Pix, W, rotateSprite } from './pixels';
-import { CLOCK_AT, KIT_AT, MACHINE_AT, MACHINE_PIECES, NOZZLES, SPR, drawFireFront, drawFlame, drawRoom, drawWindowWreck, fireRect, inDoorway, lidTop, type Broken, type ExitSign, type Hole, type SceneState } from './scene';
+import { CLOCK_AT, KIT_AT, MACHINE_AT, MACHINE_PIECES, NOZZLES, SPR, drawFireFront, drawFlame, drawRoom, drawWindowWreck, fireRect, inDoorway, lampX, lidTop, type Broken, type ExitSign, type Hole, type SceneState } from './scene';
 import { ART_AT, ART_SUB, renderVictory } from './art';
 import { PAL, type PalKey } from './palette';
 import { createRoomSounds, type FireSound, type Hum } from './sounds';
@@ -75,8 +75,16 @@ const ATTACK_GAP_MS = 2250;
 const ATTACK_GAP_LATE_MS = 1500;
 /** From this score on, the attacks come faster. */
 const LATE_SCORE = 900;
-const SCAN_MS = 600;
+/** The scan: the lid rises over LID_MS, the lamp sweeps the glass for SWEEP_MS (the window:
+ * PRNTR-FIGHT-DESIGN.md §5), the flash washes the screen for WASH_MS, the lid falls over LID_MS.
+ * A shot on the lamp during the sweep pops the bulb (LAMP_POINTS): the sweep stops where it is,
+ * dead, and there is no flash; the lid still falls on time. */
+const LID_MS = 450;
+const SWEEP_MS = 1200;
 const WASH_MS = 300;
+const SCAN_TOTAL_MS = LID_MS + SWEEP_MS + WASH_MS + LID_MS;
+const LAMP_POINTS = 40;
+const LAMP_HIT_PAD = 1;
 const STAPLE_MS = 1500;
 const STAPLE_STAGGER_MS = 500;
 /** The staple's hit box: its sprite at the current scale, plus this many virtual px around. */
@@ -605,6 +613,10 @@ export const room: Stage = {
     let nextAttackAt = 0;
     let scanAt: number | null = null;
     let washUntil = 0;
+    /** The scan's sound and flash steps run so far (SCAN_STEPS), and the bulb: shot, and where the lamp was then. */
+    let scanStep = 0;
+    let bulbOut = false;
+    let lampStop = 0;
     let autoReloadAt: number | null = null;
     let reloadSecondAt: number | null = null;
     /** The one continue has been used: the next death is the end. */
@@ -1156,6 +1168,19 @@ export const room: Stage = {
         addScore(TUBE_POINTS, now);
         return;
       }
+      // The lamp during the sweep: the bulb pops, the sweep stops where it is, and there is no flash.
+      const m = scene.machine;
+      if (scanAt !== null && !bulbOut && m.lamp !== null && m.lid >= 1) {
+        const hx = lampX(m.lamp) + scene.shake.x;
+        if (x >= hx - 2 - LAMP_HIT_PAD && x < hx + 5 + LAMP_HIT_PAD && y >= 81 + scene.shake.y - LAMP_HIT_PAD && y < 89 + scene.shake.y + LAMP_HIT_PAD) {
+          bulbOut = true;
+          lampStop = m.lamp;
+          popBulb(hx, now);
+          flashFrames = HIT_FLASH_FRAMES;
+          addScore(LAMP_POINTS, now);
+          return;
+        }
+      }
       // The button: more damage, and the machine answers faster. Bright or not.
       if (x >= BUTTON.x - BUTTON_HIT_PAD && x < BUTTON.x + BUTTON.w + BUTTON_HIT_PAD && y >= BUTTON.y - BUTTON_HIT_PAD && y < BUTTON.y + BUTTON.h + BUTTON_HIT_PAD) {
         flashFrames = HIT_FLASH_FRAMES;
@@ -1299,6 +1324,16 @@ export const room: Stage = {
         bits.push({ x: SHORT_AT.x + (Math.random() - 0.5) * 6, y: SHORT_AT.y - Math.random() * 6, vx: Math.cos(a) * v, vy: Math.sin(a) * v, g: 220, born: now, life: 250 + Math.random() * 350, size: 1, color: Math.random() < 0.6 ? 'W' : Math.random() < 0.5 ? 'y' : 'c' });
       }
     };
+    // The bulb shot: a pop, and its glass and filament thrown up out of the lid in sparks.
+    const popBulb = (hx: number, now: number) => {
+      sounds.bulbPop();
+      if (reduced) return;
+      for (let i = 0; i < 12 + Math.floor(Math.random() * 6); i++) {
+        const a = -Math.PI * (0.2 + Math.random() * 0.6);
+        const v = 40 + Math.random() * 80;
+        bits.push({ x: hx + 1 + (Math.random() - 0.5) * 4, y: 84, vx: Math.cos(a) * v, vy: Math.sin(a) * v, g: 220, born: now, life: 250 + Math.random() * 300, size: 1, color: Math.random() < 0.5 ? 'W' : Math.random() < 0.5 ? 'c' : 'L' });
+      }
+    };
     const startFire = (now: number) => {
       shortAt = null;
       fireAt = now;
@@ -1350,6 +1385,52 @@ export const room: Stage = {
         bits.push({ x: x + (Math.random() - 0.5) * 10, y: y + (Math.random() - 0.5) * 6, vx: (Math.random() - 0.5) * 16, vy: -20 - Math.random() * 30, g: 0, born: now, life: 500 + Math.random() * 400, size: 1 + Math.floor(Math.random() * 2), color: Math.random() < 0.5 ? 'l' : 'T' });
       }
     };
+    const runSteps = (steps: [number, () => void][], index: number, t: number): number => {
+      while (index < steps.length && t >= steps[index][0]) steps[index++][1]();
+      return index;
+    };
+    // A scan: the lid rises, the lamp sweeps the glass, the flash, the lid falls (SCAN_STEPS are
+    // its sounds and the flash, by ms from scanAt). Used by the sticker beat too (the wake-up).
+    const startScan = (now: number) => {
+      scanAt = now;
+      scanStep = 0;
+      bulbOut = false;
+      sounds.lidOpen();
+    };
+    const SCAN_STEPS: [number, () => void][] = [
+      [LID_MS, () => sounds.scanSweep()],
+      [
+        LID_MS + SWEEP_MS,
+        () => {
+          if (bulbOut) return;
+          if (!reduced) invertFrame = true;
+          wash.classList.add('is-on');
+          washUntil = performance.now() + WASH_MS;
+          sounds.scanBurst();
+        },
+      ],
+      [SCAN_TOTAL_MS - 60, () => sounds.lidShut()],
+    ];
+    /** The machine's lid, lamp and flash from where the scan is; shut and dark when there is none. */
+    const poseScan = (now: number) => {
+      const m = scene.machine;
+      if (scanAt === null) {
+        m.lid = 0;
+        m.lamp = null;
+        m.lampOut = false;
+        m.flash = false;
+        return;
+      }
+      const st = now - scanAt;
+      scanStep = runSteps(SCAN_STEPS, scanStep, st);
+      const falls = LID_MS + SWEEP_MS + WASH_MS;
+      m.lid = reduced ? (st < falls ? 1 : 0) : st < LID_MS ? st / LID_MS : st < falls ? 1 : Math.max(0, 1 - (st - falls) / LID_MS);
+      m.lampOut = bulbOut;
+      if (bulbOut) m.lamp = st < falls ? lampStop : null;
+      else m.lamp = st >= LID_MS && st < LID_MS + SWEEP_MS ? (st - LID_MS) / SWEEP_MS : null;
+      m.flash = !bulbOut && st >= LID_MS + SWEEP_MS && st < falls;
+      if (st >= SCAN_TOTAL_MS) scanAt = null;
+    };
     /** The next attack the dev hook asked for, if any. */
     let forcedKind: AttackKind | null = null;
     // The machine does not move. Scan, staples, pages, in rotation; once it is mad, ink too; at
@@ -1387,9 +1468,8 @@ export const room: Stage = {
         }
         nextAttackAt = now + TUBE_RISE_MS + (SPRAY_COUNT - 1) * SPRAY_STAGGER_MS + SPRAY_MS + SPRAY_FLIGHT_MS + gap;
       } else if (kind === 'scan') {
-        scanAt = now;
-        sounds.scanFlash();
-        nextAttackAt = now + SCAN_MS + WASH_MS + gap;
+        startScan(now);
+        nextAttackAt = now + SCAN_TOTAL_MS + gap;
       } else if (kind === 'staples') {
         for (let i = 0; i < 3; i++) {
           staples.push({ kind: 'staple', ms: STAPLE_MS, x0: SLOT.x0 + 3 + Math.random() * (SLOT.x1 - SLOT.x0 - 6), x: 20 + Math.random() * 180, y: 40 + Math.random() * 70, at: now + i * STAPLE_STAGGER_MS, hit: false, shot: false, fed: false });
@@ -1564,6 +1644,10 @@ export const room: Stage = {
           fire(a.x, a.y, now);
           return { x: a.x, y: a.y, shots };
         },
+        /** The machine's lid (0 shut … 1 standing), the lamp's left edge in virtual px while it is on, and the bulb shot. */
+        lid: () => scene.machine.lid,
+        lamp: () => (scene.machine.lamp === null ? null : lampX(scene.machine.lamp)),
+        bulb: () => bulbOut,
       };
     }
 
@@ -1614,10 +1698,6 @@ export const room: Stage = {
     // the dark room, the HUD gone, the tune; then out, WIN_END_MS after the burst. The lights stay
     // off and nothing comes back. (Until then it ended on the quiet room, lit again, the lid shut.)
     const END_STEPS: [number, () => void][] = [[0, () => showFightUi(false)]];
-    const runSteps = (steps: [number, () => void][], index: number, t: number): number => {
-      while (index < steps.length && t >= steps[index][0]) steps[index++][1]();
-      return index;
-    };
 
     // ---- update -----------------------------------------------------------
     const update = (now: number) => {
@@ -1728,19 +1808,7 @@ export const room: Stage = {
           blinkAt = now;
           scheduleBlink(now, BLINK_MIN_MS);
         }
-        if (scanAt !== null) {
-          // The lid up, the lamp across the glass, then one inverted frame and the white wash.
-          const st = now - scanAt;
-          scene.machine.lid = 1;
-          scene.machine.lamp = st < SCAN_MS ? st / SCAN_MS : null;
-          if (st >= SCAN_MS) {
-            scanAt = null;
-            scene.machine.lid = 0;
-            if (!reduced) invertFrame = true;
-            wash.classList.add('is-on');
-            washUntil = now + WASH_MS;
-          }
-        }
+        poseScan(now);
         if (washUntil && now >= washUntil) {
           wash.classList.remove('is-on');
           washUntil = 0;
