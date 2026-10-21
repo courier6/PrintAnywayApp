@@ -195,8 +195,9 @@ export function markBox(m: Mark): { x0: number; y0: number; x1: number; y1: numb
 export const BLIND_TOP = 39;
 export const BLIND_PITCH = 5;
 
-/** The door's knob, 2×2: near the door's free (left) edge, moving with it as the door swings in on its right hinge. */
-export const KNOB = { y: 76, w: 2, h: 2 };
+/** The door's knob, a 3×3 brass ball with a highlight and a shadow (4×4 drawn): near the door's free (left) edge,
+ * moving with it as the door swings in on its right hinge. */
+export const KNOB = { y: 76, w: 3, h: 3 };
 export const knobX = (doorGap: number): number => 16 + Math.min(doorGap, 22);
 
 /** A hole in the door that the open door has swung away from: it is in the black doorway now. */
@@ -977,8 +978,11 @@ export function drawRoom(p: Pix, s: SceneState): void {
       // the door's leading edge
       p.rect(13 + s.doorGap, 43, 14 + s.doorGap, 108, 'E');
     }
+    // the knob: brass, lit from the upper left, its shadow down and to the right
     const kx = knobX(s.doorGap);
-    p.rect(kx, KNOB.y, kx + KNOB.w, KNOB.y + KNOB.h, 'K');
+    p.rect(kx + 1, KNOB.y + 1, kx + KNOB.w + 1, KNOB.y + KNOB.h + 1, 'K');
+    p.rect(kx, KNOB.y, kx + KNOB.w, KNOB.y + KNOB.h, 'y');
+    p.set(kx, KNOB.y, 'W');
   }
   // the EXIT sign: on the wall, hanging loose, falling, or on the floor in front of the door
   const sign = s.exit;
