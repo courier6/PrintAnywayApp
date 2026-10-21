@@ -797,6 +797,18 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
   border-bottom: none;
 }
 
+/* The way into Prntr stays off touch screens until its touch form is finished. The item before it
+   then becomes the last, so it drops its rule too. */
+@media (hover: none) {
+  .help-other {
+    display: none;
+  }
+
+  .help-item:has(+ .help-other) {
+    border-bottom: none;
+  }
+}
+
 .help-item summary {
   font-size: 13px;
   font-weight: 700;
