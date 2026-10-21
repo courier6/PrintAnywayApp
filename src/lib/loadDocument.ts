@@ -1,11 +1,33 @@
 import { HeicDecodeError, ImageDecodeError, UnsupportedFileError } from './errors';
 
+// pdf.js's modern build calls built-ins only the newest browsers have
+// (Map#getOrInsertComputed, Math.sumPrecise, Uint8Array#toHex, …) without
+// polyfills, so a browser a release or two behind would fail every PDF.
+// Such a browser gets the legacy build, which carries the polyfills.
+function needsLegacyPdfjs(): boolean {
+  const iterator = (globalThis as { Iterator?: { prototype: object } }).Iterator;
+  return !(
+    'getOrInsertComputed' in Map.prototype &&
+    'getOrInsertComputed' in WeakMap.prototype &&
+    'sumPrecise' in Math &&
+    'toHex' in Uint8Array.prototype &&
+    'fromBase64' in Uint8Array &&
+    'try' in Promise &&
+    'withResolvers' in Promise &&
+    'parse' in URL &&
+    !!iterator &&
+    'take' in iterator.prototype
+  );
+}
+
 // pdfjs is loaded on demand so the landing screen doesn't pay for it.
 async function getPdfjs() {
-  const [pdfjsLib, worker] = await Promise.all([
-    import('pdfjs-dist'),
-    import('pdfjs-dist/build/pdf.worker.min.mjs?url'),
-  ]);
+  const [pdfjsLib, worker] = needsLegacyPdfjs()
+    ? await Promise.all([
+        import('pdfjs-dist/legacy/build/pdf.mjs'),
+        import('pdfjs-dist/legacy/build/pdf.worker.min.mjs?url'),
+      ])
+    : await Promise.all([import('pdfjs-dist'), import('pdfjs-dist/build/pdf.worker.min.mjs?url')]);
   pdfjsLib.GlobalWorkerOptions.workerSrc = worker.default;
   return pdfjsLib;
 }
