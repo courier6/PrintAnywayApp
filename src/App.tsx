@@ -324,7 +324,14 @@ export default function App() {
   }
 
   function exitPrntr() {
+    prntrPage.current = null; // the page it was handed goes with it
     setAppState(prntrReturn.current);
+  }
+
+  // The drop has landed (or its safety net fired): Prntr unmounts, and its page goes.
+  function landPrntrDrop() {
+    prntrPage.current = null;
+    setPrntrDrop(null);
   }
 
   // The drops (PRNTR-STAGE-1.md §4.10): after the room is cleared the app's UI falls
@@ -376,7 +383,7 @@ export default function App() {
   // Safety net: Prntr never stays mounted if the drop's animationend does not arrive.
   useEffect(() => {
     if (!prntrDrop) return;
-    const id = window.setTimeout(() => setPrntrDrop(null), prntrDrop === 'tetris' ? 2000 : 1200);
+    const id = window.setTimeout(landPrntrDrop, prntrDrop === 'tetris' ? 2000 : 1200);
     return () => window.clearTimeout(id);
   }, [prntrDrop]);
 
@@ -459,7 +466,7 @@ export default function App() {
         onAnimationEnd={(e) => {
           // The sky drop animates .no-print itself; the Tetris drop's last piece is the header.
           const landed = prntrDrop === 'tetris' ? (e.target as HTMLElement).classList.contains('header') : e.target === e.currentTarget;
-          if (landed) setPrntrDrop(null);
+          if (landed) landPrntrDrop();
         }}
       >
         <Header />
