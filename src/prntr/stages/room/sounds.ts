@@ -29,6 +29,8 @@ export interface RoomSounds {
   uiClick(): void;
   /** A fluorescent tube going off or on. */
   lightTick(): void;
+  /** A tube flickering on for `dur` s: its tick and a 120 Hz buzz. */
+  lightBuzz(dur: number): void;
   lidOpen(): void;
   lidShut(): void;
   /** The machine pouncing forward: a swelling whoosh, then its landing thump at 0.35 s. */
@@ -86,6 +88,8 @@ export interface RoomSounds {
   short(zapsMs: number[]): void;
   /** A jet of ink from a nozzle: a hiss for the jet's 1.4 s. */
   inkSpray(): void;
+  /** The black cartridge, empty: three dry coughs, the last one weakest, and two low error beeps. */
+  inkDud(): void;
   /** A splat completing on the glass. */
   inkSplat(): void;
   /** The fire's roar and crackle; loops until stop(), at the level set. */
@@ -116,6 +120,7 @@ const SILENT: RoomSounds = {
   printerTick: noop,
   uiClick: noop,
   lightTick: noop,
+  lightBuzz: noop,
   lidOpen: noop,
   lidShut: noop,
   pounce: noop,
@@ -146,6 +151,7 @@ const SILENT: RoomSounds = {
   zap: noop,
   short: noop,
   inkSpray: noop,
+  inkDud: noop,
   inkSplat: noop,
   fire: () => ({ setLevel: noop, stop: noop }),
   pop: noop,
@@ -330,6 +336,13 @@ export function createRoomSounds(audio: PrntrAudio): RoomSounds {
       const t = now();
       tone(t, 0.09, { f0: 3200, gain: 0.35, decay: 0.012 });
       noise(t, 0.03, { hp: 2500, gain: 0.3, decay: 0.004 });
+    },
+    // the tick, then a square 120 Hz buzz under high noise for as long as the tube is lit
+    lightBuzz(dur) {
+      const t = now();
+      tone(t, 0.09, { f0: 3200, gain: 0.35, decay: 0.012 });
+      tone(t, dur, { type: 'square', f0: 120, gain: 0.06, attack: 0.01, release: 0.02 });
+      noise(t, dur, { hp: 4000, gain: 0.06 });
     },
     // a rising creak, 0.45 s
     lidOpen() {
@@ -581,6 +594,13 @@ export function createRoomSounds(audio: PrntrAudio): RoomSounds {
       const t = now();
       tone(t, 0.03, { f0: 900, f1: 300, gain: 0.15, decay: 0.006 });
       noise(t, 1.4, { hp: 3000, gain: 0.16 });
+    },
+    // three 60 ms puffs of high noise (0, 0.45, 0.9 s; the last weakest) and two 120 ms square beeps at 520 Hz
+    inkDud() {
+      const t = now();
+      [0, 0.45, 0.9].forEach((d, i) => noise(t + d, 0.06, { hp: 1800, lp: 7000, gain: i === 2 ? 0.12 : 0.22, decay: 0.02 }));
+      tone(t + 0.2, 0.12, { type: 'square', f0: 520, gain: 0.07, attack: 0.004, release: 0.02 });
+      tone(t + 0.4, 0.12, { type: 'square', f0: 520, gain: 0.07, attack: 0.004, release: 0.02 });
     },
     // a wet slap: low noise, a 140 → 50 Hz thump, and a short blip falling 600 → 200 Hz
     inkSplat() {

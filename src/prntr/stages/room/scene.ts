@@ -122,6 +122,8 @@ export interface Machine {
   back: number;
   /** The frame's time in ms, for the angry display's flicker (0 = still). */
   t: number;
+  /** The black cartridge has failed: ms the NO BLACK INK error has been up, or null. */
+  error: number | null;
 }
 
 /** The machine's size and foot line at `back`. */
@@ -136,11 +138,13 @@ const LID_H = 24;
 export const lidTop = (lid: number): number => MACHINE_AT.y0 - Math.round(LID_H * Math.sin((lid * Math.PI) / 2));
 /** The lamp's left edge at u along the glass: 82 to 156, 3 px wide with a 2 px halo each side. */
 export const lampX = (u: number): number => Math.round(82 + 74 * u);
-/** The ink reservoirs on the back ledge, by their nozzle's x: the tubes rise from them, in their colour. */
-export const NOZZLES: { x: number; color: 'c' | 'm' | 'y' }[] = [
+/** The ink reservoirs on the back ledge, by their nozzle's x: the tubes rise from them, in their colour.
+ * The fourth is black, and empty: its tube comes up, coughs, and the display says so. */
+export const NOZZLES: { x: number; color: 'c' | 'm' | 'y' | 'z' }[] = [
   { x: 108, color: 'c' },
   { x: 120, color: 'm' },
   { x: 132, color: 'y' },
+  { x: 144, color: 'z' },
 ];
 
 /** An ink particle on the far half of its flight, drawn behind the machine. */
@@ -165,6 +169,13 @@ export interface Mark {
   kind: 'staple' | 'bolt';
   x: number;
   y: number;
+}
+
+/** Where a mark on the glass can be shot off: a staple's crown and its legs, a bolt's head (±1 px). */
+export function markBox(m: Mark): { x0: number; y0: number; x1: number; y1: number } {
+  const cx = Math.floor(m.x);
+  const cy = Math.floor(m.y);
+  return m.kind === 'staple' ? { x0: cx - 18, y0: cy - 5, x1: cx + 18, y1: cy + 9 } : { x0: cx - 15, y0: cy - 15, x1: cx + 15, y1: cy + 15 };
 }
 
 /** The blind's slats: one every BLIND_PITCH rows from BLIND_TOP, three rows of slat and a 2 px gap on the storm. */
@@ -533,6 +544,21 @@ const GLYPHS: string[][] = [
 const INK_WHITE: PalKey[] = ['c', 'm', 'y', 'W'];
 const STRAY: PalKey[] = ['c', 'm', 'y', 'W', 'z'];
 
+/** The empty black cartridge's error, a word at a time: the display is 26 px wide. */
+const ERROR_WORDS = ['NO', 'BLACK', 'INK'];
+const ERROR_WORD_MS = 500;
+/** 3×5 letters for the error (N is 4 wide, or it reads as an H). */
+const FONT: Record<string, string[]> = {
+  N: ['#..#', '##.#', '#.##', '#..#', '#..#'],
+  O: ['###', '#.#', '#.#', '#.#', '###'],
+  B: ['##.', '#.#', '##.', '#.#', '##.'],
+  L: ['#..', '#..', '#..', '#..', '###'],
+  A: ['.#.', '#.#', '###', '#.#', '#.#'],
+  C: ['.##', '#..', '#..', '#..', '.##'],
+  K: ['#.#', '#.#', '##.', '#.#', '#.#'],
+  I: ['###', '.#.', '.#.', '.#.', '###'],
+};
+
 /**
  * The display's text, 26×9 inside 79–105 × 93–102 (PRNTR-FIGHT-DESIGN.md §9.8, the sheet's C1–C4).
  * Quiet: three green lines. Angry: three red lines each a new length every 80 ms, jumping about,
@@ -544,6 +570,20 @@ const STRAY: PalKey[] = ['c', 'm', 'y', 'W', 'z'];
  * holds one frame, never black.
  */
 function drawScreen(set: (x: number, y: number, k: PalKey) => void, rect: (x0: number, y0: number, x1: number, y1: number, k: PalKey) => void, m: Machine, damage: number): void {
+  if (m.error !== null) {
+    // the black cartridge is empty: NO, BLACK, INK in yellow on the dark screen, a word every ERROR_WORD_MS
+    rect(79, 93, 105, 102, 'i');
+    const word = [...ERROR_WORDS[Math.floor(m.error / ERROR_WORD_MS) % ERROR_WORDS.length]];
+    const w = word.reduce((n, ch) => n + FONT[ch][0].length + 1, -1);
+    let x = 79 + Math.floor((26 - w) / 2);
+    for (const ch of word) {
+      FONT[ch].forEach((row, ry) => {
+        for (let rx = 0; rx < row.length; rx++) if (row[rx] === '#') set(x + rx, 95 + ry, 'y');
+      });
+      x += FONT[ch][0].length + 1;
+    }
+    return;
+  }
   if (!m.angry) {
     rect(80, 94, 96, 95, 'n');
     rect(80, 97, 102, 98, 'n');
@@ -776,7 +816,7 @@ function drawMachineBack(p: Pix, s: MachineScene): void {
 const MACHINE_SPRITE: Sprite = (() => {
   const lp = new LetterPix(MACHINE_AT.x0, MACHINE_AT.y0, MACHINE_AT.x1 - MACHINE_AT.x0, MACHINE_AT.y1 - MACHINE_AT.y0);
   drawMachine(lp, {
-    machine: { lid: 0, lamp: null, lampOut: false, flash: false, power: true, angry: true, back: 0, t: 0 },
+    machine: { lid: 0, lamp: null, lampOut: false, flash: false, power: true, angry: true, back: 0, t: 0, error: null },
     shake: { x: 0, y: 0 },
     flashWhite: false,
     ledRed: true,

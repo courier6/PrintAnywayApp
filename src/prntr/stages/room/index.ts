@@ -1,7 +1,7 @@
 import { reducedMotion, wait } from '../../anim';
 import type { Handoff, Stage } from '../../types';
 import { H, Pix, W, rotateSprite } from './pixels';
-import { CLOCK_AT, KIT_AT, KNOB, MACHINE_AT, MACHINE_PIECES, NOZZLES, SPR, drawFireFront, drawFlame, drawMarks, drawRoom, drawWindowWreck, fireRect, inDoorway, knobX, lampX, tubeX, type Broken, type ExitSign, type Hole, type Mark, type SceneState, type Tube } from './scene';
+import { CLOCK_AT, KIT_AT, KNOB, MACHINE_AT, MACHINE_PIECES, NOZZLES, SPR, drawFireFront, drawFlame, drawMarks, drawRoom, drawWindowWreck, fireRect, inDoorway, knobX, lampX, markBox, tubeX, type Broken, type ExitSign, type Hole, type Mark, type SceneState, type Tube } from './scene';
 import { ART_AT, ART_SUB, renderVictory } from './art';
 import { PAL, type PalKey } from './palette';
 import { createRoomSounds, type FireSound, type Hum } from './sounds';
@@ -106,8 +106,9 @@ const BOLT_MS = 1300;
 const BOLT_STAGGER_MS = 400;
 const BOLT_POINTS = 2;
 const BOLT_SPIN_MS = 100;
-/** A nut that landed drops out of the bottom of the frame: at 3×, a quarter turn every DROP_SPIN_MS,
- * under DROP_GRAVITY px/s², gone after DROP_MS. */
+/** A nut that landed, or a staple or a bolt shot off the glass, drops out of the bottom of the frame:
+ * a nut at 3×, a staple or a bolt at 4× as it was stuck, a quarter turn every DROP_SPIN_MS, under
+ * DROP_GRAVITY px/s², gone after DROP_MS. */
 const DROP_MS = 900;
 const DROP_SPIN_MS = 90;
 const DROP_GRAVITY = 260;
@@ -189,7 +190,17 @@ const SPRAY_MS = 1400;
 const SPRAY_EVERY_MS = 40;
 const SPRAY_FLIGHT_MS = 700;
 const SPRAY_ARC = 24;
-const NOZZLES_X = NOZZLES.map((n) => n.x);
+/** The colour nozzles; the black one is a dud (BLACK_X). */
+const NOZZLES_X = NOZZLES.filter((n) => n.color !== 'z').map((n) => n.x);
+/** The black cartridge, the fourth cap: it is empty. The first ink attack the machine picks tries it,
+ * and then one in BLACK_CHANCE of them: its tube comes up and hunts like the others, coughs out a few
+ * specks that fall back onto the machine (DUD_COUGHS_MS from the jet's start), and the display reads
+ * NO BLACK INK until DUD_ERROR_TAIL_MS after the tube starts to sink. Nothing reaches the glass. It can
+ * be shot apart like the others (TUBE_POINTS), and then it is never tried again. */
+const BLACK_X = NOZZLES.find((n) => n.color === 'z')!.x;
+const BLACK_CHANCE = 0.25;
+const DUD_COUGHS_MS = [150, 600, 1050];
+const DUD_ERROR_TAIL_MS = 1200;
 /** The machine's top edge (MACHINE.y0) and the tube's head when it is up; its mouth is 2 px into the head. */
 const TUBE_BASE = 80;
 const TUBE_TOP = 72;
@@ -340,6 +351,17 @@ const CLOCK_BURN_SPEED = 28;
 /** While the machine shakes (the pounce and its landing, the mad tremble) the clock's hands spin out of
  * control, and for CLOCK_SPIN_TAIL_MS after; then they are back at 1:37. Still under reduced motion. */
 const CLOCK_SPIN_TAIL_MS = 600;
+/** The lights, out since the pounce, flicker back on at random once the machine has FLICKER_FROM of its
+ * damage (20% of its health or less): one panel at a time (now and then both), on for FLICKER_ON_MIN–
+ * FLICKER_ON_MAX ms with a buzz, then out with a click, the next coming FLICKER_GAP_MIN–FLICKER_GAP_MAX ms
+ * later. Never closer than FLICKER_GAP_MIN, so under three flashes a second. Off under reduced motion,
+ * and off for good once the machine has burst. */
+const FLICKER_FROM = 0.8;
+const FLICKER_ON_MIN = 60;
+const FLICKER_ON_MAX = 220;
+const FLICKER_GAP_MIN = 350;
+const FLICKER_GAP_MAX = 1600;
+const FLICKER_BOTH = 0.2;
 /** The USB stick's hit area in screen px (the handoff's 44 px for the sticker), whatever the scale. */
 const USB_HIT_PX = 44;
 
@@ -376,7 +398,7 @@ const ROOM_ALT =
   'A quiet office: drop ceiling with two fluorescent panels, a door shut under an EXIT sign, a clock, a Simple Products board with notes on it by a window with its blind down on a storm outside and a green first aid kit at its lower right, a water cooler, a plant, one large copier in the middle, and a USB stick on the carpet beside it';
 
 type Phase = 'look' | 'sticker' | 'fight' | 'continue' | 'over' | 'end';
-type AttackKind = 'scan' | 'staples' | 'pages' | 'ink' | 'bolts';
+type AttackKind = 'scan' | 'staples' | 'pages' | 'ink' | 'bolts' | 'black';
 
 /** A staple, or a nut or a bolt: all thrown out of the slot at the camera. */
 type ThrownKind = 'staple' | 'nut' | 'bolt';
@@ -412,6 +434,8 @@ interface Spray {
   done: boolean;
   /** The hiss has played. */
   fed: boolean;
+  /** From the black cartridge: it coughs and nothing lands. */
+  dud: boolean;
 }
 
 interface Page {
@@ -441,8 +465,9 @@ interface Bit {
   color: PalKey;
 }
 
-/** A nut bouncing off the glass: where it hit, and when. */
+/** A nut bouncing off the glass, or a staple or a bolt shot off it: what, where it was, and when. */
 interface Drop {
+  kind: 'nut' | 'staple' | 'bolt';
   x: number;
   y: number;
   at: number;
@@ -620,7 +645,7 @@ export const room: Stage = {
       ledRed: false,
       trayPage: true,
       usb: true,
-      machine: { lid: 0, lamp: null, lampOut: false, flash: false, power: true, angry: false, back: 1, t: 0 },
+      machine: { lid: 0, lamp: null, lampOut: false, flash: false, power: true, angry: false, back: 1, t: 0, error: null },
       flashWhite: false,
       buttonBright: false,
       broken: { clock: false, poster: false, tank: false, plant: false, vase: false, kit: false },
@@ -687,6 +712,8 @@ export const room: Stage = {
     let bits: Bit[] = [];
     let drops: Drop[] = [];
     let attackIndex = 0;
+    /** Ink attacks the rotation has picked: the first tries the black cartridge. */
+    let inkTries = 0;
     let nextAttackAt = 0;
     let scanAt: number | null = null;
     /** The flash's moment (0 = no white-out); the wash fades from it over WHITEOUT_MS (half under reduced motion). */
@@ -717,6 +744,9 @@ export const room: Stage = {
     /** The clock's hands: spinning since spinFrom, until spinUntil. */
     let spinFrom = 0;
     let spinUntil = -Infinity;
+    /** The flicker: when the next panel comes on, and when each lit one goes out (null: out). */
+    let flickerNext = 0;
+    const flickerOff: (number | null)[] = [null, null];
     /** The machine is shorting out from this moment (the water jug broke); the fire takes SHORT_MS later. */
     let shortAt: number | null = null;
     let shortZaps = 0;
@@ -1301,6 +1331,30 @@ export const room: Stage = {
         addScore(staple.kind === 'staple' ? STAPLE_POINTS : BOLT_POINTS, now);
         return;
       }
+      // On the glass, on the player's side of it: a landed page slides off at once; a staple or a bolt
+      // stuck in it is knocked out and drops out of the frame. No points: it is about seeing. The ink
+      // cannot be shot off (a shot through it goes on to what is behind).
+      const stuck = pages.find((p) => {
+        if (p.shot || p.landedAt === null || now - p.landedAt >= PAGE_LANDED_MS) return false;
+        const lx = Math.floor(p.x1 - 20);
+        const ly = Math.floor(p.y1 - 26);
+        return x >= lx - 2 && x < lx + 52 && y >= ly - 2 && y < ly + 54;
+      });
+      if (stuck) {
+        stuck.landedAt = now - PAGE_LANDED_MS;
+        sounds.whoosh();
+        return;
+      }
+      for (let i = scene.marks.length - 1; i >= 0; i--) {
+        const mk = scene.marks[i];
+        const b = markBox(mk);
+        if (x < b.x0 || x >= b.x1 || y < b.y0 || y >= b.y1) continue;
+        scene.marks.splice(i, 1);
+        drops.push({ kind: mk.kind, x: mk.x, y: mk.y, at: now });
+        if (mk.kind === 'staple') sounds.stapleHit();
+        else sounds.boltHit();
+        return;
+      }
       // A spraying tube, its head or the hose over the edge: it blows up. The jet stops (what is
       // already in the air still lands), the tube's bits fly, and that nozzle never comes back.
       const jet = sprays.find((s) => {
@@ -1637,8 +1691,19 @@ export const room: Stage = {
         nextAttackAt = now + 100;
         return;
       }
-      const kind = forcedKind ?? kinds[attackIndex++ % kinds.length];
+      let kind = forcedKind ?? kinds[attackIndex++ % kinds.length];
+      // the rotation's ink tries the black cartridge first, then now and then (a forced 'ink' never does)
+      if (kind === 'ink' && forcedKind === null && !scene.stubs.includes(BLACK_X) && (inkTries++ === 0 || Math.random() < BLACK_CHANCE)) kind = 'black';
       forcedKind = null;
+      if (kind === 'black') {
+        if (scene.stubs.includes(BLACK_X)) {
+          nextAttackAt = now + gap;
+          return;
+        }
+        sprays.push({ nx: BLACK_X, x: BLACK_X, y: TUBE_TOP, at: now + TUBE_RISE_MS, color: 'z', fire: false, stoppedAt: null, done: true, fed: false, dud: true });
+        nextAttackAt = now + TUBE_RISE_MS + SPRAY_MS + TUBE_RISE_MS + gap;
+        return;
+      }
       if (kind === 'bolts') {
         for (let i = 0; i < 3; i++) {
           staples.push({ kind: Math.random() < 0.5 ? 'nut' : 'bolt', ms: BOLT_MS, x0: SLOT.x0 + 4 + Math.random() * (SLOT.x1 - SLOT.x0 - 8), x: 20 + Math.random() * 180, y: 40 + Math.random() * 70, at: now + i * BOLT_STAGGER_MS, hit: false, shot: false, fed: false });
@@ -1660,7 +1725,7 @@ export const room: Stage = {
             y = r.y0 + (r.y1 - r.y0) * 0.6 + (Math.random() - 0.5) * 8;
           }
           const nx = nozzles[Math.floor(Math.random() * nozzles.length)];
-          sprays.push({ nx, x, y, at: now + TUBE_RISE_MS + i * SPRAY_STAGGER_MS, color: NOZZLES.find((n) => n.x === nx)!.color, fire: atFire, stoppedAt: null, done: false, fed: false });
+          sprays.push({ nx, x, y, at: now + TUBE_RISE_MS + i * SPRAY_STAGGER_MS, color: NOZZLES.find((n) => n.x === nx)!.color, fire: atFire, stoppedAt: null, done: false, fed: false, dud: false });
         }
         nextAttackAt = now + TUBE_RISE_MS + (SPRAY_COUNT - 1) * SPRAY_STAGGER_MS + SPRAY_MS + SPRAY_FLIGHT_MS + gap;
       } else if (kind === 'scan') {
@@ -1829,11 +1894,14 @@ export const room: Stage = {
         holes: () => scene.holes.map((h) => h.kind),
         marks: () => scene.marks.map((m) => ({ ...m })),
         drops: () => drops.length,
+        /** The pages on the glass: where each landed, and whether it is sliding off yet. */
+        landed: () => pages.filter((p) => p.landedAt !== null).map((p) => ({ x: p.x1, y: p.y1, sliding: performance.now() - p.landedAt! >= PAGE_LANDED_MS })),
         thrown: () => staples.map((s) => ({ kind: s.kind, x: s.x, y: s.y, at: s.at, shot: s.shot, hit: s.hit })),
         ghosts: () => ghosts.length,
         name: () => lifeName.textContent,
         clock: () => ({ ...scene.clock }),
         clockSpin: () => scene.clockSpin,
+        lights: () => [...scene.lights],
         wreck: () => scene.printer === 'wreck',
         pieces: () => scene.pieces.map((q) => [Math.round(q.x), Math.round(q.y)]),
         windowOpen: () => scene.windowOpen,
@@ -2050,7 +2118,7 @@ export const room: Stage = {
             else sounds.boltHit();
             hurt(s.kind, now);
             // the mark it leaves: a staple or a bolt sticks in the glass; a nut bounces off and drops out of the frame
-            if (s.kind === 'nut') drops.push({ x: s.x, y: s.y, at: now });
+            if (s.kind === 'nut') drops.push({ kind: 'nut', x: s.x, y: s.y, at: now });
             else addMark(s.kind, s.x, s.y);
           }
         }
@@ -2071,7 +2139,8 @@ export const room: Stage = {
         for (const s of sprays) {
           if (!s.fed && now >= s.at) {
             s.fed = true;
-            sounds.inkSpray();
+            if (s.dud) sounds.inkDud();
+            else sounds.inkSpray();
           }
           if (!s.done && s.stoppedAt === null && now >= splatAt(s)) {
             s.done = true;
@@ -2242,6 +2311,9 @@ export const room: Stage = {
       poseFire(now);
       scene.flashWhite = flashFrames > 0;
       scene.damage = score / HI;
+      // the black cartridge's error on the display, from the cough until a while after
+      const dud = sprays.find((s) => s.dud && now >= s.at && now < jetEnd(s) + DUD_ERROR_TAIL_MS);
+      scene.machine.error = dud ? now - dud.at : null;
       // the angry display's flicker runs on the frame's time (still under reduced motion)
       scene.machine.t = reduced ? 0 : now;
       if (flashFrames > 0) flashFrames--;
@@ -2264,6 +2336,28 @@ export const room: Stage = {
         spinUntil = now + CLOCK_SPIN_TAIL_MS;
       }
       scene.clockSpin = now < spinUntil ? now - spinFrom : null;
+      // The lights flicker back on now and then while the machine is nearly dead.
+      const flickering = phase === 'fight' && scene.printer === 'up' && scene.damage >= FLICKER_FROM && !reduced;
+      if (frozenAt === null) {
+        for (let i = 0; i < 2; i++) {
+          const off = flickerOff[i];
+          if (off !== null && (now >= off || !flickering)) {
+            flickerOff[i] = null;
+            scene.lights[i] = false;
+            sounds.lightTick();
+          }
+        }
+        if (flickering && now >= flickerNext) {
+          const on = FLICKER_ON_MIN + Math.random() * (FLICKER_ON_MAX - FLICKER_ON_MIN);
+          const which = Math.random() < FLICKER_BOTH ? [0, 1] : [Math.floor(Math.random() * 2)];
+          for (const i of which) {
+            scene.lights[i] = true;
+            flickerOff[i] = now + on;
+          }
+          sounds.lightBuzz(on / 1000);
+          flickerNext = now + on + FLICKER_GAP_MIN + Math.random() * (FLICKER_GAP_MAX - FLICKER_GAP_MIN);
+        }
+      }
       // The slot's red light is a DOM box over the canvas: it trembles with the machine.
       slotLight.style.transform = scene.shake.x || scene.shake.y ? `translate(${scene.shake.x * scale}px, ${scene.shake.y * scale}px)` : '';
       // The cross's trail, for the snakes' lagged hunt: the pointer, or on touch the last tap.
@@ -2285,7 +2379,7 @@ export const room: Stage = {
       // The ink on the far half of its flight goes behind the machine: it is sprayed from behind it.
       scene.inkBehind = [];
       for (const s of sprays) {
-        if (now < s.at) continue;
+        if (now < s.at || s.dud) continue;
         const end = Math.min(now, jetEnd(s));
         for (let tau = s.at; tau < end; tau += SPRAY_EVERY_MS) {
           if (now - tau >= SPRAY_FLIGHT_MS / 2) continue;
@@ -2309,12 +2403,15 @@ export const room: Stage = {
         if (r.h < spr.h) fpix.blit(r.x, r.y, { w: spr.w, h: r.h, rows: spr.rows.slice(0, r.h) });
         else fpix.blit(r.x, r.y, spr, r.w / spr.w);
       }
-      // A nut that bounced off: falling and rolling out of the bottom of the frame at 3× (gone at once under reduced motion).
+      // A nut that bounced off, a staple or a bolt shot off: falling and turning out of the bottom of the
+      // frame (gone at once under reduced motion).
       for (const d of drops) {
         const a = reduced ? DROP_MS : now - d.at;
         if (a >= DROP_MS) continue;
         const k = a / 1000;
-        fpix.blit(Math.floor(d.x - 10 + 8 * k), Math.floor(d.y + DROP_GRAVITY * k * k + 10 * k - 10), rotateSprite(SPR.NUT, Math.floor(a / DROP_SPIN_MS) % 4), 3);
+        const sc = d.kind === 'nut' ? 3 : 4;
+        const spr = rotateSprite(d.kind === 'nut' ? SPR.NUT : d.kind === 'staple' ? SPR.STAPLE : SPR.BOLT, Math.floor(a / DROP_SPIN_MS) % 4);
+        fpix.blit(Math.floor(d.x - (spr.w * sc) / 2 + 8 * k), Math.floor(d.y + DROP_GRAVITY * k * k + 10 * k - (spr.h * sc) / 2), spr, sc);
       }
       // A burning page (thrown while the machine burns) carries flames up its face, from its
       // bottom edge, scaled with it; its paper is scorched at the edges.
@@ -2343,6 +2440,20 @@ export const room: Stage = {
       // and the splat building up on the glass, then running down.
       for (const s of sprays) {
         if (now < s.at) continue;
+        if (s.dud) {
+          // the black cartridge coughs: a speck hops out of the mouth and falls back onto the machine
+          DUD_COUGHS_MS.forEach((c, i) => {
+            const at = s.at + c;
+            if (now < at || at >= jetEnd(s)) return;
+            const k = (now - at) / 1000;
+            const m = mouthOf(s, at);
+            const y = Math.floor(m.y - 60 * k + 200 * k * k) + scene.shake.y;
+            if (y >= TUBE_BASE + scene.shake.y) return;
+            const x = Math.floor(m.x + (i - 1) * 2 + (i - 1) * 10 * k) + scene.shake.x;
+            fpix.rect(x, y, x + 2, y + 2 - (i === 2 ? 1 : 0), 'z');
+          });
+          continue;
+        }
         const end = Math.min(now, jetEnd(s));
         for (let tau = s.at; tau < end; tau += SPRAY_EVERY_MS) {
           if (now - tau >= SPRAY_FLIGHT_MS || now - tau < SPRAY_FLIGHT_MS / 2) continue;
