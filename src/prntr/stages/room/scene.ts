@@ -195,8 +195,9 @@ export function markBox(m: Mark): { x0: number; y0: number; x1: number; y1: numb
 export const BLIND_TOP = 39;
 export const BLIND_PITCH = 5;
 
-/** The door's knob, 2×2: near the door's free (left) edge, moving with it as the door swings in on its right hinge. */
-export const KNOB = { y: 76, w: 2, h: 2 };
+/** The door's knob, a 3×3 brass ball with a highlight and a shadow (4×4 drawn): near the door's free (left) edge,
+ * moving with it as the door swings in on its right hinge. */
+export const KNOB = { y: 76, w: 3, h: 3 };
 export const knobX = (doorGap: number): number => 16 + Math.min(doorGap, 22);
 
 /** A hole in the door that the open door has swung away from: it is in the black doorway now. */
@@ -223,6 +224,8 @@ export const tubeX = (tb: Tube, y: number): number => {
 export interface SceneState {
   /** Left, right fluorescent panel. */
   lights: [boolean, boolean];
+  /** The lit panels are red (the mad machine's shaking at RED_LIGHTS_FROM of its damage), not white. */
+  lightsRed: boolean;
   /** The weeping fig by the window. */
   fig: Fig;
   printer: PrinterPose;
@@ -927,7 +930,8 @@ export function drawRoom(p: Pix, s: SceneState): void {
   p.fill('A');
   // the ceiling, exposed (the objects sheet's #4): a dark deck with its ribs, a fat duct along it with its
   // seams, a pipe and a rust-red line under it, a shadow where it meets the wall; the two lights are bare
-  // tube fixtures hanging on two cords each, the tube white when lit (with a glow row under it), grey when out
+  // tube fixtures hanging on two cords each, the tube white when lit (with a glow row under it), grey when out,
+  // red when the mad machine's shaking has brought them back (lightsRed)
   p.rect(0, 0, W, 29, 'B');
   p.rect(0, 0, W, 3, 'X');
   for (let x = 0; x < W; x += 12) p.rect(x, 0, x + 1, 3, 'G');
@@ -945,8 +949,8 @@ export function drawRoom(p: Pix, s: SceneState): void {
     line(p, x0 + 40, 0, x0 + 40, 12, 'K');
     p.rect(x0 + 2, 12, x0 + 46, 15, 'g');
     p.rect(x0 + 2, 15, x0 + 46, 16, 'K');
-    p.rect(x0 + 4, 16, x0 + 44, 18, on ? 'W' : 'f');
-    if (on) p.rect(x0 + 4, 18, x0 + 44, 19, 'F');
+    p.rect(x0 + 4, 16, x0 + 44, 18, on ? (s.lightsRed ? 'Q' : 'W') : 'f');
+    if (on) p.rect(x0 + 4, 18, x0 + 44, 19, s.lightsRed ? 'R' : 'F');
   });
   // the wall darkens under a tube that is out
   if (!s.lights[0]) p.rect(0, 29, 120, 108, 'a');
@@ -977,8 +981,11 @@ export function drawRoom(p: Pix, s: SceneState): void {
       // the door's leading edge
       p.rect(13 + s.doorGap, 43, 14 + s.doorGap, 108, 'E');
     }
+    // the knob: brass, lit from the upper left, its shadow down and to the right
     const kx = knobX(s.doorGap);
-    p.rect(kx, KNOB.y, kx + KNOB.w, KNOB.y + KNOB.h, 'K');
+    p.rect(kx + 1, KNOB.y + 1, kx + KNOB.w + 1, KNOB.y + KNOB.h + 1, 'K');
+    p.rect(kx, KNOB.y, kx + KNOB.w, KNOB.y + KNOB.h, 'y');
+    p.set(kx, KNOB.y, 'W');
   }
   // the EXIT sign: on the wall, hanging loose, falling, or on the floor in front of the door
   const sign = s.exit;

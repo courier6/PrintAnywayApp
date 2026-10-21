@@ -406,8 +406,15 @@ const FLICKER_ON_MAX = 220;
 const FLICKER_GAP_MIN = 350;
 const FLICKER_GAP_MAX = 1600;
 const FLICKER_BOTH = 0.2;
+/** From RED_LIGHTS_FROM of the machine's damage (60% of its health or less), while it is mad (its tremble is the
+ * shaking) and the fight is on, the lights come back on red and the room glows red (.is-red-lit, the wash
+ * .prntr-room-red-light); out again when the shaking stops (a freeze, the burst). No flicker meanwhile. */
+const RED_LIGHTS_FROM = 0.4;
 /** The USB stick's hit area in screen px (the handoff's 44 px for the sticker), whatever the scale. */
 const USB_HIT_PX = 44;
+/** How far a thrown thing's glow and the fire's light reach past the sprite, virtual px: the gradient's fade. */
+const GLOW_PAD = 7;
+const FIRE_GLOW_PAD = 12;
 
 interface Hotspot {
   id: string;
@@ -426,7 +433,7 @@ const HOTSPOTS: Hotspot[] = [
   { id: 'page', x0: 96, y0: 108, x1: 144, y1: 114, captions: ['A PAGE. BLANK.', 'A PAGE. BLANK.'] },
   { id: 'printer', x0: 84, y0: 86, x1: 156, y1: 138, captions: ["A PRINTER. IT'S ON.", "IT'S WARM."] },
   // Too frightening to go through (the handoff had LOCKED. / STILL LOCKED.).
-  { id: 'door', x0: 6, y0: 27, x1: 48, y1: 112, captions: ['NOT IN THERE.', "IT KNOWS YOU'RE HERE."] },
+  { id: 'door', x0: 6, y0: 27, x1: 48, y1: 112, captions: ['NOT IN THERE.', 'LOCKED. THE STORM IS LEANING ON IT.'] },
   { id: 'poster', ...BOARD_HIT, captions: ['SIMPLE PRODUCTS. WE PRINT.', 'SIMPLE PRODUCTS. WE PRINT.'] },
   { id: 'clock', ...CLOCK_HIT, captions: ['1:37.', '1:37.'] },
   // The blind is down over it (the handoff had IT'S BRIGHT OUT.).
@@ -474,6 +481,9 @@ interface Spray {
   color: (typeof NOZZLES)[number]['color'];
   /** Aimed at the fire, not the player: landing, it puts out what it touches. */
   fire: boolean;
+  /** Where the jet's first ink hit the glass (set as it lands): the aim locks there, and the splat builds
+   * and runs down there instead of following the cross. Null until then. */
+  landing: { x: number; y: number } | null;
   /** The nozzle was shot at this moment: the jet stops, what is in the air still lands. */
   stoppedAt: number | null;
   /** The whole jet has landed: the hit has been taken. */
@@ -612,6 +622,8 @@ export const room: Stage = {
     // The inside of the glows of what the machine throws, under the front layer, so its sprites stay crisp
     // over it and the glow has no hollow where a sprite is open (a staple's loop, a burning page's edges).
     const glowFills = el('div', 'prntr-room-glow-fills');
+    // The red lights' wash over the room (under the front layer), faded in by .is-red-lit on the frame.
+    const redLight = el('div', 'prntr-room-red-light');
     for (const n of [light, spill, fireLight, slotLight, holeLights, windowLight, stormWash, wash, glows, glowFills]) n.setAttribute('aria-hidden', 'true');
     const hud = el('div', 'prntr-room-hud');
     const scoreEl = el('div', 'prntr-room-score', 'SCORE 0000');
@@ -672,7 +684,7 @@ export const room: Stage = {
     const deathEl = el('div', 'prntr-room-death');
     deathEl.setAttribute('aria-hidden', 'true');
     deathEl.hidden = true;
-    frame.append(art, canvas, ...(rippleBack ? [rippleBack.canvas] : []), light, spill, fireLight, slotLight, holeLights, windowLight, glowFills, front, ...(rippleFront ? [rippleFront.canvas] : []), stormWash, wash, glows, hud, cursor, hurtEl, deathEl, continueEl, overEl);
+    frame.append(art, canvas, ...(rippleBack ? [rippleBack.canvas] : []), light, spill, fireLight, slotLight, holeLights, windowLight, glowFills, redLight, front, ...(rippleFront ? [rippleFront.canvas] : []), stormWash, wash, glows, hud, cursor, hurtEl, deathEl, continueEl, overEl);
     wrap.append(frame);
     root.append(wrap);
 
@@ -699,6 +711,7 @@ export const room: Stage = {
     const cpix = new Pix();
     const scene: SceneState = {
       lights: [true, true],
+      lightsRed: false,
       printer: 'up',
       ledRed: false,
       trayPage: true,
@@ -1293,14 +1306,17 @@ export const room: Stage = {
       return { x: tubeX(tb, tb.top), y: tb.top + 2 };
     };
     /** Where the particle launched at τ goes: at the cross as it was HUNT_LAG_MS before, while the tubes
-     * snake and there was a cross; else the jet's own point (random, or the fire). */
+     * snake and there was a cross; else the jet's own point (random, or the fire). Once the jet's first ink
+     * has hit the glass, every particle launched after it goes where that one landed: the splat stays put. */
     const aimAt = (s: Spray, tau: number) => {
       if (s.fire || snakeU() <= 0) return { x: s.x, y: s.y };
+      if (s.landing && tau >= s.at + SPRAY_FLIGHT_MS) return s.landing;
       const c = crossAgo(HUNT_LAG_MS, tau);
       return c ? { x: c.x, y: c.y } : { x: s.x, y: s.y };
     };
-    /** Where the jet is landing now: the target of the particle landing at `now` (the last one's once the jet has ended). */
-    const landingOf = (s: Spray, now: number) => aimAt(s, Math.max(s.at, Math.min(jetEnd(s), now - SPRAY_FLIGHT_MS)));
+    /** Where the jet is landing: where its first ink hit, once it has; before that the target of the particle landing
+     * at `now`. */
+    const landingOf = (s: Spray, now: number) => s.landing ?? aimAt(s, Math.max(s.at, Math.min(jetEnd(s), now - SPRAY_FLIGHT_MS)));
     /** Where the particle launched at τ is at `now`: along an arc from the mouth to its target, spreading a little. */
     const particlePose = (s: Spray, tau: number, now: number) => {
       const v = (now - tau) / SPRAY_FLIGHT_MS;
@@ -1963,7 +1979,7 @@ export const room: Stage = {
           nextAttackAt = now + gap;
           return;
         }
-        sprays.push({ nx: BLACK_X, x: BLACK_X, y: TUBE_TOP, at: now + TUBE_RISE_MS, color: 'z', fire: false, stoppedAt: null, done: true, fed: false, dud: true });
+        sprays.push({ nx: BLACK_X, x: BLACK_X, y: TUBE_TOP, at: now + TUBE_RISE_MS, color: 'z', fire: false, landing: null, stoppedAt: null, done: true, fed: false, dud: true });
         nextAttackAt = now + TUBE_RISE_MS + SPRAY_MS + TUBE_RISE_MS + gap;
         return;
       }
@@ -1989,7 +2005,7 @@ export const room: Stage = {
             y = r.y0 + (r.y1 - r.y0) * 0.6 + (Math.random() - 0.5) * 8;
           }
           const nx = nozzles[Math.floor(Math.random() * nozzles.length)];
-          sprays.push({ nx, x, y, at: now + TUBE_RISE_MS + i * SPRAY_STAGGER_MS, color: NOZZLES.find((n) => n.x === nx)!.color, fire: atFire, stoppedAt: null, done: false, fed: false, dud: false });
+          sprays.push({ nx, x, y, at: now + TUBE_RISE_MS + i * SPRAY_STAGGER_MS, color: NOZZLES.find((n) => n.x === nx)!.color, fire: atFire, landing: null, stoppedAt: null, done: false, fed: false, dud: false });
         }
         nextAttackAt = now + TUBE_RISE_MS + (SPRAY_COUNT - 1) * SPRAY_STAGGER_MS + SPRAY_MS + SPRAY_FLIGHT_MS + gap;
       } else if (kind === 'scan') {
@@ -2175,6 +2191,7 @@ export const room: Stage = {
         clock: () => ({ ...scene.clock }),
         clockSpin: () => scene.clockSpin,
         lights: () => [...scene.lights],
+        lightsRed: () => scene.lightsRed,
         daze: () => dazeNow(performance.now()),
         fig: () => ({ ...scene.fig, leaves: scene.broken.fig, pot: scene.broken.figPot }),
         wreck: () => scene.printer === 'wreck',
@@ -2429,6 +2446,8 @@ export const room: Stage = {
             if (s.dud) sounds.inkDud();
             else sounds.inkSpray();
           }
+          // the first ink on the glass: the jet's aim locks there
+          if (!s.landing && !s.dud && now >= s.at + SPRAY_FLIGHT_MS) s.landing = landingOf(s, now);
           if (!s.done && s.stoppedAt === null && now >= splatAt(s)) {
             s.done = true;
             sounds.inkSplat();
@@ -2460,11 +2479,12 @@ export const room: Stage = {
         const hx = tubeX(tb, tb.top);
         rects.push({ x: Math.min(s.nx, hx) - 3 + scene.shake.x, y: tb.top + scene.shake.y, w: Math.abs(hx - s.nx) + 6, h: TUBE_BASE - tb.top });
       }
-      // the thrown things (the staples, nuts and bolts, then the pages) get a filled inside too
-      const thrown = rects.slice(0, staples.filter((s) => now >= s.at && !s.hit && !s.shot).length + pages.filter((p) => now >= p.at && !p.shot && p.landedAt === null).length);
+      // the thrown things (the staples, nuts and bolts, then the pages) glow under the front layer, as one
+      // gradient on a box GLOW_PAD wider a side; the tubes and the button keep the outer glow over everything
+      const thrown = rects.splice(0, staples.filter((s) => now >= s.at && !s.hit && !s.shot).length + pages.filter((p) => now >= p.at && !p.shot && p.landedAt === null).length);
       if (scene.buttonBright) rects.push({ ...BUTTON, x: BUTTON.x + scene.shake.x, y: BUTTON.y + scene.shake.y });
       placeGlows(glows, 'prntr-room-glow', rects);
-      placeGlows(glowFills, 'prntr-room-glow-fill', thrown);
+      placeGlows(glowFills, 'prntr-room-glow-fill', thrown.map((r) => ({ x: r.x - GLOW_PAD, y: r.y - GLOW_PAD, w: r.w + 2 * GLOW_PAD, h: r.h + 2 * GLOW_PAD })));
     };
     const placeGlows = (layer: HTMLElement, cls: string, rects: { x: number; y: number; w: number; h: number }[]) => {
       while (layer.children.length < rects.length) layer.append(el('div', cls));
@@ -2540,10 +2560,10 @@ export const room: Stage = {
       scene.fire = { u: fireU(now), t: reduced ? 0 : now, v: spreadU(now) };
       const r = fireRect(scene.fire.u);
       fireLight.hidden = false;
-      fireLight.style.left = `${r.x0 * scale}px`;
-      fireLight.style.top = `${r.y0 * scale}px`;
-      fireLight.style.width = `${(r.x1 - r.x0) * scale}px`;
-      fireLight.style.height = `${(r.y1 - r.y0) * scale}px`;
+      fireLight.style.left = `${(r.x0 - FIRE_GLOW_PAD) * scale}px`;
+      fireLight.style.top = `${(r.y0 - FIRE_GLOW_PAD) * scale}px`;
+      fireLight.style.width = `${(r.x1 - r.x0 + 2 * FIRE_GLOW_PAD) * scale}px`;
+      fireLight.style.height = `${(r.y1 - r.y0 + 2 * FIRE_GLOW_PAD) * scale}px`;
       fireLight.style.opacity = reduced ? '0.8' : String(0.65 + 0.35 * Math.abs(Math.sin(now / 90)));
     };
     // The storm outside: a near strike (its bolt in the door's or the window's view), far lightning
@@ -2656,8 +2676,18 @@ export const room: Stage = {
         spinUntil = now + CLOCK_SPIN_TAIL_MS;
       }
       scene.clockSpin = now < spinUntil ? now - spinFrom : null;
+      // The mad machine's shaking at RED_LIGHTS_FROM of its damage brings the lights back on, red, and the room
+      // with them; they go out again when it stops (a freeze, the burst). The flicker rests meanwhile.
+      const redLit = phase === 'fight' && scene.printer === 'up' && frozenAt === null && mad && scene.damage >= RED_LIGHTS_FROM;
+      if (redLit !== scene.lightsRed) {
+        scene.lightsRed = redLit;
+        scene.lights = [redLit, redLit];
+        flickerOff[0] = flickerOff[1] = null;
+        frame.classList.toggle('is-red-lit', redLit);
+        sounds.lightTick();
+      }
       // The lights flicker back on now and then while the machine is nearly dead.
-      const flickering = phase === 'fight' && scene.printer === 'up' && scene.damage >= FLICKER_FROM && !reduced;
+      const flickering = phase === 'fight' && scene.printer === 'up' && scene.damage >= FLICKER_FROM && !reduced && !redLit;
       // A lit panel goes out on its time, and at once when the flicker is over (the fight phase ended, the machine
       // burst) or the room freezes (a death): a 60–220 ms flash is not held through a freeze.
       for (let i = 0; i < 2; i++) {
