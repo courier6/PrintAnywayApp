@@ -1,7 +1,7 @@
 import { reducedMotion, wait } from '../../anim';
 import type { Handoff, Stage } from '../../types';
 import { H, Pix, W, rotateSprite } from './pixels';
-import { CLOCK_AT, KIT_AT, KNOB, MACHINE_AT, MACHINE_PIECES, NOZZLES, SPR, drawFireFront, drawFlame, drawMarks, drawRoom, drawWindowWreck, fireRect, inDoorway, knobX, lampX, markBox, tubeX, type Broken, type ExitSign, type Hole, type Mark, type SceneState, type Tube } from './scene';
+import { CLOCK_AT, KIT_AT, KNOB, MACHINE_AT, MACHINE_PIECES, NOZZLES, SPR, drawFireFront, drawFlame, drawMarks, drawRoom, drawWindowWreck, figLeaf, fireRect, inDoorway, knobX, lampX, markBox, tubeX, type Broken, type ExitSign, type Hole, type Mark, type SceneState, type Tube } from './scene';
 import { ART_AT, ART_SUB, renderVictory } from './art';
 import { PAL, type PalKey } from './palette';
 import { createRoomSounds, type FireSound, type Hum } from './sounds';
@@ -109,6 +109,9 @@ const GLASS_MARKS_MAX = 40;
  * for HIT_DAMAGE.nut and drops out of the frame; a bolt sticks for HIT_DAMAGE.bolt and stays as a
  * mark (PRNTR-PLANNING.md P1.C). BOLT_POINTS when shot. */
 const BOLT_HEALTH = 0.5;
+/** The ink comes into the rotation with the fire (or the mad machine), and at INK_HEALTH of its health or
+ * less whatever else: there it takes two places in the rotation, so every other attack or so is ink. */
+const INK_HEALTH = 0.75;
 const BOLT_MS = 1300;
 const BOLT_STAGGER_MS = 400;
 const BOLT_POINTS = 2;
@@ -342,8 +345,8 @@ const BREAKABLES: { id: keyof Broken; x0: number; y0: number; x1: number; y1: nu
   { id: 'tank', x0: 48, y0: 90, x1: 76, y1: 108, sound: 'shatter' },
   { id: 'plant', x0: 190, y0: 93, x1: 239, y1: 119, sound: 'rustle' },
   { id: 'vase', x0: 203, y0: 119, x1: 226, y1: 136, sound: 'shatter' },
-  // the fig behind the monstera (which is in front, so it is tried first): its crown, then its planter
-  { id: 'fig', x0: 172, y0: 56, x1: 213, y1: 90, sound: 'rustle' },
+  // the fig behind the monstera (which is in front, so it is tried first): its crown (only on a leaf, figLeaf), then its planter
+  { id: 'fig', x0: 165, y0: 53, x1: 220, y1: 110, sound: 'rustle' },
   { id: 'figPot', x0: 180, y0: 115, x1: 204, y1: 131, sound: 'shatter' },
 ];
 /** The clock shot: it falls off the wall over CLOCK_FALL_MS, drifting to
@@ -367,7 +370,8 @@ const CLOCK_SPIN_TAIL_MS = 600;
  * (a cut under reduced motion), and lands leaning on the machine's back corner with a crash of leaves.
  * Leaning there while the fire burns, it catches FIG_CATCH_MS later and burns, and the burning tree
  * sets the machine going: the fire's spread onto it starts at once whatever its health, or, already
- * spreading, goes a stoke faster. */
+ * spreading, goes a stoke faster. The machine answers with its nuts and bolts: a volley of them at once,
+ * and the bolts in the rotation from then on, whatever its health. */
 const FIG_FALL_MS = 700;
 const FIG_CATCH_MS = 1200;
 /** The lights, out since the pounce, flicker back on at random once the machine has FLICKER_FROM of its
@@ -410,7 +414,7 @@ const HOTSPOTS: Hotspot[] = [
   { id: 'art', x0: ART_AT.x - 4, y0: ART_AT.y - 4, x1: ART_AT.x + ART_AT.w + 4, y1: ART_AT.y + ART_AT.h + 4, captions: ['THE WINGED VICTORY. A PRINT.', 'SHE HAS NO HEAD.'] },
   // the monstera is in front of the fig, the fig in front of the window: tried in that order
   { id: 'plant', x0: 190, y0: 92, x1: 240, y1: 138, captions: ["A PLANT. IT'S REAL.", "A PLANT. IT'S REAL."] },
-  { id: 'fig', x0: 172, y0: 56, x1: 213, y1: 131, captions: ['A FIG. OLDER THAN THE OFFICE.', 'IT LEANS TOWARD THE PRINTER.'] },
+  { id: 'fig', x0: 165, y0: 53, x1: 220, y1: 131, captions: ['A FIG. OLDER THAN THE OFFICE.', 'IT LEANS TOWARD THE PRINTER.'] },
   { id: 'window', x0: 156, y0: 32, x1: 228, y1: 94, captions: ['UNABLE TO OPEN.', 'STILL UNABLE TO OPEN.'] },
   { id: 'cooler', x0: 46, y0: 88, x1: 78, y1: 140, captions: ['WATER COOLER. FULL.', 'STILL FULL.'] },
 ];
@@ -802,6 +806,8 @@ export const room: Stage = {
     let mad = false;
     /** The fire has just caught: the next attack is a colour volley, whatever the rotation says. */
     let inkNow = false;
+    /** The fig has just caught: the next attack is a volley of nuts and bolts (after the ink's, if both wait). */
+    let boltsNow = false;
     let frameCount = 0;
     /** When the door starts to open (set as the sign lands), and when it did. */
     let doorAt: number | null = null;
@@ -1480,7 +1486,7 @@ export const room: Stage = {
         ctx.announce('First aid. Health full.');
         return;
       }
-      const thing = BREAKABLES.find((b) => !scene.broken[b.id] && !(b.id === 'fig' && scene.broken.figPot) && x >= b.x0 && x < b.x1 && y >= b.y0 && y < b.y1);
+      const thing = BREAKABLES.find((b) => !scene.broken[b.id] && !(b.id === 'fig' && (scene.broken.figPot || !figLeaf(x, y))) && x >= b.x0 && x < b.x1 && y >= b.y0 && y < b.y1);
       if (thing) {
         scene.broken[thing.id] = true;
         // the pot shot takes the plant with it (one break's points); the leaves shot leave the pot
@@ -1739,13 +1745,23 @@ export const room: Stage = {
     let forcedKind: AttackKind | null = null;
     // The machine does not move. Scan, staples, pages, in rotation; once it has caught fire, ink too; at
     // half health or less, nuts and bolts too.
-    const launchAttack = (now: number) => {
-      const gap = attackGap();
+    /** The attacks the machine takes turns with now. */
+    const rotation = (): AttackKind[] => {
       // the bulb shot, the scan is over for good: nothing to sweep with, nothing to flash
       const kinds: AttackKind[] = bulbOut ? ['staples', 'pages'] : ['scan', 'staples', 'pages'];
+      const low = 1 - score / HI <= INK_HEALTH;
+      if ((fireAt !== null || mad || low) && NOZZLES_X.some((x) => !scene.stubs.includes(x))) {
+        kinds.push('ink');
+        // low, a second ink early in the rotation, never right after the first
+        if (low) kinds.splice(1, 0, 'ink');
+      }
+      if (score >= HI * BOLT_HEALTH || scene.fig.burning) kinds.push('bolts');
+      return kinds;
+    };
+    const launchAttack = (now: number) => {
+      const gap = attackGap();
+      const kinds = rotation();
       const nozzles = NOZZLES_X.filter((x) => !scene.stubs.includes(x));
-      if ((fireAt !== null || mad) && nozzles.length) kinds.push('ink');
-      if (score >= HI * BOLT_HEALTH) kinds.push('bolts');
       // Nothing while the lid is up (a scan is on), and no scan while a tube is up: the lid would
       // cover it. The attack waits; a forced one keeps.
       const tubesUp = sprays.some((s) => now >= s.at - TUBE_RISE_MS && now < jetEnd(s) + TUBE_RISE_MS);
@@ -1753,10 +1769,12 @@ export const room: Stage = {
         nextAttackAt = now + 100;
         return;
       }
-      // the fire's volley comes first, unless an attack was forced (it waits for the next)
+      // the fire's volley comes first, then the burning fig's, unless an attack was forced (they wait for the next)
       const fireVolley = forcedKind === null && inkNow && nozzles.length > 0;
+      const figVolley = forcedKind === null && !fireVolley && boltsNow;
       if (fireVolley) inkNow = false;
-      let kind = forcedKind ?? (fireVolley ? 'ink' : kinds[attackIndex++ % kinds.length]);
+      if (figVolley) boltsNow = false;
+      let kind = forcedKind ?? (fireVolley ? 'ink' : figVolley ? 'bolts' : kinds[attackIndex++ % kinds.length]);
       // the rotation's ink tries the black cartridge first, then now and then (a forced 'ink' never does)
       if (kind === 'ink' && forcedKind === null && !fireVolley && !scene.stubs.includes(BLACK_X) && (inkTries++ === 0 || Math.random() < BLACK_CHANCE)) kind = 'black';
       forcedKind = null;
@@ -1822,7 +1840,8 @@ export const room: Stage = {
         return;
       }
       // The ceiling, wall, carpet and the light: nothing, and the caption stays.
-      const h = HOTSPOTS.find((h) => v.x >= h.x0 && v.x < h.x1 && v.y >= h.y0 && v.y < h.y1);
+      // the fig only on its leaves or about its planter: between them the window is seen, and captioned
+      const h = HOTSPOTS.find((h) => v.x >= h.x0 && v.x < h.x1 && v.y >= h.y0 && v.y < h.y1 && (h.id !== 'fig' || v.y >= 110 || figLeaf(v.x, v.y)));
       if (!h) return;
       const n = (clicks.get(h.id) ?? 0) + 1;
       clicks.set(h.id, n);
@@ -1942,6 +1961,9 @@ export const room: Stage = {
         /** The x of a tube spraying at the fire right now, or null. */
         fireJet: () => sprays.find((s) => s.fire && spraying(s, performance.now()))?.nx ?? null,
         mad: () => mad,
+        /** The attacks in turn now, and the volleys waiting (the fire's ink, the burning fig's bolts). */
+        rotation: () => rotation(),
+        volleys: () => ({ ink: inkNow, bolts: boltsNow }),
         spread: () => spreadAt !== null,
         stokes: () => stokes,
         spreadMs: () => spreadMs,
@@ -2417,6 +2439,8 @@ export const room: Stage = {
         if (now >= figCatchAt) {
           scene.fig.burning = true;
           sounds.whoosh();
+          boltsNow = true;
+          nextAttackAt = Math.min(nextAttackAt, now);
           if (spreadAt === null) spreadAt = now;
           else if (stokes < STOKE_MAX) {
             const v = spreadU(now);

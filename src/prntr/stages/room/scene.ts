@@ -278,10 +278,22 @@ export const COOLER_SHOT_AT = { x: 51, y: 103 };
 /** The weeping fig by the window, behind the monstera: its tree (or bare) and its planter (or the shards); it
  * falls about FIG_AT.pivot, the foot of its trunk, by up to FIG_LEAN radians toward the machine, and comes to
  * rest against the machine's back right corner (the machine is drawn after it, in front). */
-export const FIG_AT = { tree: { x: 172, y: 56 }, bare: { x: 176, y: 62 }, pot: { x: 181, y: 116 }, shards: { x: 177, y: 121 }, pivot: { x: 192, y: 126 } };
+export const FIG_AT = { tree: { x: 166, y: 52 }, bare: { x: 166, y: 52 }, pot: { x: 181, y: 116 }, shards: { x: 177, y: 121 }, pivot: { x: 192, y: 126 } };
 export const FIG_LEAN = 0.5;
 /** The fig's crown, for the flames when it burns: its centre on the standing tree. */
-const FIG_CROWN = { x: 192, y: 73 };
+const FIG_CROWN = { x: 192, y: 72 };
+/** A leaf of the standing fig at (x, y), or within a px of it: its crown is shot only there, and a shot through its
+ * gaps goes on to the blind behind. */
+export function figLeaf(x: number, y: number): boolean {
+  const s = SPR.FIG;
+  for (let dy = -1; dy <= 1; dy++) {
+    for (let dx = -1; dx <= 1; dx++) {
+      const k = s.rows[Math.floor(y) + dy - FIG_AT.tree.y]?.[Math.floor(x) + dx - FIG_AT.tree.x];
+      if (k === 'V' || k === 'v' || k === 'n') return true;
+    }
+  }
+  return false;
+}
 
 /** Blits a sprite turned by a radians toward the left (its top going left) about a pivot: each pixel of the
  * turned box takes the sprite pixel that turns onto it (nearest), so nothing gaps. */
@@ -409,6 +421,8 @@ export function drawStorm(p: Pix, r: Rect, s: StormView): void {
   const sky: PalKey = near > 0.6 ? 'W' : near > 0.25 ? 'j' : near > 0 ? 'U' : 'N';
   p.rect(r.x0, r.y0, r.x1, r.y1, sky);
   const inR = (x: number, y: number) => x >= r.x0 && x < r.x1 && y >= r.y0 && y < r.y1;
+  // the lines (the road, the bolt) clipped to the opening, so none of them lands on the door or the wall around a hole
+  const q = { set: (px: number, py: number, k: PalKey) => inR(px, py) && p.set(px, py, k) };
   // the clouds
   const lit = far > 0 && near === 0;
   const d = Math.floor(t / 120);
@@ -434,8 +448,8 @@ export function drawStorm(p: Pix, r: Rect, s: StormView): void {
     for (let y = by0 + 3; y < HORIZON - 2; y += 4) for (let x = bx0 + 2; x < bx1 - 1; x += 3) if (inR(x, y)) p.set(x, y, near > 0.6 ? 'M' : 'J');
     for (let y = by0 - 6; y < by0; y++) if (inR(bx0 + 6, y)) p.set(bx0 + 6, y, 'N');
     if (r.x0 < 50) {
-      line(p, r.x0, r.y1 - 1, Math.min(r.x1 - 1, r.x0 + 24), HORIZON, 'N');
-      line(p, r.x0 + 4, r.y1 - 1, Math.min(r.x1 - 1, r.x0 + 26), HORIZON, 'N');
+      line(q, r.x0, r.y1 - 1, Math.min(r.x1 - 1, r.x0 + 24), HORIZON, 'N');
+      line(q, r.x0 + 4, r.y1 - 1, Math.min(r.x1 - 1, r.x0 + 26), HORIZON, 'N');
     }
     for (const px of [172, 186, 206, 20, 30]) {
       if (px < r.x0 || px >= r.x1) continue;
@@ -451,11 +465,9 @@ export function drawStorm(p: Pix, r: Rect, s: StormView): void {
     while (y < HORIZON) {
       const ny = Math.min(HORIZON, y + 4 + Math.floor(hash(s.bolt.seed + i) * 6));
       const nx = x + Math.floor(hash(s.bolt.seed + i * 3 + 1) * 9) - 4;
-      if (inR(nx, y) && inR(x, y)) {
-        line(p, x, y, nx, Math.min(ny, r.y1 - 1), 'j');
-        line(p, x + 1, y, nx + 1, Math.min(ny, r.y1 - 1), 'W');
-      }
-      if (i === 2 && inR(nx + 6, ny + 8)) line(p, nx, ny, nx + 6, ny + 8, 'j');
+      line(q, x, y, nx, ny, 'j');
+      line(q, x + 1, y, nx + 1, ny, 'W');
+      if (i === 2) line(q, nx, ny, nx + 6, ny + 8, 'j');
       x = nx;
       y = ny;
       i++;
@@ -535,7 +547,7 @@ export function drawMarks(p: Pix, marks: Mark[]): void {
 }
 
 /** A one-pixel line from (x0,y0) to (x1,y1). */
-export function line(p: Pix, x0: number, y0: number, x1: number, y1: number, key: PalKey): void {
+export function line(p: Pick<Painter, 'set'>, x0: number, y0: number, x1: number, y1: number, key: PalKey): void {
   const n = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0), 1);
   for (let i = 0; i <= n; i++) p.set(Math.round(x0 + ((x1 - x0) * i) / n), Math.round(y0 + ((y1 - y0) * i) / n), key);
 }
