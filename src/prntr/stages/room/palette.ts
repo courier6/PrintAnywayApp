@@ -84,13 +84,14 @@ KgggGgGgK
 KggGKKKKK
 KKKK.....
 `,
-  // 6 × 5
+  // 8 × 5: a staple with a staple's proportions: a wide crown with a bright edge over dark steel,
+  // three rows of thin leg, open underneath (the attacks sheet's STAPLE2; not in sprites.txt)
   STAPLE: `
-gggggg
-gWWWWg
-gW..Wg
-gW..Wg
-gW..Wg
+GGGGGGGG
+GWWWWWWG
+G......G
+G......G
+G......G
 `,
   // 12 × 22
   COOLER: `

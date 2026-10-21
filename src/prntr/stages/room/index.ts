@@ -1,7 +1,7 @@
 import { reducedMotion, wait } from '../../anim';
 import type { Handoff, Stage } from '../../types';
 import { H, Pix, W, rotateSprite } from './pixels';
-import { CLOCK_AT, KIT_AT, MACHINE_AT, MACHINE_PIECES, NOZZLES, SPR, drawFireFront, drawFlame, drawRoom, drawWindowWreck, fireRect, inDoorway, lampX, tubeX, type Broken, type ExitSign, type Hole, type SceneState, type Tube } from './scene';
+import { CLOCK_AT, KIT_AT, MACHINE_AT, MACHINE_PIECES, NOZZLES, SPR, drawFireFront, drawFlame, drawMarks, drawRoom, drawWindowWreck, fireRect, inDoorway, lampX, tubeX, type Broken, type ExitSign, type Hole, type Mark, type SceneState, type Tube } from './scene';
 import { ART_AT, ART_SUB, renderVictory } from './art';
 import { PAL, type PalKey } from './palette';
 import { createRoomSounds, type FireSound, type Hum } from './sounds';
@@ -33,7 +33,7 @@ const RESPAWN_MS = 2000;
  * lands takes HIT_DAMAGE of it and the room flashes red for HURT_MS; the hit that empties it
  * costs a life (the death beat above), and the bar is full again when the beat is over. */
 const PLAYER_HEALTH = 100;
-const HIT_DAMAGE = { staple: 25, page: 34, firePage: 43, ink: 50, nut: 68, bolt: 68 } as const;
+const HIT_DAMAGE = { staple: 25, page: 34, firePage: 43, ink: 50, nut: 25, bolt: 50 } as const;
 const HURT_MS = 150;
 /** A lost heart's ghost floating up can be shot (± GHOST_HIT_PAD virtual px around it): it pops
  * like a balloon, its bits gone after POP_MS. No points: it was the player's. */
@@ -82,6 +82,9 @@ const LATE_SCORE = 900;
 const LID_MS = 450;
 const SWEEP_MS = 1200;
 const WASH_MS = 300;
+/** The flash whites the whole glass: the wash at 100% fading over WHITEOUT_MS as (1 − u)²; half as
+ * long under reduced motion (PRNTR-PLANNING.md P1.B). What is in the air is inside the white. */
+const WHITEOUT_MS = 1200;
 const SCAN_TOTAL_MS = LID_MS + SWEEP_MS + WASH_MS + LID_MS;
 const LAMP_POINTS = 40;
 const LAMP_HIT_PAD = 1;
@@ -89,14 +92,24 @@ const STAPLE_MS = 1500;
 const STAPLE_STAGGER_MS = 500;
 /** The staple's hit box: its sprite at the current scale, plus this many virtual px around. */
 const STAPLE_HIT_PAD = 3;
+/** A staple tumbles a quarter turn every STAPLE_SPIN_MS in flight (a nut or a bolt every BOLT_SPIN_MS). */
+const STAPLE_SPIN_MS = 180;
+/** The marks on the glass (a staple stuck in, a bolt stuck point first): the oldest go past this many. */
+const GLASS_MARKS_MAX = 40;
 /** At half health or less the machine throws nuts and bolts too: out of the
- * slot and at the camera like the staples, spinning, a little quicker, twice a page's damage
- * (HIT_DAMAGE), BOLT_POINTS when shot. */
+ * slot and at the camera like the staples, spinning, a little quicker. A nut bounces off the glass
+ * for HIT_DAMAGE.nut and drops out of the frame; a bolt sticks for HIT_DAMAGE.bolt and stays as a
+ * mark (PRNTR-PLANNING.md P1.C). BOLT_POINTS when shot. */
 const BOLT_HEALTH = 0.5;
 const BOLT_MS = 1300;
 const BOLT_STAGGER_MS = 400;
 const BOLT_POINTS = 2;
 const BOLT_SPIN_MS = 100;
+/** A nut that landed drops out of the bottom of the frame: at 3×, a quarter turn every DROP_SPIN_MS,
+ * under DROP_GRAVITY px/s², gone after DROP_MS. */
+const DROP_MS = 900;
+const DROP_SPIN_MS = 90;
+const DROP_GRAVITY = 260;
 /** 1.8 s, then a quarter longer: they were landing too fast. */
 const PAGE_MS = 2250;
 /** While the machine burns, the pages it throws are on fire: a quarter more
@@ -183,14 +196,20 @@ const TUBE_RISE_MS = 250;
 const NOZZLE_HIT_PAD = 4;
 /** The tubes only come up while the lid is shut (up, it would cover them): an ink attack waits for a
  * scan to end, and a scan for the tubes to sink. As the machine nears half health (SNAKE_FROM to
- * SNAKE_FULL of the damage) the tubes come up longer, to TUBE_TOP_SNAKE, and move like snakes: a wave
- * of SNAKE_AMP px running up the hose every SNAKE_MS, the head swaying with it, the jet from wherever
- * the head is. Still under reduced motion. */
+ * SNAKE_FULL of the damage) the tubes come up longer, to TUBE_TOP_SNAKE, and hunt the cross
+ * (PRNTR-PLANNING.md P1.D): the head turns toward where the cross was HUNT_LAG_MS ago, HUNT_GAIN of
+ * the way, at most HUNT_REACH px either side of its cap, the hose bending after it; and the jet goes
+ * where the head points: every particle aims at the cross HUNT_LAG_MS before its launch, so the
+ * stream follows a moving player. On touch the cross is the last tap. Under reduced motion the hose
+ * stands straight and the jet is still lagged. */
 const SNAKE_FROM = 0.4;
 const SNAKE_FULL = 0.5;
 const TUBE_TOP_SNAKE = 52;
-const SNAKE_AMP = 7;
-const SNAKE_MS = 900;
+const HUNT_LAG_MS = 500;
+const HUNT_GAIN = 0.6;
+const HUNT_REACH = 28;
+/** How long the cross's trail is kept, for the lagged aim. */
+const TRAIL_MS = 3000;
 /** A tube shot blows up: the jet stops, its bits fly, the nozzle is dead for
  * the rest of the stage (its stump stays); with every nozzle dead the ink attack is gone. */
 const TUBE_POINTS = 5;
@@ -397,6 +416,13 @@ interface Bit {
   color: PalKey;
 }
 
+/** A nut bouncing off the glass: where it hit, and when. */
+interface Drop {
+  x: number;
+  y: number;
+  at: number;
+}
+
 function el(tag: string, className: string, text?: string): HTMLElement {
   const node = document.createElement(tag);
   node.className = className;
@@ -583,6 +609,7 @@ export const room: Stage = {
       tubes: [],
       stubs: [],
       holes: [],
+      marks: [],
       windowOpen: false,
       pieces: [],
       damage: 0,
@@ -615,6 +642,10 @@ export const room: Stage = {
     let steady = false;
     /** On touch, the last tap and its moment: the cross shows there for TOUCH_CROSS_MS. */
     let tap: { x: number; y: number; at: number } | null = null;
+    /** On touch, the last tap of the fight: the point the snakes hunt. */
+    let lastTap: { x: number; y: number } | null = null;
+    /** The cross's trail: where it was each frame it was in the frame, newest last, TRAIL_MS deep. */
+    const trail: { at: number; x: number; y: number }[] = [];
     let flashFrames = 0;
     let invertFrame = false;
     let lastTickAt = phaseAt;
@@ -626,10 +657,12 @@ export const room: Stage = {
     let pages: Page[] = [];
     let sprays: Spray[] = [];
     let bits: Bit[] = [];
+    let drops: Drop[] = [];
     let attackIndex = 0;
     let nextAttackAt = 0;
     let scanAt: number | null = null;
-    let washUntil = 0;
+    /** The flash's moment (0 = no white-out); the wash fades from it over WHITEOUT_MS (half under reduced motion). */
+    let washAt = 0;
     /** The scan's sound and flash steps run so far (SCAN_STEPS), and the bulb: shot, and where the lamp was then. */
     let scanStep = 0;
     let bulbOut = false;
@@ -882,9 +915,11 @@ export const room: Stage = {
       staples = [];
       pages = [];
       sprays = [];
+      drops = [];
       scanAt = null;
       wash.classList.remove('is-on');
-      washUntil = 0;
+      washAt = 0;
+      wash.style.opacity = '';
       drawPips();
       drawShots();
       phase = 'fight';
@@ -936,12 +971,14 @@ export const room: Stage = {
       staples = [];
       pages = [];
       sprays = [];
+      drops = [];
       scanAt = null;
       scene.shake = { x: 0, y: 0 };
       nextAttackAt = Infinity;
       frame.classList.remove('is-mad');
       wash.classList.remove('is-on');
-      washUntil = 0;
+      washAt = 0;
+      wash.style.opacity = '';
       flashFrames = HIT_FLASH_FRAMES * 2;
       sounds.burst();
       // the tune, once the pieces are coming down
@@ -983,9 +1020,11 @@ export const room: Stage = {
       staples = [];
       pages = [];
       sprays = [];
+      drops = [];
       scanAt = null;
       wash.classList.remove('is-on');
-      washUntil = 0;
+      washAt = 0;
+      wash.style.opacity = '';
       if (lives === 0) {
         (continued ? startOver : startContinue)(now);
         return;
@@ -1035,14 +1074,15 @@ export const room: Stage = {
       const y = y0 + (p.y1 - y0) * v;
       return { x: Math.floor(x - 5 * sc), y: Math.floor(y - 6.5 * sc), w: 10 * sc, h: 13 * sc };
     };
-    /** A thrown thing's sprite: a nut or a bolt spins a quarter turn every BOLT_SPIN_MS. */
+    /** A thrown thing's sprite: a staple tumbles a quarter turn every STAPLE_SPIN_MS, a nut or a bolt every BOLT_SPIN_MS. */
     const thrownSprite = (s: Staple, now: number) => {
       const spr = SPR[THROWN_SPR[s.kind]];
-      if (s.kind === 'staple' || reduced) return spr;
-      return rotateSprite(spr, Math.floor((now - s.at) / BOLT_SPIN_MS) % 4);
+      if (reduced) return spr;
+      return rotateSprite(spr, Math.floor((now - s.at) / (s.kind === 'staple' ? STAPLE_SPIN_MS : BOLT_SPIN_MS)) % 4);
     };
     // A staple (or a nut or a bolt) punches up out of the slot at 1× for the first part of its
-    // flight (the rect is the rows showing), then flies out of it at the camera: 1× → 2× → 4×.
+    // flight (the rect is the rows showing), then flies out of it at the camera: 1× → 2× → 3× → 4×,
+    // in four equal steps.
     const staplePose = (s: Staple, now: number) => {
       const spr = thrownSprite(s, now);
       const hw = spr.w / 2;
@@ -1053,7 +1093,7 @@ export const room: Stage = {
         return { x: Math.floor(s.x0 - hw), y: SLOT.y - rows, w: spr.w, h: rows };
       }
       const v = (u - STAPLE_EJECT) / (1 - STAPLE_EJECT);
-      const sc = v < 1 / 3 ? 1 : v < 2 / 3 ? 2 : 4;
+      const sc = 1 + Math.min(3, Math.floor(v * 4));
       const y0 = SLOT.y - hh;
       const x = s.x0 + (s.x - s.x0) * v;
       const y = y0 + (s.y - y0) * v;
@@ -1066,25 +1106,44 @@ export const room: Stage = {
     const spraying = (s: Spray, now: number) => now >= s.at && s.stoppedAt === null && now < s.at + SPRAY_MS;
     /** How much of a snake the tubes are now, 0 (a straight stub) to 1. */
     const snakeU = () => Math.max(0, Math.min(1, (scene.damage - SNAKE_FROM) / (SNAKE_FULL - SNAKE_FROM)));
-    /** The tube on nozzle `nx` risen `up` (0 … 1) at `now`: its head's top, its wave. */
+    /** Where the cross was `ago` ms before `now`, or null if it was not in the frame then (no sample within 100 ms). */
+    const crossAgo = (ago: number, now: number) => {
+      const t = now - ago;
+      let best: { at: number; x: number; y: number } | null = null;
+      for (const s of trail) if (s.at <= t) best = s;
+      return best && t - best.at <= 100 ? best : null;
+    };
+    /** The tube on nozzle `nx` risen `up` (0 … 1) at `now`: its head's top, and its reach toward the lagged cross. */
     const poseTube = (nx: number, up: number, now: number): Tube => {
       const su = snakeU();
       const top = TUBE_TOP + (TUBE_TOP_SNAKE - TUBE_TOP) * su;
-      return { x: nx, top: Math.round(TUBE_BASE - (TUBE_BASE - top) * up), color: NOZZLES.find((n) => n.x === nx)!.color, amp: reduced ? 0 : SNAKE_AMP * su * up, ph: reduced ? 0 : (now / SNAKE_MS) * 2 * Math.PI + nx };
+      const c = reduced ? null : crossAgo(HUNT_LAG_MS, now);
+      const reach = c ? Math.max(-HUNT_REACH, Math.min(HUNT_REACH, (c.x - nx) * HUNT_GAIN)) * su * up : 0;
+      return { x: nx, top: Math.round(TUBE_BASE - (TUBE_BASE - top) * up), color: NOZZLES.find((n) => n.x === nx)!.color, reach };
     };
-    /** Where a jet's ink comes out now: the mouth of its tube, up and swaying as it is. */
+    /** Where a jet's ink comes out now: the mouth of its tube, up and turned as it is. */
     const mouthOf = (s: Spray, now: number) => {
       const tb = poseTube(s.nx, 1, now);
       return { x: tubeX(tb, tb.top), y: tb.top + 2 };
     };
-    /** Where the particle launched at τ is at `now`: along an arc from the mouth to the target, spreading a little. */
+    /** Where the particle launched at τ goes: at the cross as it was HUNT_LAG_MS before, while the tubes
+     * snake and there was a cross; else the jet's own point (random, or the fire). */
+    const aimAt = (s: Spray, tau: number) => {
+      if (s.fire || snakeU() <= 0) return { x: s.x, y: s.y };
+      const c = crossAgo(HUNT_LAG_MS, tau);
+      return c ? { x: c.x, y: c.y } : { x: s.x, y: s.y };
+    };
+    /** Where the jet is landing now: the target of the particle landing at `now` (the last one's once the jet has ended). */
+    const landingOf = (s: Spray, now: number) => aimAt(s, Math.max(s.at, Math.min(jetEnd(s), now - SPRAY_FLIGHT_MS)));
+    /** Where the particle launched at τ is at `now`: along an arc from the mouth to its target, spreading a little. */
     const particlePose = (s: Spray, tau: number, now: number) => {
       const v = (now - tau) / SPRAY_FLIGHT_MS;
       const spread = (((tau * 7919) % 97) / 97 - 0.5) * 6 * v;
       const size = v < 0.4 ? 1 : v < 0.75 ? 2 : 3;
       const m = mouthOf(s, now);
-      const x = m.x + (s.x - m.x) * v + spread;
-      const y = m.y + (s.y - m.y) * v - SPRAY_ARC * Math.sin(Math.PI * v);
+      const a = aimAt(s, tau);
+      const x = m.x + (a.x - m.x) * v + spread;
+      const y = m.y + (a.y - m.y) * v - SPRAY_ARC * Math.sin(Math.PI * v);
       return { x: Math.floor(x - size / 2), y: Math.floor(y - size / 2), size };
     };
     /** The splat's scale from how much of the jet has landed: 0 (nothing yet) to 4. */
@@ -1093,12 +1152,12 @@ export const room: Stage = {
       const f = landed / SPRAY_MS;
       return f <= 0 ? 0 : f < 0.3 ? 2 : f < 0.7 ? 3 : 4;
     };
-    /** How far a splat has run down the glass: from where it landed to past the bottom of the view. */
-    const splatSlide = (s: Spray, sc: number, now: number) => {
+    /** How far a splat has run down the glass: from where it landed (`ly`) to past the bottom of the view. */
+    const splatSlide = (s: Spray, sc: number, ly: number, now: number) => {
       const lt = now - splatAt(s);
       if (lt <= INK_LANDED_MS) return 0;
       const u = Math.min(1, (lt - INK_LANDED_MS) / INK_SLIDE_MS);
-      return (H + 7 * sc - s.y) * u * u;
+      return (H + 7 * sc - ly) * u * u;
     };
     /** The cross's gap now: the base plus what is left of the bloom, cooling since the last shot. */
     const spreadNow = (now: number) => BLOOM_BASE + Math.max(0, heat - ((now - heatAt) / 1000) * BLOOM_COOL);
@@ -1199,7 +1258,8 @@ export const room: Stage = {
         if (!spraying(s, now)) return false;
         const tb = poseTube(s.nx, 1, now);
         const { x: sx, y: sy } = scene.shake;
-        return x >= s.nx - 3 - tb.amp - NOZZLE_HIT_PAD + sx && x < s.nx + 3 + tb.amp + NOZZLE_HIT_PAD + sx && y >= tb.top - NOZZLE_HIT_PAD + sy && y < TUBE_BASE + NOZZLE_HIT_PAD + sy;
+        const hx = tubeX(tb, tb.top);
+        return x >= Math.min(s.nx, hx) - 3 - NOZZLE_HIT_PAD + sx && x < Math.max(s.nx, hx) + 3 + NOZZLE_HIT_PAD + sx && y >= tb.top - NOZZLE_HIT_PAD + sy && y < TUBE_BASE + NOZZLE_HIT_PAD + sy;
       });
       if (jet) {
         explodeTube(jet, now);
@@ -1304,6 +1364,12 @@ export const room: Stage = {
       box.hidden = inDoorway(hole, scene.doorGap);
       holeLightOf.set(hole, box);
       holeLights.append(box);
+    };
+    // A mark on the glass where a thrown thing landed; the oldest go past the cap. (Cover, when it
+    // comes: a thing that lands while the player is covered clanks off and leaves nothing.)
+    const addMark = (kind: Mark['kind'], x: number, y: number) => {
+      scene.marks.push({ kind, x, y });
+      if (scene.marks.length > GLASS_MARKS_MAX) scene.marks.shift();
     };
     // Shot open, the window takes no more holes: the shots go into the red.
     const windowShot = (x: number, y: number, now: number) => {
@@ -1446,7 +1512,7 @@ export const room: Stage = {
           if (bulbOut) return;
           if (!reduced) invertFrame = true;
           wash.classList.add('is-on');
-          washUntil = performance.now() + WASH_MS;
+          washAt = performance.now();
           sounds.scanBurst();
         },
       ],
@@ -1573,7 +1639,10 @@ export const room: Stage = {
         if (e.button !== 0) return;
         if (phase === 'look') clickRoom(v, now);
         else if (phase === 'fight' && frozenAt === null) {
-          if (e.pointerType === 'touch') tap = { x: v.x, y: v.y, at: now };
+          if (e.pointerType === 'touch') {
+            tap = { x: v.x, y: v.y, at: now };
+            lastTap = { x: v.x, y: v.y };
+          }
           const a = aim(v, now);
           fire(a.x, a.y, now);
         }
@@ -1667,7 +1736,12 @@ export const room: Stage = {
         deadTubes: () => [...scene.stubs],
         sprays: () => sprays.length,
         tubes: () => scene.tubes.map((t) => ({ ...t })),
+        /** Each jet's nozzle, start and where it is landing now (the hunt's lagged target). */
+        jets: () => sprays.map((s) => ({ nx: s.nx, at: s.at, landing: landingOf(s, performance.now()) })),
         holes: () => scene.holes.map((h) => h.kind),
+        marks: () => scene.marks.map((m) => ({ ...m })),
+        drops: () => drops.length,
+        thrown: () => staples.map((s) => ({ kind: s.kind, x: s.x, y: s.y, at: s.at, shot: s.shot, hit: s.hit })),
         ghosts: () => ghosts.length,
         name: () => lifeName.textContent,
         clock: () => ({ ...scene.clock }),
@@ -1874,10 +1948,6 @@ export const room: Stage = {
           scheduleBlink(now, BLINK_MIN_MS);
         }
         poseScan(now);
-        if (washUntil && now >= washUntil) {
-          wash.classList.remove('is-on');
-          washUntil = 0;
-        }
         for (const s of staples) {
           if (!s.fed && now >= s.at) {
             s.fed = true;
@@ -1889,9 +1959,13 @@ export const room: Stage = {
             if (s.kind === 'staple') sounds.stapleHit();
             else sounds.boltHit();
             hurt(s.kind, now);
+            // the mark it leaves: a staple or a bolt sticks in the glass; a nut bounces off and drops out of the frame
+            if (s.kind === 'nut') drops.push({ x: s.x, y: s.y, at: now });
+            else addMark(s.kind, s.x, s.y);
           }
         }
         staples = staples.filter((s) => !s.hit && !s.shot);
+        drops = drops.filter((d) => now - d.at < DROP_MS);
         for (const p of pages) {
           if (!p.fed && now >= p.at) {
             p.fed = true;
@@ -1937,7 +2011,8 @@ export const room: Stage = {
       for (const s of sprays) {
         if (!spraying(s, now)) continue;
         const tb = poseTube(s.nx, 1, now);
-        rects.push({ x: s.nx - 3 - Math.round(tb.amp) + scene.shake.x, y: tb.top + scene.shake.y, w: 6 + 2 * Math.round(tb.amp), h: TUBE_BASE - tb.top });
+        const hx = tubeX(tb, tb.top);
+        rects.push({ x: Math.min(s.nx, hx) - 3 + scene.shake.x, y: tb.top + scene.shake.y, w: Math.abs(hx - s.nx) + 6, h: TUBE_BASE - tb.top });
       }
       if (scene.buttonBright) rects.push({ ...BUTTON, x: BUTTON.x + scene.shake.x, y: BUTTON.y + scene.shake.y });
       while (glows.children.length < rects.length) glows.append(el('div', 'prntr-room-glow'));
@@ -2042,8 +2117,12 @@ export const room: Stage = {
       }
       // The slot's red light is a DOM box over the canvas: it trembles with the machine.
       slotLight.style.transform = scene.shake.x || scene.shake.y ? `translate(${scene.shake.x * scale}px, ${scene.shake.y * scale}px)` : '';
+      // The cross's trail, for the snakes' lagged hunt: the pointer, or on touch the last tap.
+      const seen = pointer ?? lastTap;
+      if (seen && phase === 'fight') trail.push({ at: now, x: seen.x, y: seen.y });
+      while (trail.length && trail[0].at < now - TRAIL_MS) trail.shift();
       // The tubes up behind the machine: rising before the jet, sinking after it, one per nozzle
-      // (the most risen of its jets), snaking as the machine's health goes.
+      // (the most risen of its jets), turned after the cross as the machine's health goes.
       const tubes = new Map<number, number>();
       for (const s of sprays) {
         const from = s.at - TUBE_RISE_MS;
@@ -2071,6 +2150,8 @@ export const room: Stage = {
       fpix.clear();
       if (scene.windowOpen) drawWindowWreck(fpix);
       if (scene.fire) drawFireFront(fpix, scene.fire);
+      // The marks on the glass, under the things in flight, the landed pages and the ink.
+      drawMarks(fpix, scene.marks);
       // Out of the slot: only the top rows of the sprite so far, then the whole thing.
       for (const s of staples) {
         if (now < s.at || s.hit || s.shot) continue;
@@ -2078,6 +2159,13 @@ export const room: Stage = {
         const spr = thrownSprite(s, now);
         if (r.h < spr.h) fpix.blit(r.x, r.y, { w: spr.w, h: r.h, rows: spr.rows.slice(0, r.h) });
         else fpix.blit(r.x, r.y, spr, r.w / spr.w);
+      }
+      // A nut that bounced off: falling and rolling out of the bottom of the frame at 3× (gone at once under reduced motion).
+      for (const d of drops) {
+        const a = reduced ? DROP_MS : now - d.at;
+        if (a >= DROP_MS) continue;
+        const k = a / 1000;
+        fpix.blit(Math.floor(d.x - 10 + 8 * k), Math.floor(d.y + DROP_GRAVITY * k * k + 10 * k - 10), rotateSprite(SPR.NUT, Math.floor(a / DROP_SPIN_MS) % 4), 3);
       }
       // A burning page (thrown while the machine burns) carries flames up its face, from its
       // bottom edge, scaled with it; its paper is scorched at the edges.
@@ -2114,18 +2202,20 @@ export const room: Stage = {
         }
         const sc = splatScale(s, now);
         if (sc === 0) continue;
-        const slide = splatSlide(s, sc, now);
-        const top = Math.floor(s.y - 7 * sc + slide);
+        // the splat builds where the jet is landing: where the player was, half a second behind (the hunt)
+        const L = landingOf(s, now);
+        const slide = splatSlide(s, sc, L.y, now);
+        const top = Math.floor(L.y - 7 * sc + slide);
         // the drips it leaves running down the glass above it, each its own length
         if (slide > 0) {
           for (let i = 0; i < INK_DRIPS; i++) {
             const k = ((i + 1) / (INK_DRIPS + 1)) * 16 * sc - 8 * sc + (((s.at * 31 + i * 17) % 7) - 3) * (sc / 2);
-            const x = Math.floor(s.x + k);
-            const from = Math.floor(s.y - 7 * sc + 3 * sc + (((s.at * 13 + i * 29) % 5) * sc) / 2);
+            const x = Math.floor(L.x + k);
+            const from = Math.floor(L.y - 7 * sc + 3 * sc + (((s.at * 13 + i * 29) % 5) * sc) / 2);
             fpix.rect(x, from, x + 1 + (i % 2), top + 4 * sc, s.color);
           }
         }
-        fpix.blit(Math.floor(s.x - 8 * sc), top, SPR.SPLAT, sc, { remap: { c: s.color } });
+        fpix.blit(Math.floor(L.x - 8 * sc), top, SPR.SPLAT, sc, { remap: { c: s.color } });
       }
       // The bits in the air (steam), over everything else on the front layer.
       bits = bits.filter((b) => now - b.born < b.life);
@@ -2146,6 +2236,15 @@ export const room: Stage = {
       fpix.present(fg);
       cpix.present(cg);
       drawGlows(now);
+      // The white-out: the flash's wash from 100%, fading fast then with a tail; under the HUD and the cross.
+      if (washAt) {
+        const u = (now - washAt) / (reduced ? WHITEOUT_MS / 2 : WHITEOUT_MS);
+        if (u >= 1) {
+          washAt = 0;
+          wash.classList.remove('is-on');
+          wash.style.opacity = '';
+        } else wash.style.opacity = String((1 - u) * (1 - u));
+      }
       canvas.classList.toggle('is-inverted', invertFrame);
       art.classList.toggle('is-inverted', invertFrame);
       front.classList.toggle('is-inverted', invertFrame);

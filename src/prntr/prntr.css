@@ -596,7 +596,6 @@
   color: #EDEDED;
 }
 
-/* The scan flash's white wash (the Continue dim is .prntr-room-continue). */
 /* Everything that can be shot glows red, the door's kind of light: a transparent box
    the size of the sprite with the glow outside it, so the pixels stay crisp. */
 .prntr-room-glows {
@@ -613,16 +612,15 @@
     0 0 calc(5px * var(--s)) calc(2px * var(--s)) rgba(184, 20, 10, 0.5);
 }
 
+/* The flash's white-out: a flat white wash over the room (the Continue dim is .prntr-room-continue);
+   the stage sets its opacity each frame, 1 at the flash and fading over 1.2 s, and .is-on marks it on.
+   Under the HUD and the cross: the player's side. */
 .prntr-room-wash {
   position: absolute;
   inset: 0;
   background: #FFFFFF;
   opacity: 0;
   pointer-events: none;
-}
-
-.prntr-room-wash.is-on {
-  opacity: 0.14;
 }
 
 .prntr-room-hud {
