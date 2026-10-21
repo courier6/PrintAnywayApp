@@ -134,6 +134,9 @@ export interface Machine {
   t: number;
   /** The black cartridge has failed: ms the NO BLACK INK error has been up, or null. */
   error: number | null;
+  /** Lifted off the carpet for the slam, px (the body goes up with `shake`; the shadow stays down
+   * and spreads a px a side for each). */
+  lift: number;
 }
 
 /** The machine's size and foot line at `back`. */
@@ -714,7 +717,7 @@ export function drawMachine(p: Painter, s: MachineScene): void {
     for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) if (((x + y + phase) & 1) === 0) set(x, y, k);
   };
   // the shadow on the carpet (the window is the light), the feet
-  p.rect(84 + ox, 146 + oy, 176 + ox, 152 + oy, 'X');
+  p.rect(84 + ox - m.lift, 146 + oy + m.lift, 176 + ox + m.lift, 152 + oy + m.lift, 'X');
   rect(74, 143, 82, 146, 'K');
   rect(158, 143, 166, 146, 'K');
   // the front face, and the top surface we look slightly down on
@@ -873,7 +876,7 @@ function drawMachineBack(p: Pix, s: MachineScene): void {
 const MACHINE_SPRITE: Sprite = (() => {
   const lp = new LetterPix(MACHINE_AT.x0, MACHINE_AT.y0, MACHINE_AT.x1 - MACHINE_AT.x0, MACHINE_AT.y1 - MACHINE_AT.y0);
   drawMachine(lp, {
-    machine: { lid: 0, lamp: null, lampOut: false, flash: false, power: true, angry: true, back: 0, t: 0, error: null },
+    machine: { lid: 0, lamp: null, lampOut: false, flash: false, power: true, angry: true, back: 0, t: 0, error: null, lift: 0 },
     shake: { x: 0, y: 0 },
     flashWhite: false,
     ledRed: true,

@@ -1,10 +1,11 @@
 import { reducedMotion, wait } from '../../anim';
 import type { Handoff, Stage } from '../../types';
 import { H, Pix, W, rotateSprite } from './pixels';
-import { CLOCK_AT, KIT_AT, KNOB, MACHINE_AT, MACHINE_PIECES, NOZZLES, SPR, drawFireFront, drawFlame, drawMarks, drawRoom, drawWindowWreck, figLeaf, fireRect, inDoorway, knobX, lampX, markBox, tubeX, type Broken, type ExitSign, type Hole, type Mark, type SceneState, type Tube } from './scene';
+import { CLOCK_AT, GLASS, KIT_AT, KNOB, MACHINE_AT, MACHINE_PIECES, NOZZLES, SPR, drawFireFront, drawFlame, drawMarks, drawRoom, drawWindowWreck, figLeaf, fireRect, inDoorway, knobX, lampX, markBox, tubeX, type Broken, type ExitSign, type Hole, type Mark, type SceneState, type Tube } from './scene';
 import { ART_AT, ART_SUB, renderVictory } from './art';
 import { PAL, type PalKey } from './palette';
 import { createRoomSounds, type FireSound, type Hum } from './sounds';
+import { RIPPLE_MS, RIPPLE_SPEED, RippleView, rippleAt } from './ripple';
 import { startStormSound } from '../storm';
 
 // ---------------------------------------------------------------------------
@@ -96,6 +97,26 @@ const WHITEOUT_MS = 1200;
 const SCAN_TOTAL_MS = LID_MS + SWEEP_MS + WASH_MS + LID_MS;
 const LAMP_POINTS = 40;
 const LAMP_HIT_PAD = 1;
+/** The slam (PRNTR-SLAM.md), in the rotation once the machine has SLAM_LIFE left of its 1337 (the design's
+ * phase 2): the machine strains up SLAM_LIFT px over SLAM_LIFT_MS, drops in SLAM_DROP_MS and
+ * lands shaking for SLAM_SHAKE_MS; the lid bangs open at the landing and stands while the world ripples
+ * out from SLAM_AT (SLAM_OPEN_MS, the ripple's length), the glass worth SLAM_GLASS_POINTS, then falls over LID_MS. */
+const SLAM_LIFE = 900;
+const SLAM_LIFT = 6;
+const SLAM_LIFT_MS = 500;
+const SLAM_DROP_MS = 90;
+const SLAM_IMPACT_MS = SLAM_LIFT_MS + SLAM_DROP_MS;
+const SLAM_SHAKE_MS = 400;
+const SLAM_OPEN_MS = RIPPLE_MS;
+/** Where the slam's ripple starts: the machine's foot. */
+const SLAM_AT = { x: 120, y: 146 };
+/** The tear (PRNTR-SLAM.md §4.4): a HUD element is torn while the ripple's front is from its centre to TEAR_BAND
+ * px past it (150 ms); one tear in TEAR_DROP is a dropout instead. */
+const TEAR_BAND = 30;
+const TEAR_DROP = 0.25;
+const SLAM_TOTAL_MS = SLAM_IMPACT_MS + SLAM_OPEN_MS + LID_MS;
+const SLAM_GLASS_POINTS = 25;
+const GLASS_HIT_PAD = 1;
 const STAPLE_MS = 1500;
 const STAPLE_STAGGER_MS = 500;
 /** The staple's hit box: its sprite at the current scale, plus this many virtual px around. */
@@ -423,7 +444,7 @@ const ROOM_ALT =
   'A quiet office: an exposed ceiling, a duct along it and two bare tube lights hanging on cords, a door shut under an EXIT sign, a clock, a Simple Products board with notes on it by a window with its blind down on a storm outside, a tall fig tree before it and a green first aid kit at its lower right, a water cooler, a plant, one large copier in the middle, and a USB stick on the carpet beside it';
 
 type Phase = 'look' | 'sticker' | 'fight' | 'continue' | 'over' | 'end';
-type AttackKind = 'scan' | 'staples' | 'pages' | 'ink' | 'bolts' | 'black';
+type AttackKind = 'scan' | 'staples' | 'pages' | 'ink' | 'bolts' | 'black' | 'slam';
 
 /** A staple, or a nut or a bolt: all thrown out of the slot at the camera. */
 type ThrownKind = 'staple' | 'nut' | 'bolt';
@@ -561,6 +582,14 @@ export const room: Stage = {
     const ag = art.getContext('2d');
     if (!ag) throw new Error('prntr: no 2d context');
     ag.drawImage(renderVictory(), 0, 0);
+    // The room's pixels and the front layer's, presented to their canvases each frame.
+    const pix = new Pix();
+    const fpix = new Pix();
+    // The slam's ripple: the room (the print under its hole) and the front layer redrawn bent by WebGL, each
+    // over the 2D canvas it comes from, while the ripple runs. None under reduced motion, none without WebGL.
+    // (The print's canvas is uploaded as it is: it changes only where a shot holes it.)
+    const rippleBack = reduced ? null : RippleView.create('prntr-room-ripple', { src: pix.image, x: 0, y: 0, w: W, h: H }, { src: art, ...ART_AT });
+    const rippleFront = rippleBack && RippleView.create('prntr-room-ripple', { src: fpix.image, x: 0, y: 0, w: W, h: H });
     const light = el('div', 'prntr-room-light');
     const spill = el('div', 'prntr-room-spill');
     // The fire's light: an unpixelated orange glow sized to the flames each frame.
@@ -643,7 +672,7 @@ export const room: Stage = {
     const deathEl = el('div', 'prntr-room-death');
     deathEl.setAttribute('aria-hidden', 'true');
     deathEl.hidden = true;
-    frame.append(art, canvas, light, spill, fireLight, slotLight, holeLights, windowLight, glowFills, front, stormWash, wash, glows, hud, cursor, hurtEl, deathEl, continueEl, overEl);
+    frame.append(art, canvas, ...(rippleBack ? [rippleBack.canvas] : []), light, spill, fireLight, slotLight, holeLights, windowLight, glowFills, front, ...(rippleFront ? [rippleFront.canvas] : []), stormWash, wash, glows, hud, cursor, hurtEl, deathEl, continueEl, overEl);
     wrap.append(frame);
     root.append(wrap);
 
@@ -655,6 +684,9 @@ export const room: Stage = {
       frame.style.height = `${H * scale}px`;
       frame.style.setProperty('--s', String(scale));
       frame.classList.toggle('is-small', scale <= 3);
+      const px = scale * (window.devicePixelRatio || 1);
+      rippleBack?.resize(px);
+      rippleFront?.resize(px);
     };
     fit();
     window.addEventListener('resize', fit, { signal });
@@ -664,8 +696,6 @@ export const room: Stage = {
     };
 
     // ---- state ------------------------------------------------------------
-    const pix = new Pix();
-    const fpix = new Pix();
     const cpix = new Pix();
     const scene: SceneState = {
       lights: [true, true],
@@ -673,7 +703,7 @@ export const room: Stage = {
       ledRed: false,
       trayPage: true,
       usb: true,
-      machine: { lid: 0, lamp: null, lampOut: false, flash: false, power: true, angry: false, back: 1, t: 0, error: null },
+      machine: { lid: 0, lamp: null, lampOut: false, flash: false, power: true, angry: false, back: 1, t: 0, error: null, lift: 0 },
       flashWhite: false,
       buttonBright: false,
       broken: { clock: false, poster: false, tank: false, plant: false, vase: false, kit: false, fig: false, figPot: false },
@@ -753,6 +783,13 @@ export const room: Stage = {
      * replaced), and where the lamp was then. */
     let scanStep = 0;
     let bulbOut = false;
+    /** The slam on now (its start), the step its sounds are at, its landing shake this frame; the first fall to
+     * SLAM_LIFE seen, and the slam it makes the next attack. */
+    let slamAt: number | null = null;
+    let slamStep = 0;
+    let slamShake = { x: 0, y: 0 };
+    let slamSeen = false;
+    let slamNow = false;
     let lampStop = 0;
     let autoReloadAt: number | null = null;
     let reloadSecondAt: number | null = null;
@@ -867,9 +904,9 @@ export const room: Stage = {
     /** The name's next flip or glitch, and when a flipped letter goes back (0 = none). */
     let nameAt = 0;
     let nameBackAt = 0;
-    /** The name with `n` of its letters broken (a glitch character or a gap). */
-    const brokenName = (n: number) => {
-      const chars = PLAYER_NAME.split('');
+    /** The name (or another text) with `n` of its letters broken (a glitch character or a gap). */
+    const brokenName = (n: number, text = PLAYER_NAME) => {
+      const chars = text.split('');
       for (let k = 0; k < n; k++) {
         const i = Math.floor(Math.random() * chars.length);
         if (chars[i] === ' ') continue;
@@ -1037,6 +1074,8 @@ export const room: Stage = {
       sprays = [];
       drops = [];
       scanAt = null;
+      slamAt = null;
+      releaseTears();
       wash.classList.remove('is-on');
       washAt = 0;
       wash.style.opacity = '';
@@ -1144,6 +1183,8 @@ export const room: Stage = {
       sprays = [];
       drops = [];
       scanAt = null;
+      slamAt = null;
+      releaseTears();
       wash.classList.remove('is-on');
       washAt = 0;
       wash.style.opacity = '';
@@ -1436,6 +1477,16 @@ export const room: Stage = {
           popBulb(hx, now);
           flashFrames = HIT_FLASH_FRAMES;
           addScore(LAMP_POINTS, now);
+          return;
+        }
+      }
+      // The glass while the slam holds the lid open: the window, SLAM_GLASS_POINTS.
+      if (slamAt !== null && m.lid >= 1) {
+        const { x: sx, y: sy } = scene.shake;
+        if (x >= GLASS.x0 - GLASS_HIT_PAD + sx && x < GLASS.x1 + GLASS_HIT_PAD + sx && y >= GLASS.y0 - GLASS_HIT_PAD + sy && y < GLASS.y1 + GLASS_HIT_PAD + sy) {
+          flashFrames = HIT_FLASH_FRAMES;
+          stoke(x, y, now);
+          addScore(SLAM_GLASS_POINTS, now);
           return;
         }
       }
@@ -1741,6 +1792,115 @@ export const room: Stage = {
       m.flash = !bulbOut && st >= LID_MS + SWEEP_MS && st < falls;
       if (st >= SCAN_TOTAL_MS) scanAt = null;
     };
+    // A slam: the machine strains up, drops and lands; the lid bangs open as it lands and stands, then falls.
+    const startSlam = (now: number) => {
+      slamAt = now;
+      slamStep = 0;
+      // a slam forced before the first one's turn is the first one
+      slamNow = false;
+      sounds.slamLift((SLAM_LIFT_MS + SLAM_DROP_MS) / 1000);
+    };
+    const SLAM_STEPS: [number, () => void][] = [
+      [
+        SLAM_IMPACT_MS,
+        () => {
+          sounds.slamLand(SLAM_OPEN_MS / 1000);
+          scheduleTears(performance.now());
+        },
+      ],
+      [SLAM_TOTAL_MS - 60, () => sounds.lidShut()],
+    ];
+    /** The slam this frame: the lid, the lift, and the machine's offset (up as it lifts, the landing's shake),
+     * or null when the slam is not moving it. Under reduced motion it does not move: the lid cuts open and shut. */
+    const poseSlam = (now: number): { x: number; y: number } | null => {
+      const m = scene.machine;
+      m.lift = 0;
+      if (slamAt === null) return null;
+      const st = now - slamAt;
+      slamStep = runSteps(SLAM_STEPS, slamStep, st);
+      if (st >= SLAM_TOTAL_MS) {
+        slamAt = null;
+        m.lid = 0;
+        return null;
+      }
+      const open = SLAM_IMPACT_MS + SLAM_OPEN_MS;
+      m.lid = st < SLAM_IMPACT_MS ? 0 : st < open ? 1 : reduced ? 0 : 1 - (st - open) / LID_MS;
+      if (reduced) return null;
+      if (st < SLAM_LIFT_MS) {
+        const u = st / SLAM_LIFT_MS;
+        m.lift = Math.round(SLAM_LIFT * (1 - (1 - u) * (1 - u)));
+      } else if (st < SLAM_IMPACT_MS) {
+        m.lift = Math.round(SLAM_LIFT * (1 - (st - SLAM_LIFT_MS) / SLAM_DROP_MS));
+      } else if (st < SLAM_IMPACT_MS + SLAM_SHAKE_MS) {
+        if (frameCount % SHAKE_FRAMES === 0 || st - SLAM_IMPACT_MS < 16) slamShake = { x: Math.floor(Math.random() * 5) - 2, y: Math.floor(Math.random() * 5) - 2 };
+        return slamShake;
+      } else return null;
+      return { x: 0, y: -m.lift };
+    };
+    // The tear: the player's layer breaks where the slam's ripple passes under it. Each HUD element is torn while
+    // the crest is under it: split red and cyan and jittering, or dropped out; its letters broken, or a bar's
+    // fill wrong. Then it is put back to the truth (a text something rewrote meanwhile keeps the new text).
+    // Under reduced motion every element tears once at the landing, still.
+    interface Tear {
+      el: HTMLElement;
+      from: number;
+      to: number;
+      on: boolean;
+      /** The element whose letters were broken, what they were, and what they were broken to. */
+      text: HTMLElement | null;
+      was: string;
+      shown: string;
+    }
+    let tears: Tear[] = [];
+    const TEARABLE = [scoreEl, hiEl, creditEl, captionEl, healthEl, healthName, lifeEl, lifeName, pipsEl, shotsBtn];
+    /** At the landing: when the front reaches each element on show (its centre's distance from SLAM_AT). */
+    const scheduleTears = (now: number) => {
+      releaseTears();
+      const fr = frame.getBoundingClientRect();
+      for (const el of TEARABLE) {
+        if (el.hidden) continue;
+        const b = el.getBoundingClientRect();
+        if (!b.width || !b.height) continue;
+        const r = Math.hypot((b.left + b.width / 2 - fr.left) / scale - SLAM_AT.x, (b.top + b.height / 2 - fr.top) / scale - SLAM_AT.y);
+        const from = reduced ? now : now + r / RIPPLE_SPEED;
+        if (from - now >= RIPPLE_MS) continue;
+        tears.push({ el, from, to: from + TEAR_BAND / RIPPLE_SPEED, on: false, text: null, was: '', shown: '' });
+      }
+    };
+    const tearOn = (t: Tear) => {
+      t.on = true;
+      t.el.classList.add(!reduced && Math.random() < TEAR_DROP ? 'is-dropped' : 'is-torn');
+      if (t.el === healthEl) healthFill.style.width = `${Math.random() * 100}%`;
+      else if (t.el === lifeEl) lifeFill.style.width = `${Math.random() * 100}%`;
+      else {
+        const n = t.el === captionEl ? captionText : t.el;
+        if (n.childElementCount === 0 && n.textContent) {
+          t.text = n;
+          t.was = n.textContent;
+          t.shown = brokenName(1 + Math.floor(Math.random() * 3), t.was);
+          n.textContent = t.shown;
+        }
+      }
+    };
+    const tearOff = (t: Tear) => {
+      t.on = false;
+      t.el.classList.remove('is-torn', 'is-dropped');
+      if (t.el === healthEl) drawScore();
+      else if (t.el === lifeEl) drawHealth();
+      else if (t.text && t.text.textContent === t.shown) t.text.textContent = t.was;
+    };
+    const poseTears = (now: number) => {
+      for (const t of tears) {
+        const on = now >= t.from && now < t.to;
+        if (on && !t.on) tearOn(t);
+        else if (!on && t.on) tearOff(t);
+      }
+      tears = tears.filter((t) => t.on || now < t.to);
+    };
+    const releaseTears = () => {
+      for (const t of tears) if (t.on) tearOff(t);
+      tears = [];
+    };
     /** The next attack the dev hook asked for, if any. */
     let forcedKind: AttackKind | null = null;
     // The machine does not move. Scan, staples, pages, in rotation; once it has caught fire, ink too; at
@@ -1756,25 +1916,29 @@ export const room: Stage = {
         if (low) kinds.splice(1, 0, 'ink');
       }
       if (score >= HI * BOLT_HEALTH || scene.fig.burning) kinds.push('bolts');
+      if (HI - score <= SLAM_LIFE) kinds.push('slam');
       return kinds;
     };
     const launchAttack = (now: number) => {
       const gap = attackGap();
       const kinds = rotation();
       const nozzles = NOZZLES_X.filter((x) => !scene.stubs.includes(x));
-      // Nothing while the lid is up (a scan is on), and no scan while a tube is up: the lid would
-      // cover it. The attack waits; a forced one keeps.
+      // Nothing while the lid is up (a scan or a slam is on), and no scan or slam while a tube is up: the lid
+      // would cover it. The attack waits; a forced one keeps.
       const tubesUp = sprays.some((s) => now >= s.at - TUBE_RISE_MS && now < jetEnd(s) + TUBE_RISE_MS);
-      if (scanAt !== null || ((forcedKind ?? kinds[attackIndex % kinds.length]) === 'scan' && tubesUp)) {
+      const next = forcedKind ?? (slamNow ? 'slam' : kinds[attackIndex % kinds.length]);
+      if (scanAt !== null || slamAt !== null || ((next === 'scan' || next === 'slam') && tubesUp)) {
         nextAttackAt = now + 100;
         return;
       }
       // the fire's volley comes first, then the burning fig's, unless an attack was forced (they wait for the next)
       const fireVolley = forcedKind === null && inkNow && nozzles.length > 0;
       const figVolley = forcedKind === null && !fireVolley && boltsNow;
+      // then the first slam, once the machine has fallen to SLAM_LIFE
+      const slamFirst = forcedKind === null && !fireVolley && !figVolley && slamNow;
       if (fireVolley) inkNow = false;
       if (figVolley) boltsNow = false;
-      let kind = forcedKind ?? (fireVolley ? 'ink' : figVolley ? 'bolts' : kinds[attackIndex++ % kinds.length]);
+      let kind = forcedKind ?? (fireVolley ? 'ink' : figVolley ? 'bolts' : slamFirst ? 'slam' : kinds[attackIndex++ % kinds.length]);
       // the rotation's ink tries the black cartridge first, then now and then (a forced 'ink' never does)
       if (kind === 'ink' && forcedKind === null && !fireVolley && !scene.stubs.includes(BLACK_X) && (inkTries++ === 0 || Math.random() < BLACK_CHANCE)) kind = 'black';
       forcedKind = null;
@@ -1815,6 +1979,9 @@ export const room: Stage = {
       } else if (kind === 'scan') {
         startScan(now);
         nextAttackAt = now + SCAN_TOTAL_MS + gap;
+      } else if (kind === 'slam') {
+        startSlam(now);
+        nextAttackAt = now + SLAM_TOTAL_MS + gap;
       } else if (kind === 'staples') {
         for (let i = 0; i < 3; i++) {
           staples.push({ kind: 'staple', ms: STAPLE_MS, x0: SLOT.x0 + 3 + Math.random() * (SLOT.x1 - SLOT.x0 - 6), x: 20 + Math.random() * 180, y: 40 + Math.random() * 70, at: now + i * STAPLE_STAGGER_MS, hit: false, shot: false, fed: false });
@@ -2017,6 +2184,13 @@ export const room: Stage = {
         lid: () => scene.machine.lid,
         lamp: () => (scene.machine.lamp === null ? null : lampX(scene.machine.lamp)),
         bulb: () => bulbOut,
+        /** The slam: when it started (null: none on), the machine's lift now, and whether it is next. */
+        slam: () => ({ at: slamAt, lift: scene.machine.lift, next: slamNow }),
+        /** The world drawn bent by WebGL this frame; the ripple's displacement at a virtual point now (zero when none). */
+        rippling: () => frame.classList.contains('is-rippling'),
+        /** The HUD's elements torn now (their class names), and those still to tear in this slam. */
+        torn: () => ({ now: TEARABLE.filter((n) => n.classList.contains('is-torn') || n.classList.contains('is-dropped')).map((n) => n.className), left: tears.filter((t) => !t.on).length }),
+        rippleAt: (x: number, y: number) => (slamAt === null ? { x: 0, y: 0 } : rippleAt(x, y, SLAM_AT.x, SLAM_AT.y, performance.now() - slamAt - SLAM_IMPACT_MS)),
         /** The machine's shake this frame (the tremble, the landing): what is attached to it moves with it. */
         shake: () => ({ ...scene.shake }),
       };
@@ -2183,6 +2357,11 @@ export const room: Stage = {
             addScore(0, now);
             return;
           }
+        }
+        // the first fall to SLAM_LIFE: the slam is the machine's next attack
+        if (!slamSeen && HI - score <= SLAM_LIFE) {
+          slamSeen = true;
+          slamNow = true;
         }
         if (shots === 0 && autoReloadAt !== null && now >= autoReloadAt) reload(now);
         if (reloadSecondAt !== null && now >= reloadSecondAt) {
@@ -2416,10 +2595,12 @@ export const room: Stage = {
       scene.buttonBright = phase === 'fight' && scene.printer === 'up' && (mad || buttonBright(now));
       if (scene.printer === 'wreck') posePieces(now);
       // The tremble: a new offset of ±1 px every few frames while the mad machine fights; the
-      // pounce's landing before that.
+      // pounce's landing before that, and the slam's lift and landing over it.
       frameCount++;
       const landing = poseBack(now);
+      const slam = poseSlam(now);
       if (landing) scene.shake = landing;
+      else if (slam) scene.shake = slam;
       else if (mad && phase === 'fight' && scene.printer === 'up' && frozenAt === null && !reduced) {
         if (frameCount % SHAKE_FRAMES === 0) scene.shake = { x: Math.floor(Math.random() * 3) - 1, y: -Math.floor(Math.random() * 2) };
       } else {
@@ -2616,6 +2797,11 @@ export const room: Stage = {
       pix.present(g);
       fpix.present(fg);
       cpix.present(cg);
+      // The slam's ripple: the pixel world bent, drawn over the 2D layers it comes from (hidden meanwhile).
+      const rt = slamAt === null ? -1 : now - slamAt - SLAM_IMPACT_MS;
+      const bent = rt >= 0 && rt < RIPPLE_MS && !!rippleBack?.draw(SLAM_AT.x, SLAM_AT.y, rt) && !!rippleFront?.draw(SLAM_AT.x, SLAM_AT.y, rt);
+      frame.classList.toggle('is-rippling', bent);
+      poseTears(now);
       drawGlows(now);
       // The white-out: the flash's wash from 100%, fading fast then with a tail; under the HUD and the cross.
       if (washAt) {
@@ -2629,6 +2815,8 @@ export const room: Stage = {
       canvas.classList.toggle('is-inverted', invertFrame);
       art.classList.toggle('is-inverted', invertFrame);
       front.classList.toggle('is-inverted', invertFrame);
+      rippleBack?.canvas.classList.toggle('is-inverted', invertFrame);
+      rippleFront?.canvas.classList.toggle('is-inverted', invertFrame);
       invertFrame = false;
     };
 

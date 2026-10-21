@@ -407,6 +407,33 @@
   pointer-events: none;
 }
 
+/* The slam's ripple (PRNTR-SLAM.md): WebGL canvases at the screen's resolution over the room canvas
+   (with the print) and over the front layer, drawing them bent. Shown only while the ripple runs; the 2D
+   canvases they are drawn from go see-through meanwhile (they stay in the accessibility tree). The DOM
+   lights between them do not bend: they are on the player's side of the glass. */
+.prntr-room-ripple {
+  position: absolute;
+  inset: 0;
+  display: none;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.prntr-room-frame.is-rippling .prntr-room-ripple {
+  display: block;
+}
+
+.prntr-room-frame.is-rippling .prntr-room-canvas,
+.prntr-room-frame.is-rippling .prntr-room-art,
+.prntr-room-frame.is-rippling .prntr-room-front {
+  opacity: 0;
+}
+
+.prntr-room-ripple.is-inverted {
+  filter: invert(1);
+}
+
 /* The pointer and crosshair: a transparent canvas of their own above the door's light,
    the spill and the glows, so the cursor never sits behind a glow. */
 .prntr-room-cursor {
@@ -787,6 +814,23 @@
 
   .prntr-room-life-name.is-worn {
     opacity: 0.7;
+  }
+}
+
+/* The slam's tear (PRNTR-SLAM.md §4.4): a HUD element the ripple's crest is passing under splits red and
+   cyan and jitters as the rough name does, faster; or it drops out. Still under reduced motion. */
+.prntr-room-hud .is-torn {
+  filter: drop-shadow(calc(-1px * var(--s)) 0 #19B8F0) drop-shadow(calc(1px * var(--s)) 0 #B8140A);
+  animation: prntr-name-rough 60ms steps(1, end) infinite;
+}
+
+.prntr-room-hud .is-dropped {
+  visibility: hidden;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .prntr-room-hud .is-torn {
+    animation: none;
   }
 }
 

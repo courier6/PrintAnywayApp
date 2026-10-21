@@ -35,6 +35,10 @@ export interface RoomSounds {
   lidShut(): void;
   /** The machine pouncing forward: a swelling whoosh, then its landing thump at 0.35 s. */
   pounce(): void;
+  /** The slam's lift: a motor straining up off the carpet over `dur` s, a creak near the top. */
+  slamLift(dur: number): void;
+  /** The slam's landing: a deep boom and a rattle, then a low wobble going down like water over `dur` s. */
+  slamLand(dur: number): void;
   /** The scan's whine, rising over the 1.2 s sweep. */
   scanSweep(): void;
   /** The flash: an 80 ms white burst. */
@@ -124,6 +128,8 @@ const SILENT: RoomSounds = {
   lidOpen: noop,
   lidShut: noop,
   pounce: noop,
+  slamLift: noop,
+  slamLand: noop,
   scanSweep: noop,
   scanBurst: noop,
   bulbPop: noop,
@@ -365,6 +371,23 @@ export function createRoomSounds(audio: PrntrAudio): RoomSounds {
       noise(t + 0.15, 0.2, { lp: 1200, gain: 0.3 });
       tone(t + 0.35, 0.18, { f0: 120, f1: 35, gain: 0.7, decay: 0.06 });
       noise(t + 0.35, 0.1, { lp: 800, gain: 0.4, decay: 0.03 });
+    },
+    slamLift(dur: number) {
+      const t = now();
+      tone(t, dur, { type: 'sawtooth', f0: 45, f1: 110, gain: 0.07, attack: 0.08, release: 0.04 });
+      noise(t, dur, { lp: 380, gain: 0.08 });
+      tone(t + dur * 0.7, 0.16, { type: 'square', f0: 320, f1: 190, gain: 0.03, release: 0.05 });
+    },
+    // the boom under everything, the room's rattle on top, then a wobble falling in steps under the ripple
+    slamLand(dur: number) {
+      const t = now();
+      tone(t, 0.6, { f0: 95, f1: 26, gain: 0.9, decay: 0.14 });
+      noise(t, 0.35, { lp: 700, gain: 0.6, decay: 0.08 });
+      noise(t + 0.02, 0.25, { hp: 1800, gain: 0.12, decay: 0.05 });
+      for (let i = 0; i < 6; i++) {
+        const at = t + 0.12 + (i * dur) / 7;
+        tone(at, dur / 6, { f0: 150 - i * 14, f1: 95 - i * 9, curve: 'linear', gain: 0.1 * (1 - i / 7), attack: 0.03, decay: dur / 14 });
+      }
     },
     // a whine rising 800 → 2400 Hz over the 1.2 s sweep
     scanSweep() {
