@@ -82,6 +82,9 @@ const LATE_SCORE = 900;
 const LID_MS = 450;
 const SWEEP_MS = 1200;
 const WASH_MS = 300;
+/** The flash whites the whole glass: the wash at 100% fading over WHITEOUT_MS as (1 − u)²; half as
+ * long under reduced motion (PRNTR-PLANNING.md P1.B). What is in the air is inside the white. */
+const WHITEOUT_MS = 1200;
 const SCAN_TOTAL_MS = LID_MS + SWEEP_MS + WASH_MS + LID_MS;
 const LAMP_POINTS = 40;
 const LAMP_HIT_PAD = 1;
@@ -634,7 +637,8 @@ export const room: Stage = {
     let attackIndex = 0;
     let nextAttackAt = 0;
     let scanAt: number | null = null;
-    let washUntil = 0;
+    /** The flash's moment (0 = no white-out); the wash fades from it over WHITEOUT_MS (half under reduced motion). */
+    let washAt = 0;
     /** The scan's sound and flash steps run so far (SCAN_STEPS), and the bulb: shot, and where the lamp was then. */
     let scanStep = 0;
     let bulbOut = false;
@@ -889,7 +893,8 @@ export const room: Stage = {
       sprays = [];
       scanAt = null;
       wash.classList.remove('is-on');
-      washUntil = 0;
+      washAt = 0;
+      wash.style.opacity = '';
       drawPips();
       drawShots();
       phase = 'fight';
@@ -946,7 +951,8 @@ export const room: Stage = {
       nextAttackAt = Infinity;
       frame.classList.remove('is-mad');
       wash.classList.remove('is-on');
-      washUntil = 0;
+      washAt = 0;
+      wash.style.opacity = '';
       flashFrames = HIT_FLASH_FRAMES * 2;
       sounds.burst();
       // the tune, once the pieces are coming down
@@ -990,7 +996,8 @@ export const room: Stage = {
       sprays = [];
       scanAt = null;
       wash.classList.remove('is-on');
-      washUntil = 0;
+      washAt = 0;
+      wash.style.opacity = '';
       if (lives === 0) {
         (continued ? startOver : startContinue)(now);
         return;
@@ -1458,7 +1465,7 @@ export const room: Stage = {
           if (bulbOut) return;
           if (!reduced) invertFrame = true;
           wash.classList.add('is-on');
-          washUntil = performance.now() + WASH_MS;
+          washAt = performance.now();
           sounds.scanBurst();
         },
       ],
@@ -1887,10 +1894,6 @@ export const room: Stage = {
           scheduleBlink(now, BLINK_MIN_MS);
         }
         poseScan(now);
-        if (washUntil && now >= washUntil) {
-          wash.classList.remove('is-on');
-          washUntil = 0;
-        }
         for (const s of staples) {
           if (!s.fed && now >= s.at) {
             s.fed = true;
@@ -2163,6 +2166,15 @@ export const room: Stage = {
       fpix.present(fg);
       cpix.present(cg);
       drawGlows(now);
+      // The white-out: the flash's wash from 100%, fading fast then with a tail; under the HUD and the cross.
+      if (washAt) {
+        const u = (now - washAt) / (reduced ? WHITEOUT_MS / 2 : WHITEOUT_MS);
+        if (u >= 1) {
+          washAt = 0;
+          wash.classList.remove('is-on');
+          wash.style.opacity = '';
+        } else wash.style.opacity = String((1 - u) * (1 - u));
+      }
       canvas.classList.toggle('is-inverted', invertFrame);
       art.classList.toggle('is-inverted', invertFrame);
       front.classList.toggle('is-inverted', invertFrame);
