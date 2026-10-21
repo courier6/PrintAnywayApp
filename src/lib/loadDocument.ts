@@ -49,7 +49,16 @@ function getPdfWorker() {
 
 // ~150 DPI: readable in print, fast enough for per-pixel recoloring.
 const RENDER_DPI = 150;
-const MAX_IMAGE_DIM = 3500;
+// The largest canvas a page gets, for PDF pages and images alike: a poster or
+// a panorama is scaled down rather than failing (iOS caps a canvas at 16.7 MP)
+// or holding hundreds of megabytes.
+const MAX_DIM = 3500;
+const MAX_PIXELS = MAX_DIM * MAX_DIM;
+
+/** The scale (≤ want) that fits a width × height page within MAX_DIM and MAX_PIXELS. */
+function fitScale(width: number, height: number, want: number): number {
+  return Math.min(want, MAX_DIM / Math.max(width, height), Math.sqrt(MAX_PIXELS / (width * height)));
+}
 
 export interface SourceDocument {
   pageCount: number;
@@ -109,7 +118,8 @@ async function loadPdf(file: File): Promise<SourceDocument> {
     pageCount: pdf.numPages,
     async renderPage(index: number): Promise<HTMLCanvasElement> {
       const page = await pdf.getPage(index + 1);
-      const viewport = page.getViewport({ scale: RENDER_DPI / 72 });
+      const natural = page.getViewport({ scale: 1 });
+      const viewport = page.getViewport({ scale: fitScale(natural.width, natural.height, RENDER_DPI / 72) });
       const canvas = document.createElement('canvas');
       canvas.width = Math.ceil(viewport.width);
       canvas.height = Math.ceil(viewport.height);
@@ -137,7 +147,7 @@ async function loadImage(file: Blob): Promise<SourceDocument> {
   } catch (err) {
     throw new ImageDecodeError(err instanceof Error ? err.message : String(err));
   }
-  const scale = Math.min(1, MAX_IMAGE_DIM / Math.max(bitmap.width, bitmap.height));
+  const scale = fitScale(bitmap.width, bitmap.height, 1);
   const canvas = document.createElement('canvas');
   canvas.width = Math.round(bitmap.width * scale);
   canvas.height = Math.round(bitmap.height * scale);
