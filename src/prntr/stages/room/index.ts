@@ -5,6 +5,7 @@ import { CLOCK_AT, GLASS, KIT_AT, KNOB, MACHINE_AT, MACHINE_PIECES, NOZZLES, SPR
 import { ART_AT, ART_SUB, renderVictory } from './art';
 import { PAL, type PalKey } from './palette';
 import { createRoomSounds, type FireSound, type Hum } from './sounds';
+import { RIPPLE_MS, RippleView, rippleAt } from './ripple';
 import { startStormSound } from '../storm';
 
 // ---------------------------------------------------------------------------
@@ -98,15 +99,17 @@ const LAMP_POINTS = 40;
 const LAMP_HIT_PAD = 1;
 /** The slam (PRNTR-SLAM.md), in the rotation once the machine has SLAM_LIFE left of its 1337 (the design's
  * phase 2): the machine strains up SLAM_LIFT px over SLAM_LIFT_MS, drops in SLAM_DROP_MS and
- * lands shaking for SLAM_SHAKE_MS; the lid bangs open at the landing and stands for SLAM_OPEN_MS, the glass
- * worth SLAM_GLASS_POINTS, then falls over LID_MS. */
+ * lands shaking for SLAM_SHAKE_MS; the lid bangs open at the landing and stands while the world ripples
+ * out from SLAM_AT (SLAM_OPEN_MS, the ripple's length), the glass worth SLAM_GLASS_POINTS, then falls over LID_MS. */
 const SLAM_LIFE = 900;
 const SLAM_LIFT = 6;
 const SLAM_LIFT_MS = 500;
 const SLAM_DROP_MS = 90;
 const SLAM_IMPACT_MS = SLAM_LIFT_MS + SLAM_DROP_MS;
 const SLAM_SHAKE_MS = 400;
-const SLAM_OPEN_MS = 1600;
+const SLAM_OPEN_MS = RIPPLE_MS;
+/** Where the slam's ripple starts: the machine's foot. */
+const SLAM_AT = { x: 120, y: 146 };
 const SLAM_TOTAL_MS = SLAM_IMPACT_MS + SLAM_OPEN_MS + LID_MS;
 const SLAM_GLASS_POINTS = 25;
 const GLASS_HIT_PAD = 1;
@@ -575,6 +578,14 @@ export const room: Stage = {
     const ag = art.getContext('2d');
     if (!ag) throw new Error('prntr: no 2d context');
     ag.drawImage(renderVictory(), 0, 0);
+    // The room's pixels and the front layer's, presented to their canvases each frame.
+    const pix = new Pix();
+    const fpix = new Pix();
+    // The slam's ripple: the room (the print under its hole) and the front layer redrawn bent by WebGL, each
+    // over the 2D canvas it comes from, while the ripple runs. None under reduced motion, none without WebGL.
+    // (The print's canvas is uploaded as it is: it changes only where a shot holes it.)
+    const rippleBack = reduced ? null : RippleView.create('prntr-room-ripple', { src: pix.image, x: 0, y: 0, w: W, h: H }, { src: art, ...ART_AT });
+    const rippleFront = rippleBack && RippleView.create('prntr-room-ripple', { src: fpix.image, x: 0, y: 0, w: W, h: H });
     const light = el('div', 'prntr-room-light');
     const spill = el('div', 'prntr-room-spill');
     // The fire's light: an unpixelated orange glow sized to the flames each frame.
@@ -657,7 +668,7 @@ export const room: Stage = {
     const deathEl = el('div', 'prntr-room-death');
     deathEl.setAttribute('aria-hidden', 'true');
     deathEl.hidden = true;
-    frame.append(art, canvas, light, spill, fireLight, slotLight, holeLights, windowLight, glowFills, front, stormWash, wash, glows, hud, cursor, hurtEl, deathEl, continueEl, overEl);
+    frame.append(art, canvas, ...(rippleBack ? [rippleBack.canvas] : []), light, spill, fireLight, slotLight, holeLights, windowLight, glowFills, front, ...(rippleFront ? [rippleFront.canvas] : []), stormWash, wash, glows, hud, cursor, hurtEl, deathEl, continueEl, overEl);
     wrap.append(frame);
     root.append(wrap);
 
@@ -669,6 +680,9 @@ export const room: Stage = {
       frame.style.height = `${H * scale}px`;
       frame.style.setProperty('--s', String(scale));
       frame.classList.toggle('is-small', scale <= 3);
+      const px = scale * (window.devicePixelRatio || 1);
+      rippleBack?.resize(px);
+      rippleFront?.resize(px);
     };
     fit();
     window.addEventListener('resize', fit, { signal });
@@ -678,8 +692,6 @@ export const room: Stage = {
     };
 
     // ---- state ------------------------------------------------------------
-    const pix = new Pix();
-    const fpix = new Pix();
     const cpix = new Pix();
     const scene: SceneState = {
       lights: [true, true],
@@ -2098,6 +2110,9 @@ export const room: Stage = {
         bulb: () => bulbOut,
         /** The slam: when it started (null: none on), the machine's lift now, and whether it is next. */
         slam: () => ({ at: slamAt, lift: scene.machine.lift, next: slamNow }),
+        /** The world drawn bent by WebGL this frame; the ripple's displacement at a virtual point now (zero when none). */
+        rippling: () => frame.classList.contains('is-rippling'),
+        rippleAt: (x: number, y: number) => (slamAt === null ? { x: 0, y: 0 } : rippleAt(x, y, SLAM_AT.x, SLAM_AT.y, performance.now() - slamAt - SLAM_IMPACT_MS)),
         /** The machine's shake this frame (the tremble, the landing): what is attached to it moves with it. */
         shake: () => ({ ...scene.shake }),
       };
@@ -2704,6 +2719,10 @@ export const room: Stage = {
       pix.present(g);
       fpix.present(fg);
       cpix.present(cg);
+      // The slam's ripple: the pixel world bent, drawn over the 2D layers it comes from (hidden meanwhile).
+      const rt = slamAt === null ? -1 : now - slamAt - SLAM_IMPACT_MS;
+      const bent = rt >= 0 && rt < RIPPLE_MS && !!rippleBack?.draw(SLAM_AT.x, SLAM_AT.y, rt) && !!rippleFront?.draw(SLAM_AT.x, SLAM_AT.y, rt);
+      frame.classList.toggle('is-rippling', bent);
       drawGlows(now);
       // The white-out: the flash's wash from 100%, fading fast then with a tail; under the HUD and the cross.
       if (washAt) {
@@ -2717,6 +2736,8 @@ export const room: Stage = {
       canvas.classList.toggle('is-inverted', invertFrame);
       art.classList.toggle('is-inverted', invertFrame);
       front.classList.toggle('is-inverted', invertFrame);
+      rippleBack?.canvas.classList.toggle('is-inverted', invertFrame);
+      rippleFront?.canvas.classList.toggle('is-inverted', invertFrame);
       invertFrame = false;
     };
 
