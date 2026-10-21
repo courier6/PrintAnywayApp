@@ -370,7 +370,8 @@ const CLOCK_SPIN_TAIL_MS = 600;
  * (a cut under reduced motion), and lands leaning on the machine's back corner with a crash of leaves.
  * Leaning there while the fire burns, it catches FIG_CATCH_MS later and burns, and the burning tree
  * sets the machine going: the fire's spread onto it starts at once whatever its health, or, already
- * spreading, goes a stoke faster. */
+ * spreading, goes a stoke faster. The machine answers with its nuts and bolts: a volley of them at once,
+ * and the bolts in the rotation from then on, whatever its health. */
 const FIG_FALL_MS = 700;
 const FIG_CATCH_MS = 1200;
 /** The lights, out since the pounce, flicker back on at random once the machine has FLICKER_FROM of its
@@ -805,6 +806,8 @@ export const room: Stage = {
     let mad = false;
     /** The fire has just caught: the next attack is a colour volley, whatever the rotation says. */
     let inkNow = false;
+    /** The fig has just caught: the next attack is a volley of nuts and bolts (after the ink's, if both wait). */
+    let boltsNow = false;
     let frameCount = 0;
     /** When the door starts to open (set as the sign lands), and when it did. */
     let doorAt: number | null = null;
@@ -1752,7 +1755,7 @@ export const room: Stage = {
         // low, a second ink early in the rotation, never right after the first
         if (low) kinds.splice(1, 0, 'ink');
       }
-      if (score >= HI * BOLT_HEALTH) kinds.push('bolts');
+      if (score >= HI * BOLT_HEALTH || scene.fig.burning) kinds.push('bolts');
       return kinds;
     };
     const launchAttack = (now: number) => {
@@ -1766,10 +1769,12 @@ export const room: Stage = {
         nextAttackAt = now + 100;
         return;
       }
-      // the fire's volley comes first, unless an attack was forced (it waits for the next)
+      // the fire's volley comes first, then the burning fig's, unless an attack was forced (they wait for the next)
       const fireVolley = forcedKind === null && inkNow && nozzles.length > 0;
+      const figVolley = forcedKind === null && !fireVolley && boltsNow;
       if (fireVolley) inkNow = false;
-      let kind = forcedKind ?? (fireVolley ? 'ink' : kinds[attackIndex++ % kinds.length]);
+      if (figVolley) boltsNow = false;
+      let kind = forcedKind ?? (fireVolley ? 'ink' : figVolley ? 'bolts' : kinds[attackIndex++ % kinds.length]);
       // the rotation's ink tries the black cartridge first, then now and then (a forced 'ink' never does)
       if (kind === 'ink' && forcedKind === null && !fireVolley && !scene.stubs.includes(BLACK_X) && (inkTries++ === 0 || Math.random() < BLACK_CHANCE)) kind = 'black';
       forcedKind = null;
@@ -1955,8 +1960,9 @@ export const room: Stage = {
         /** The x of a tube spraying at the fire right now, or null. */
         fireJet: () => sprays.find((s) => s.fire && spraying(s, performance.now()))?.nx ?? null,
         mad: () => mad,
-        /** The attacks in turn now. */
+        /** The attacks in turn now, and the volleys waiting (the fire's ink, the burning fig's bolts). */
         rotation: () => rotation(),
+        volleys: () => ({ ink: inkNow, bolts: boltsNow }),
         spread: () => spreadAt !== null,
         stokes: () => stokes,
         spreadMs: () => spreadMs,
@@ -2432,6 +2438,8 @@ export const room: Stage = {
         if (now >= figCatchAt) {
           scene.fig.burning = true;
           sounds.whoosh();
+          boltsNow = true;
+          nextAttackAt = Math.min(nextAttackAt, now);
           if (spreadAt === null) spreadAt = now;
           else if (stokes < STOKE_MAX) {
             const v = spreadU(now);
