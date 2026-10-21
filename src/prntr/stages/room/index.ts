@@ -1508,9 +1508,11 @@ export const room: Stage = {
         addScore(HIT_POINTS, now);
         return;
       }
-      // The door's knob, while the door is shut or ajar: it swings open.
+      // The door's knob, while the door is shut or ajar: it swings open. On touch its hit area is the
+      // USB stick's 44 screen px (no hover to aim a 2 px knob with).
       const kx = knobX(scene.doorGap);
-      if (!scene.doorBroken && doorOpenAt === null && scene.doorGap < DOOR_OPEN && x >= kx - KNOB_HIT_PAD && x < kx + KNOB.w + KNOB_HIT_PAD && y >= KNOB.y - KNOB_HIT_PAD && y < KNOB.y + KNOB.h + KNOB_HIT_PAD) {
+      const knobPad = touch ? Math.max(KNOB_HIT_PAD, Math.ceil(USB_HIT_PX / 2 / scale) - 1) : KNOB_HIT_PAD;
+      if (!scene.doorBroken && doorOpenAt === null && scene.doorGap < DOOR_OPEN && x >= kx - knobPad && x < kx + KNOB.w + knobPad && y >= KNOB.y - knobPad && y < KNOB.y + KNOB.h + knobPad) {
         sounds.knobHit();
         swingDoor(now);
         addScore(BREAK_POINTS, now);
