@@ -190,7 +190,17 @@ const SPRAY_MS = 1400;
 const SPRAY_EVERY_MS = 40;
 const SPRAY_FLIGHT_MS = 700;
 const SPRAY_ARC = 24;
-const NOZZLES_X = NOZZLES.map((n) => n.x);
+/** The colour nozzles; the black one is a dud (BLACK_X). */
+const NOZZLES_X = NOZZLES.filter((n) => n.color !== 'z').map((n) => n.x);
+/** The black cartridge, the fourth cap: it is empty. The first ink attack the machine picks tries it,
+ * and then one in BLACK_CHANCE of them: its tube comes up and hunts like the others, coughs out a few
+ * specks that fall back onto the machine (DUD_COUGHS_MS from the jet's start), and the display reads
+ * NO BLACK INK until DUD_ERROR_TAIL_MS after the tube starts to sink. Nothing reaches the glass. It can
+ * be shot apart like the others (TUBE_POINTS), and then it is never tried again. */
+const BLACK_X = NOZZLES.find((n) => n.color === 'z')!.x;
+const BLACK_CHANCE = 0.25;
+const DUD_COUGHS_MS = [150, 600, 1050];
+const DUD_ERROR_TAIL_MS = 1200;
 /** The machine's top edge (MACHINE.y0) and the tube's head when it is up; its mouth is 2 px into the head. */
 const TUBE_BASE = 80;
 const TUBE_TOP = 72;
@@ -377,7 +387,7 @@ const ROOM_ALT =
   'A quiet office: drop ceiling with two fluorescent panels, a door shut under an EXIT sign, a clock, a Simple Products board with notes on it by a window with its blind down on a storm outside and a green first aid kit at its lower right, a water cooler, a plant, one large copier in the middle, and a USB stick on the carpet beside it';
 
 type Phase = 'look' | 'sticker' | 'fight' | 'continue' | 'over' | 'end';
-type AttackKind = 'scan' | 'staples' | 'pages' | 'ink' | 'bolts';
+type AttackKind = 'scan' | 'staples' | 'pages' | 'ink' | 'bolts' | 'black';
 
 /** A staple, or a nut or a bolt: all thrown out of the slot at the camera. */
 type ThrownKind = 'staple' | 'nut' | 'bolt';
@@ -413,6 +423,8 @@ interface Spray {
   done: boolean;
   /** The hiss has played. */
   fed: boolean;
+  /** From the black cartridge: it coughs and nothing lands. */
+  dud: boolean;
 }
 
 interface Page {
@@ -622,7 +634,7 @@ export const room: Stage = {
       ledRed: false,
       trayPage: true,
       usb: true,
-      machine: { lid: 0, lamp: null, lampOut: false, flash: false, power: true, angry: false, back: 1, t: 0 },
+      machine: { lid: 0, lamp: null, lampOut: false, flash: false, power: true, angry: false, back: 1, t: 0, error: null },
       flashWhite: false,
       buttonBright: false,
       broken: { clock: false, poster: false, tank: false, plant: false, vase: false, kit: false },
@@ -689,6 +701,8 @@ export const room: Stage = {
     let bits: Bit[] = [];
     let drops: Drop[] = [];
     let attackIndex = 0;
+    /** Ink attacks the rotation has picked: the first tries the black cartridge. */
+    let inkTries = 0;
     let nextAttackAt = 0;
     let scanAt: number | null = null;
     /** The flash's moment (0 = no white-out); the wash fades from it over WHITEOUT_MS (half under reduced motion). */
@@ -1663,8 +1677,19 @@ export const room: Stage = {
         nextAttackAt = now + 100;
         return;
       }
-      const kind = forcedKind ?? kinds[attackIndex++ % kinds.length];
+      let kind = forcedKind ?? kinds[attackIndex++ % kinds.length];
+      // the rotation's ink tries the black cartridge first, then now and then (a forced 'ink' never does)
+      if (kind === 'ink' && forcedKind === null && !scene.stubs.includes(BLACK_X) && (inkTries++ === 0 || Math.random() < BLACK_CHANCE)) kind = 'black';
       forcedKind = null;
+      if (kind === 'black') {
+        if (scene.stubs.includes(BLACK_X)) {
+          nextAttackAt = now + gap;
+          return;
+        }
+        sprays.push({ nx: BLACK_X, x: BLACK_X, y: TUBE_TOP, at: now + TUBE_RISE_MS, color: 'z', fire: false, stoppedAt: null, done: true, fed: false, dud: true });
+        nextAttackAt = now + TUBE_RISE_MS + SPRAY_MS + TUBE_RISE_MS + gap;
+        return;
+      }
       if (kind === 'bolts') {
         for (let i = 0; i < 3; i++) {
           staples.push({ kind: Math.random() < 0.5 ? 'nut' : 'bolt', ms: BOLT_MS, x0: SLOT.x0 + 4 + Math.random() * (SLOT.x1 - SLOT.x0 - 8), x: 20 + Math.random() * 180, y: 40 + Math.random() * 70, at: now + i * BOLT_STAGGER_MS, hit: false, shot: false, fed: false });
@@ -1686,7 +1711,7 @@ export const room: Stage = {
             y = r.y0 + (r.y1 - r.y0) * 0.6 + (Math.random() - 0.5) * 8;
           }
           const nx = nozzles[Math.floor(Math.random() * nozzles.length)];
-          sprays.push({ nx, x, y, at: now + TUBE_RISE_MS + i * SPRAY_STAGGER_MS, color: NOZZLES.find((n) => n.x === nx)!.color, fire: atFire, stoppedAt: null, done: false, fed: false });
+          sprays.push({ nx, x, y, at: now + TUBE_RISE_MS + i * SPRAY_STAGGER_MS, color: NOZZLES.find((n) => n.x === nx)!.color, fire: atFire, stoppedAt: null, done: false, fed: false, dud: false });
         }
         nextAttackAt = now + TUBE_RISE_MS + (SPRAY_COUNT - 1) * SPRAY_STAGGER_MS + SPRAY_MS + SPRAY_FLIGHT_MS + gap;
       } else if (kind === 'scan') {
@@ -2099,7 +2124,8 @@ export const room: Stage = {
         for (const s of sprays) {
           if (!s.fed && now >= s.at) {
             s.fed = true;
-            sounds.inkSpray();
+            if (s.dud) sounds.inkDud();
+            else sounds.inkSpray();
           }
           if (!s.done && s.stoppedAt === null && now >= splatAt(s)) {
             s.done = true;
@@ -2270,6 +2296,9 @@ export const room: Stage = {
       poseFire(now);
       scene.flashWhite = flashFrames > 0;
       scene.damage = score / HI;
+      // the black cartridge's error on the display, from the cough until a while after
+      const dud = sprays.find((s) => s.dud && now >= s.at && now < jetEnd(s) + DUD_ERROR_TAIL_MS);
+      scene.machine.error = dud ? now - dud.at : null;
       // the angry display's flicker runs on the frame's time (still under reduced motion)
       scene.machine.t = reduced ? 0 : now;
       if (flashFrames > 0) flashFrames--;
@@ -2313,7 +2342,7 @@ export const room: Stage = {
       // The ink on the far half of its flight goes behind the machine: it is sprayed from behind it.
       scene.inkBehind = [];
       for (const s of sprays) {
-        if (now < s.at) continue;
+        if (now < s.at || s.dud) continue;
         const end = Math.min(now, jetEnd(s));
         for (let tau = s.at; tau < end; tau += SPRAY_EVERY_MS) {
           if (now - tau >= SPRAY_FLIGHT_MS / 2) continue;
@@ -2374,6 +2403,20 @@ export const room: Stage = {
       // and the splat building up on the glass, then running down.
       for (const s of sprays) {
         if (now < s.at) continue;
+        if (s.dud) {
+          // the black cartridge coughs: a speck hops out of the mouth and falls back onto the machine
+          DUD_COUGHS_MS.forEach((c, i) => {
+            const at = s.at + c;
+            if (now < at || at >= jetEnd(s)) return;
+            const k = (now - at) / 1000;
+            const m = mouthOf(s, at);
+            const y = Math.floor(m.y - 60 * k + 200 * k * k) + scene.shake.y;
+            if (y >= TUBE_BASE + scene.shake.y) return;
+            const x = Math.floor(m.x + (i - 1) * 2 + (i - 1) * 10 * k) + scene.shake.x;
+            fpix.rect(x, y, x + 2, y + 2 - (i === 2 ? 1 : 0), 'z');
+          });
+          continue;
+        }
         const end = Math.min(now, jetEnd(s));
         for (let tau = s.at; tau < end; tau += SPRAY_EVERY_MS) {
           if (now - tau >= SPRAY_FLIGHT_MS || now - tau < SPRAY_FLIGHT_MS / 2) continue;
