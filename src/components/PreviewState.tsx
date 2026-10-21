@@ -270,10 +270,11 @@ export function PreviewState({
               </details>
             ))}
             {/* Cross-brand advice, and the way into Prntr (PRNTR-TRIGGER.md). English
-                only, so not in PRINTER_TIPS (shared with the landing page) nor localized. */}
+                only, so not in PRINTER_TIPS (shared with the landing page) nor localized.
+                Hidden on touch screens until Prntr's touch form is done (.help-other). */}
             {locale.code === 'en' && (
               <details
-                className="help-item"
+                className="help-item help-other"
                 onToggle={(e) => {
                   if (e.currentTarget.open) onPrefetchPrntr();
                 }}
