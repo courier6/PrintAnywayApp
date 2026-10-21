@@ -555,7 +555,10 @@ export const room: Stage = {
     // The red glow on everything that can be shot: DOM boxes over the pixel layer,
     // unpixelated like the door's light. One per projectile, pooled.
     const glows = el('div', 'prntr-room-glows');
-    for (const n of [light, spill, fireLight, slotLight, holeLights, windowLight, stormWash, wash, glows]) n.setAttribute('aria-hidden', 'true');
+    // The inside of the glows of what the machine throws, under the front layer, so its sprites stay crisp
+    // over it and the glow has no hollow where a sprite is open (a staple's loop, a burning page's edges).
+    const glowFills = el('div', 'prntr-room-glow-fills');
+    for (const n of [light, spill, fireLight, slotLight, holeLights, windowLight, stormWash, wash, glows, glowFills]) n.setAttribute('aria-hidden', 'true');
     const hud = el('div', 'prntr-room-hud');
     const scoreEl = el('div', 'prntr-room-score', 'SCORE 0000');
     const hiEl = el('div', 'prntr-room-hi', 'HI 1337');
@@ -615,7 +618,7 @@ export const room: Stage = {
     const deathEl = el('div', 'prntr-room-death');
     deathEl.setAttribute('aria-hidden', 'true');
     deathEl.hidden = true;
-    frame.append(art, canvas, light, spill, fireLight, slotLight, holeLights, windowLight, front, stormWash, wash, glows, hud, cursor, hurtEl, deathEl, continueEl, overEl);
+    frame.append(art, canvas, light, spill, fireLight, slotLight, holeLights, windowLight, glowFills, front, stormWash, wash, glows, hud, cursor, hurtEl, deathEl, continueEl, overEl);
     wrap.append(frame);
     root.append(wrap);
 
@@ -2177,9 +2180,15 @@ export const room: Stage = {
         const hx = tubeX(tb, tb.top);
         rects.push({ x: Math.min(s.nx, hx) - 3 + scene.shake.x, y: tb.top + scene.shake.y, w: Math.abs(hx - s.nx) + 6, h: TUBE_BASE - tb.top });
       }
+      // the thrown things (the staples, nuts and bolts, then the pages) get a filled inside too
+      const thrown = rects.slice(0, staples.filter((s) => now >= s.at && !s.hit && !s.shot).length + pages.filter((p) => now >= p.at && !p.shot && p.landedAt === null).length);
       if (scene.buttonBright) rects.push({ ...BUTTON, x: BUTTON.x + scene.shake.x, y: BUTTON.y + scene.shake.y });
-      while (glows.children.length < rects.length) glows.append(el('div', 'prntr-room-glow'));
-      Array.from(glows.children).forEach((n, i) => {
+      placeGlows(glows, 'prntr-room-glow', rects);
+      placeGlows(glowFills, 'prntr-room-glow-fill', thrown);
+    };
+    const placeGlows = (layer: HTMLElement, cls: string, rects: { x: number; y: number; w: number; h: number }[]) => {
+      while (layer.children.length < rects.length) layer.append(el('div', cls));
+      Array.from(layer.children).forEach((n, i) => {
         const r = rects[i];
         const box = n as HTMLElement;
         box.hidden = !r;

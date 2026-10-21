@@ -530,10 +530,13 @@
   pointer-events: none;
 }
 
-/* The fire's light: an orange glow the size of the flames, set each frame. */
+/* The fire's light: an orange glow the size of the flames, set each frame. Its inside is lit too,
+   rising to meet the glow at the edge: the flames are ragged, and an outer glow alone left a hollow
+   oval of unlit wall between them. */
 .prntr-room-fire-light {
   position: absolute;
   border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(255, 150, 40, 0.1), rgba(255, 150, 40, 0.24) 75%, rgba(255, 150, 40, 0.35));
   box-shadow:
     0 0 calc(4px * var(--s)) calc(1.5px * var(--s)) rgba(255, 150, 40, 0.35),
     0 0 calc(9px * var(--s)) calc(4px * var(--s)) rgba(255, 90, 20, 0.3);
@@ -583,6 +586,20 @@
   box-shadow:
     0 0 calc(2px * var(--s)) calc(0.8px * var(--s)) rgba(255, 90, 60, 0.45),
     0 0 calc(5px * var(--s)) calc(2px * var(--s)) rgba(184, 20, 10, 0.5);
+}
+
+.prntr-room-glow-fills {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* The inside of a thrown thing's glow, under the front layer: rising to meet the glow at its edge, so a
+   sprite with open pixels does not show a hollow in it. */
+.prntr-room-glow-fill {
+  position: absolute;
+  border-radius: 40%;
+  background: radial-gradient(closest-side, rgba(255, 90, 60, 0.16), rgba(255, 90, 60, 0.3) 75%, rgba(255, 90, 60, 0.42));
 }
 
 /* The flash's white-out: a flat white wash over the room (the Continue dim is .prntr-room-continue);
