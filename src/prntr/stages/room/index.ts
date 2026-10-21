@@ -1134,6 +1134,8 @@ export const room: Stage = {
       sprays = [];
       drops = [];
       scanAt = null;
+      slamAt = null;
+      releaseTears();
       scene.shake = { x: 0, y: 0 };
       nextAttackAt = Infinity;
       frame.classList.remove('is-mad');
