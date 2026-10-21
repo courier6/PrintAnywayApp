@@ -1,7 +1,7 @@
 import { reducedMotion, wait } from '../../anim';
 import type { Handoff, Stage } from '../../types';
 import { H, Pix, W, rotateSprite } from './pixels';
-import { CLOCK_AT, KIT_AT, MACHINE_AT, MACHINE_PIECES, NOZZLES, SPR, drawFireFront, drawFlame, drawMarks, drawRoom, drawWindowWreck, fireRect, inDoorway, lampX, tubeX, type Broken, type ExitSign, type Hole, type Mark, type SceneState, type Tube } from './scene';
+import { CLOCK_AT, KIT_AT, KNOB, MACHINE_AT, MACHINE_PIECES, NOZZLES, SPR, drawFireFront, drawFlame, drawMarks, drawRoom, drawWindowWreck, fireRect, inDoorway, knobX, lampX, tubeX, type Broken, type ExitSign, type Hole, type Mark, type SceneState, type Tube } from './scene';
 import { ART_AT, ART_SUB, renderVictory } from './art';
 import { PAL, type PalKey } from './palette';
 import { createRoomSounds, type FireSound, type Hum } from './sounds';
@@ -234,16 +234,16 @@ const EXIT_FLICKER: [number, number][] = [
 const EXIT_FALL_MS = 550;
 const EXIT_WALL = { x: 17, y: 31 };
 const EXIT_FLOOR = { x: 20, y: 108 };
-/** The door: shut on the storm (PRNTR-PLANNING.md P5). DOOR_DELAY_MS after the sign hits the floor it
- * cracks open DOOR_CRACK px with the creak; at the DOOR_SWING_SHOTS-th hole in it, it swings open to
- * DOOR_OPEN px over DOOR_OPEN_MS, sign or no sign; at the DOOR_BREAK_SHOTS-th it breaks apart
- * (BREAK_POINTS, once) and the doorway is full of storm. It never closes again. */
-const DOOR_CRACK = 2;
+/** The door: shut on the storm (PRNTR-PLANNING.md P5), hinged on the right, its knob on the left.
+ * It swings open to DOOR_OPEN px over DOOR_OPEN_MS with the creak when its knob is shot (± KNOB_HIT_PAD,
+ * BREAK_POINTS) or DOOR_DELAY_MS after the sign hits the floor; any other shot only holes it, and at
+ * the DOOR_BREAK_SHOTS-th hole it breaks apart (BREAK_POINTS, once) and the doorway is full of storm.
+ * It never closes again. */
 const DOOR_OPEN = 22;
 const DOOR_DELAY_MS = 400;
 const DOOR_OPEN_MS = 1400;
-const DOOR_SWING_SHOTS = 6;
 const DOOR_BREAK_SHOTS = 12;
+const KNOB_HIT_PAD = 2;
 /** The storm outside (PRNTR-PLANNING.md P5; the timing is stage 0's storm.ts): a near strike the first
  * STRIKE_FIRST_MS in and then every STRIKE_MIN–STRIKE_MAX ms, its flash FLASH_MS long with an afterglow
  * of AFTERGLOW_MS; far lightning the first FAR_FIRST_MS in and then every FAR_MIN–FAR_MAX ms, never within
@@ -311,7 +311,7 @@ const USB_PLUG_MS = 2200;
  * the player full health, once, and hangs open and empty after. No points. */
 const KIT_HIT = { x0: KIT_AT.x - 3, y0: KIT_AT.y - 3, x1: KIT_AT.x + 16, y1: KIT_AT.y + 13 };
 /** The clock's and the post-it board's hotspots: their sprites (CLOCK_AT, BOARD_AT in scene.ts) plus 4 px. */
-const CLOCK_HIT = { x0: 64, y0: 37, x1: 88, y1: 60 };
+const CLOCK_HIT = { x0: CLOCK_AT.x - 4, y0: CLOCK_AT.y - 4, x1: CLOCK_AT.x + 20, y1: CLOCK_AT.y + 19 };
 const BOARD_HIT = { x0: 132, y0: 42, x1: 160, y1: 68 };
 /** What the gun can break and where (virtual px, half-open rects): the clock and the board (the
  * poster) as their hotspots; the cooler's bottle (COOLER rows 0–7 at 2×), the plant's leaves (PLANT
@@ -337,6 +337,9 @@ const CLOCK_REST_X = 28;
 const CLOCK_ROLL_PX = 12;
 const CLOCK_IGNITE_PAD = 2;
 const CLOCK_BURN_SPEED = 28;
+/** While the machine shakes (the pounce and its landing, the mad tremble) the clock's hands spin out of
+ * control, and for CLOCK_SPIN_TAIL_MS after; then they are back at 1:37. Still under reduced motion. */
+const CLOCK_SPIN_TAIL_MS = 600;
 /** The USB stick's hit area in screen px (the handoff's 44 px for the sticker), whatever the scale. */
 const USB_HIT_PX = 44;
 
@@ -622,6 +625,7 @@ export const room: Stage = {
       buttonBright: false,
       broken: { clock: false, poster: false, tank: false, plant: false, vase: false, kit: false },
       clock: { state: 'up', x: CLOCK_AT.x, y: CLOCK_AT.y, rot: 0 },
+      clockSpin: null,
       exit: { state: 'up', x: EXIT_WALL.x, y: EXIT_WALL.y, tilt: 0, lit: true },
       doorGap: 0,
       doorBroken: false,
@@ -710,6 +714,9 @@ export const room: Stage = {
     let clockAt = 0;
     let clockX0 = CLOCK_AT.x;
     let clockRot0 = 0;
+    /** The clock's hands: spinning since spinFrom, until spinUntil. */
+    let spinFrom = 0;
+    let spinUntil = -Infinity;
     /** The machine is shorting out from this moment (the water jug broke); the fire takes SHORT_MS later. */
     let shortAt: number | null = null;
     let shortZaps = 0;
@@ -1337,6 +1344,14 @@ export const room: Stage = {
         addScore(HIT_POINTS, now);
         return;
       }
+      // The door's knob, while the door is shut or ajar: it swings open.
+      const kx = knobX(scene.doorGap);
+      if (!scene.doorBroken && doorOpenAt === null && scene.doorGap < DOOR_OPEN && x >= kx - KNOB_HIT_PAD && x < kx + KNOB.w + KNOB_HIT_PAD && y >= KNOB.y - KNOB_HIT_PAD && y < KNOB.y + KNOB.h + KNOB_HIT_PAD) {
+        sounds.knobHit();
+        swingDoor(now);
+        addScore(BREAK_POINTS, now);
+        return;
+      }
       // The EXIT sign: the first hit knocks it loose, the second brings it down.
       const sign = scene.exit;
       if ((sign.state === 'up' || sign.state === 'loose') && x >= EXIT_HIT.x0 && x < EXIT_HIT.x1 && y >= EXIT_HIT.y0 && y < EXIT_HIT.y1) {
@@ -1363,6 +1378,8 @@ export const room: Stage = {
       const thing = BREAKABLES.find((b) => !scene.broken[b.id] && x >= b.x0 && x < b.x1 && y >= b.y0 && y < b.y1);
       if (thing) {
         scene.broken[thing.id] = true;
+        // the pot shot takes the plant with it (one break's points); the leaves shot leave the pot
+        if (thing.id === 'vase') scene.broken.plant = true;
         sounds[thing.sound]();
         addScore(BREAK_POINTS, now);
         if (thing.id === 'tank') startShort(now);
@@ -1379,7 +1396,7 @@ export const room: Stage = {
       else if (y < FLOOR_Y) addHole('wall', x, y);
     };
     // A hole where the shot landed; through the door or the blind, the storm's light in it. Every hole in
-    // the door counts toward its swing and its breaking.
+    // the door counts toward its breaking.
     const addHole = (kind: Hole['kind'], x: number, y: number, now = 0) => {
       const hole: Hole = { x: Math.floor(x), y: Math.floor(y), kind }; // the pixel under the shot
       scene.holes.push(hole);
@@ -1410,11 +1427,11 @@ export const room: Stage = {
       if (kind === 'door') {
         doorShots++;
         if (doorShots === DOOR_BREAK_SHOTS) breakDoor(now);
-        else if (doorShots === DOOR_SWING_SHOTS && doorOpenAt === null && scene.doorGap < DOOR_OPEN) swingDoor(now);
       }
     };
-    // The sixth hole: the door swings in to DOOR_OPEN from where it is, with the creak.
+    // The knob shot, or the sign down: the door swings in to DOOR_OPEN from where it is, with the creak.
     const swingDoor = (now: number) => {
+      if (scene.doorBroken || doorOpenAt !== null || scene.doorGap >= DOOR_OPEN) return;
       doorFrom = scene.doorGap;
       doorOpenAt = now;
       sounds.doorCreak();
@@ -1816,6 +1833,7 @@ export const room: Stage = {
         ghosts: () => ghosts.length,
         name: () => lifeName.textContent,
         clock: () => ({ ...scene.clock }),
+        clockSpin: () => scene.clockSpin,
         wreck: () => scene.printer === 'wreck',
         pieces: () => scene.pieces.map((q) => [Math.round(q.x), Math.round(q.y)]),
         windowOpen: () => scene.windowOpen,
@@ -1940,7 +1958,7 @@ export const room: Stage = {
       }
       if (doorAt !== null && now >= doorAt) {
         doorAt = null;
-        crackDoor();
+        swingDoor(now);
       }
       // The storm: a near strike now and then, far lightning between.
       if (now >= nextStrike) strike(now);
@@ -2135,12 +2153,6 @@ export const room: Stage = {
         ck.rot = clockRot0 - Math.floor((clockX0 - ck.x) / CLOCK_ROLL_PX);
       }
     };
-    // The sign down: the door cracks open with the creak (unless the shots already swung it).
-    const crackDoor = () => {
-      if (scene.doorBroken || scene.doorGap > 0) return;
-      scene.doorGap = DOOR_CRACK;
-      sounds.doorCreak();
-    };
     // The door swings in from where it stands, easing out, a pixel at a time; the light in it is drawn as wide.
     const poseDoor = (now: number) => {
       if (doorOpenAt !== null) {
@@ -2245,6 +2257,13 @@ export const room: Stage = {
       } else {
         scene.shake = { x: 0, y: 0 };
       }
+      // The clock's hands spin while the machine moves: forward in the pounce, shaking as it lands, trembling mad.
+      const moving = landing !== null || (scene.machine.back > 0 && scene.machine.back < 1) || scene.shake.x !== 0 || scene.shake.y !== 0;
+      if (moving && !reduced && frozenAt === null) {
+        if (now >= spinUntil) spinFrom = now;
+        spinUntil = now + CLOCK_SPIN_TAIL_MS;
+      }
+      scene.clockSpin = now < spinUntil ? now - spinFrom : null;
       // The slot's red light is a DOM box over the canvas: it trembles with the machine.
       slotLight.style.transform = scene.shake.x || scene.shake.y ? `translate(${scene.shake.x * scale}px, ${scene.shake.y * scale}px)` : '';
       // The cross's trail, for the snakes' lagged hunt: the pointer, or on touch the last tap.

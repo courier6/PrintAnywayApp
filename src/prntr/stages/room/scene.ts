@@ -34,6 +34,8 @@ const CLOCK_ROT = [0, 1, 2, 3].map((q) => rotateSprite(SPR.CLOCK, q));
 const COOLER_BODY = sliceRows(SPR.COOLER, 8, 22);
 const PLANT_TOP = sliceRows(SPR.PLANT, 0, 10);
 const PLANT_POT = sliceRows(SPR.PLANT, 10, 16);
+/** The bare plant lying on the carpet, its top to the left: the pot shot from under it. */
+const PLANT_FALLEN = rotateSprite(SPR.PLANT_BARE, 3);
 
 /** What the gun has broken: each stays broken for the rest of the stage. */
 export interface Broken {
@@ -165,6 +167,14 @@ export interface Mark {
   y: number;
 }
 
+/** The blind's slats: one every BLIND_PITCH rows from BLIND_TOP, three rows of slat and a 2 px gap on the storm. */
+export const BLIND_TOP = 39;
+export const BLIND_PITCH = 5;
+
+/** The door's knob, 2×2: near the door's free (left) edge, moving with it as the door swings in on its right hinge. */
+export const KNOB = { y: 76, w: 2, h: 2 };
+export const knobX = (doorGap: number): number => 16 + Math.min(doorGap, 22);
+
 /** A hole in the door that the open door has swung away from: it is in the black doorway now. */
 export function inDoorway(h: Hole, doorGap: number): boolean {
   return h.kind === 'door' && h.x + 1 > 13 && h.x - 1 <= 13 + doorGap;
@@ -203,8 +213,10 @@ export interface SceneState {
   buttonBright: boolean;
   broken: Broken;
   clock: Clock;
+  /** The clock's hands spinning out of control while the machine shakes: ms into the spin, or null (still, 1:37). */
+  clockSpin: number | null;
   exit: ExitSign;
-  /** How wide the door stands open on the storm, in px: 0 shut; 2 cracked by the sign; up to 22 swung in. */
+  /** How wide the door stands open on the storm, in px: 0 shut; up to 22 swung in (its knob shot, or the sign down). */
   doorGap: number;
   /** The door shot apart (the twelfth hole): gone, its planks on the carpet, the doorway full of storm. */
   doorBroken: boolean;
@@ -235,7 +247,7 @@ export interface SceneState {
 /** Where the clock hangs (16×15) and where the post-it board does (20×18): swapped, the
  * board lower than the clock and next to the window. liminal.py had the
  * board at 66,40 and the clock at 112,36. */
-export const CLOCK_AT = { x: 68, y: 41 };
+export const CLOCK_AT = { x: 50, y: 41 };
 export const BOARD_AT = { x: 136, y: 46 };
 /** The first aid kit (13×10), on the wall at the lower right of the window. */
 export const KIT_AT = { x: 226, y: 79 };
@@ -832,8 +844,8 @@ export function drawRoom(p: Pix, s: SceneState): void {
   for (let y = 109; y < H; y++) {
     for (let x = 0; x < W; x++) p.set(x, y, (x + y) % 2 === 0 ? 'C' : 'x');
   }
-  // the door in its frame, shut on the storm; cracked by the sign or swung by the shots it shows it;
-  // shot apart, it is gone and the doorway is the storm
+  // the door in its frame, shut on the storm, hinged on the right; swung in (its knob shot, or the
+  // sign down) it shows the storm at its left; shot apart, it is gone and the doorway is the storm
   p.rect(10, 40, 44, 108, 'E');
   if (s.doorBroken) {
     drawStorm(p, { x0: 13, y0: 43, x1: 41, y1: 108 }, s.storm);
@@ -845,7 +857,7 @@ export function drawRoom(p: Pix, s: SceneState): void {
     line(p, 41, 70, 47, 112, 'D');
     line(p, 42, 70, 48, 112, 'D');
     line(p, 40, 70, 46, 112, 'E');
-    p.rect(13, 43, 15, 50, 'D');
+    p.rect(39, 43, 41, 50, 'D');
   } else {
     p.rect(13, 43, 41, 108, 'D');
     if (s.doorGap > 0) {
@@ -853,8 +865,8 @@ export function drawRoom(p: Pix, s: SceneState): void {
       // the door's leading edge
       p.rect(13 + s.doorGap, 43, 14 + s.doorGap, 108, 'E');
     }
-    const kx = 36 + Math.min(s.doorGap, 4);
-    p.rect(kx, 76, kx + 2, 78, 'K');
+    const kx = knobX(s.doorGap);
+    p.rect(kx, KNOB.y, kx + KNOB.w, KNOB.y + KNOB.h, 'K');
   }
   // the EXIT sign: on the wall, hanging loose, falling, or on the floor in front of the door
   const sign = s.exit;
@@ -867,7 +879,20 @@ export function drawRoom(p: Pix, s: SceneState): void {
   p.rect(ART_AT.x - 1, ART_AT.y - 1, ART_AT.x + ART_AT.w + 1, ART_AT.y + ART_AT.h + 1, 'D');
   p.clearRect(ART_AT.x, ART_AT.y, ART_AT.x + ART_AT.w, ART_AT.y + ART_AT.h);
   // the clock where the board was, the post-it board lower and by the window
-  if (s.clock.state === 'up') p.blit(CLOCK_AT.x, CLOCK_AT.y, SPR.CLOCK);
+  if (s.clock.state === 'up') {
+    if (s.clockSpin === null) p.blit(CLOCK_AT.x, CLOCK_AT.y, SPR.CLOCK);
+    else {
+      // the face without its hands, and the hands spinning: the long one fast and lurching, the short one backwards
+      p.blit(CLOCK_AT.x, CLOCK_AT.y, SPR.CLOCK, 1, { remap: { i: 'r' } });
+      const t = s.clockSpin;
+      const cx = CLOCK_AT.x + 7;
+      const cy = CLOCK_AT.y + 7;
+      const am = t * 0.03 + 2 * Math.sin(t / 230);
+      const ah = -t * 0.006;
+      line(p, cx, cy, Math.round(cx + 5 * Math.sin(am)), Math.round(cy - 5 * Math.cos(am)), 'i');
+      line(p, cx, cy, Math.round(cx + 3 * Math.sin(ah)), Math.round(cy - 3 * Math.cos(ah)), 'i');
+    }
+  }
   p.blit(BOARD_AT.x, BOARD_AT.y, s.broken.poster ? SPR.POSTER_TORN : SPR.POSTER);
   // the window: the blind down over the storm, its slat gaps lit by every strike; shot open, the storm itself
   p.rect(160, 36, 224, 90, 'e');
@@ -879,9 +904,18 @@ export function drawRoom(p: Pix, s: SceneState): void {
     p.rect(188, 109, 196, 110, 's');
     p.rect(176, 113, 181, 114, 's');
   } else {
-    p.rect(163, 39, 221, 87, 's');
-    const gapK: PalKey = s.storm.near > 0.3 ? 'H' : s.storm.near > 0 || s.storm.far > 0.3 ? 'L' : 'a';
-    for (let y = 41; y < 87; y += 4) p.rect(163, y, 221, y + 1, gapK);
+    // the blind half open: the storm behind it, and over it ten slats tilted toward the room, each a
+    // lit top, its face and the shadowed underside the tilt shows, with a 2 px gap under each where the
+    // storm is seen (its rain, its clouds, its lightning); a near strike lights the undersides. Two
+    // ladder cords run down through them.
+    drawStorm(p, { x0: 163, y0: 39, x1: 221, y1: 87 }, s.storm);
+    const under: PalKey = s.storm.near > 0.3 ? 'l' : 'a';
+    for (let y = BLIND_TOP; y < 87; y += BLIND_PITCH) {
+      p.rect(163, y, 221, y + 1, 'W');
+      p.rect(163, y + 1, 221, y + 2, 's');
+      p.rect(163, y + 2, 221, y + 3, under);
+    }
+    for (const cx of [176, 208]) for (let y = 39; y < 87; y++) if ((y - BLIND_TOP) % BLIND_PITCH >= 3) p.set(cx, y, 'e');
   }
   // the first aid kit by the window's lower right corner, green where a kit is red
   p.blit(KIT_AT.x, KIT_AT.y, s.broken.kit ? SPR.KIT_OPEN : SPR.KIT);
@@ -910,7 +944,9 @@ export function drawRoom(p: Pix, s: SceneState): void {
   }
   if (s.fire) drawFire(p, s.fire, 'mid');
   p.rect(190, 132, 206, 135, 'X');
-  p.blit(200, 103, s.broken.plant ? SPR.PLANT_BARE : PLANT_TOP, 2);
+  // the plant in its pot; its leaves shot off, bare stems; the pot shot, the stems lie on the carpet
+  if (s.broken.vase) p.blit(182, 121, PLANT_FALLEN, 2);
+  else p.blit(200, 103, s.broken.plant ? SPR.PLANT_BARE : PLANT_TOP, 2);
   p.blit(200, 123, s.broken.vase ? SPR.POT_BROKEN : PLANT_POT, 2);
   if (s.broken.plant) {
     // leaves on the carpet
