@@ -1,7 +1,7 @@
 import { reducedMotion, wait } from '../../anim';
 import type { Handoff, Stage } from '../../types';
 import { H, Pix, W, rotateSprite } from './pixels';
-import { CLOCK_AT, KIT_AT, MACHINE_AT, MACHINE_PIECES, NOZZLES, SPR, drawFireFront, drawFlame, drawMarks, drawRoom, drawWindowWreck, fireRect, inDoorway, lampX, tubeX, type Broken, type ExitSign, type Hole, type Mark, type SceneState, type Tube } from './scene';
+import { CLOCK_AT, KIT_AT, KNOB, MACHINE_AT, MACHINE_PIECES, NOZZLES, SPR, drawFireFront, drawFlame, drawMarks, drawRoom, drawWindowWreck, fireRect, inDoorway, knobX, lampX, tubeX, type Broken, type ExitSign, type Hole, type Mark, type SceneState, type Tube } from './scene';
 import { ART_AT, ART_SUB, renderVictory } from './art';
 import { PAL, type PalKey } from './palette';
 import { createRoomSounds, type FireSound, type Hum } from './sounds';
@@ -234,16 +234,16 @@ const EXIT_FLICKER: [number, number][] = [
 const EXIT_FALL_MS = 550;
 const EXIT_WALL = { x: 17, y: 31 };
 const EXIT_FLOOR = { x: 20, y: 108 };
-/** The door: shut on the storm (PRNTR-PLANNING.md P5). DOOR_DELAY_MS after the sign hits the floor it
- * cracks open DOOR_CRACK px with the creak; at the DOOR_SWING_SHOTS-th hole in it, it swings open to
- * DOOR_OPEN px over DOOR_OPEN_MS, sign or no sign; at the DOOR_BREAK_SHOTS-th it breaks apart
- * (BREAK_POINTS, once) and the doorway is full of storm. It never closes again. */
-const DOOR_CRACK = 2;
+/** The door: shut on the storm (PRNTR-PLANNING.md P5), hinged on the right, its knob on the left.
+ * It swings open to DOOR_OPEN px over DOOR_OPEN_MS with the creak when its knob is shot (± KNOB_HIT_PAD,
+ * BREAK_POINTS) or DOOR_DELAY_MS after the sign hits the floor; any other shot only holes it, and at
+ * the DOOR_BREAK_SHOTS-th hole it breaks apart (BREAK_POINTS, once) and the doorway is full of storm.
+ * It never closes again. */
 const DOOR_OPEN = 22;
 const DOOR_DELAY_MS = 400;
 const DOOR_OPEN_MS = 1400;
-const DOOR_SWING_SHOTS = 6;
 const DOOR_BREAK_SHOTS = 12;
+const KNOB_HIT_PAD = 2;
 /** The storm outside (PRNTR-PLANNING.md P5; the timing is stage 0's storm.ts): a near strike the first
  * STRIKE_FIRST_MS in and then every STRIKE_MIN–STRIKE_MAX ms, its flash FLASH_MS long with an afterglow
  * of AFTERGLOW_MS; far lightning the first FAR_FIRST_MS in and then every FAR_MIN–FAR_MAX ms, never within
@@ -1337,6 +1337,14 @@ export const room: Stage = {
         addScore(HIT_POINTS, now);
         return;
       }
+      // The door's knob, while the door is shut or ajar: it swings open.
+      const kx = knobX(scene.doorGap);
+      if (!scene.doorBroken && doorOpenAt === null && scene.doorGap < DOOR_OPEN && x >= kx - KNOB_HIT_PAD && x < kx + KNOB.w + KNOB_HIT_PAD && y >= KNOB.y - KNOB_HIT_PAD && y < KNOB.y + KNOB.h + KNOB_HIT_PAD) {
+        sounds.knobHit();
+        swingDoor(now);
+        addScore(BREAK_POINTS, now);
+        return;
+      }
       // The EXIT sign: the first hit knocks it loose, the second brings it down.
       const sign = scene.exit;
       if ((sign.state === 'up' || sign.state === 'loose') && x >= EXIT_HIT.x0 && x < EXIT_HIT.x1 && y >= EXIT_HIT.y0 && y < EXIT_HIT.y1) {
@@ -1379,7 +1387,7 @@ export const room: Stage = {
       else if (y < FLOOR_Y) addHole('wall', x, y);
     };
     // A hole where the shot landed; through the door or the blind, the storm's light in it. Every hole in
-    // the door counts toward its swing and its breaking.
+    // the door counts toward its breaking.
     const addHole = (kind: Hole['kind'], x: number, y: number, now = 0) => {
       const hole: Hole = { x: Math.floor(x), y: Math.floor(y), kind }; // the pixel under the shot
       scene.holes.push(hole);
@@ -1410,11 +1418,11 @@ export const room: Stage = {
       if (kind === 'door') {
         doorShots++;
         if (doorShots === DOOR_BREAK_SHOTS) breakDoor(now);
-        else if (doorShots === DOOR_SWING_SHOTS && doorOpenAt === null && scene.doorGap < DOOR_OPEN) swingDoor(now);
       }
     };
-    // The sixth hole: the door swings in to DOOR_OPEN from where it is, with the creak.
+    // The knob shot, or the sign down: the door swings in to DOOR_OPEN from where it is, with the creak.
     const swingDoor = (now: number) => {
+      if (scene.doorBroken || doorOpenAt !== null || scene.doorGap >= DOOR_OPEN) return;
       doorFrom = scene.doorGap;
       doorOpenAt = now;
       sounds.doorCreak();
@@ -1940,7 +1948,7 @@ export const room: Stage = {
       }
       if (doorAt !== null && now >= doorAt) {
         doorAt = null;
-        crackDoor();
+        swingDoor(now);
       }
       // The storm: a near strike now and then, far lightning between.
       if (now >= nextStrike) strike(now);
@@ -2134,12 +2142,6 @@ export const room: Stage = {
         ck.y = CLOCK_FLOOR_Y;
         ck.rot = clockRot0 - Math.floor((clockX0 - ck.x) / CLOCK_ROLL_PX);
       }
-    };
-    // The sign down: the door cracks open with the creak (unless the shots already swung it).
-    const crackDoor = () => {
-      if (scene.doorBroken || scene.doorGap > 0) return;
-      scene.doorGap = DOOR_CRACK;
-      sounds.doorCreak();
     };
     // The door swings in from where it stands, easing out, a pixel at a time; the light in it is drawn as wide.
     const poseDoor = (now: number) => {

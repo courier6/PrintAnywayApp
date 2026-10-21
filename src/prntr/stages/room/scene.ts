@@ -165,6 +165,10 @@ export interface Mark {
   y: number;
 }
 
+/** The door's knob, 2×2: near the door's free (left) edge, moving with it as the door swings in on its right hinge. */
+export const KNOB = { y: 76, w: 2, h: 2 };
+export const knobX = (doorGap: number): number => 16 + Math.min(doorGap, 22);
+
 /** A hole in the door that the open door has swung away from: it is in the black doorway now. */
 export function inDoorway(h: Hole, doorGap: number): boolean {
   return h.kind === 'door' && h.x + 1 > 13 && h.x - 1 <= 13 + doorGap;
@@ -204,7 +208,7 @@ export interface SceneState {
   broken: Broken;
   clock: Clock;
   exit: ExitSign;
-  /** How wide the door stands open on the storm, in px: 0 shut; 2 cracked by the sign; up to 22 swung in. */
+  /** How wide the door stands open on the storm, in px: 0 shut; up to 22 swung in (its knob shot, or the sign down). */
   doorGap: number;
   /** The door shot apart (the twelfth hole): gone, its planks on the carpet, the doorway full of storm. */
   doorBroken: boolean;
@@ -832,8 +836,8 @@ export function drawRoom(p: Pix, s: SceneState): void {
   for (let y = 109; y < H; y++) {
     for (let x = 0; x < W; x++) p.set(x, y, (x + y) % 2 === 0 ? 'C' : 'x');
   }
-  // the door in its frame, shut on the storm; cracked by the sign or swung by the shots it shows it;
-  // shot apart, it is gone and the doorway is the storm
+  // the door in its frame, shut on the storm, hinged on the right; swung in (its knob shot, or the
+  // sign down) it shows the storm at its left; shot apart, it is gone and the doorway is the storm
   p.rect(10, 40, 44, 108, 'E');
   if (s.doorBroken) {
     drawStorm(p, { x0: 13, y0: 43, x1: 41, y1: 108 }, s.storm);
@@ -845,7 +849,7 @@ export function drawRoom(p: Pix, s: SceneState): void {
     line(p, 41, 70, 47, 112, 'D');
     line(p, 42, 70, 48, 112, 'D');
     line(p, 40, 70, 46, 112, 'E');
-    p.rect(13, 43, 15, 50, 'D');
+    p.rect(39, 43, 41, 50, 'D');
   } else {
     p.rect(13, 43, 41, 108, 'D');
     if (s.doorGap > 0) {
@@ -853,8 +857,8 @@ export function drawRoom(p: Pix, s: SceneState): void {
       // the door's leading edge
       p.rect(13 + s.doorGap, 43, 14 + s.doorGap, 108, 'E');
     }
-    const kx = 36 + Math.min(s.doorGap, 4);
-    p.rect(kx, 76, kx + 2, 78, 'K');
+    const kx = knobX(s.doorGap);
+    p.rect(kx, KNOB.y, kx + KNOB.w, KNOB.y + KNOB.h, 'K');
   }
   // the EXIT sign: on the wall, hanging loose, falling, or on the floor in front of the door
   const sign = s.exit;

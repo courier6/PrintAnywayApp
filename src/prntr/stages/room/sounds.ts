@@ -76,6 +76,8 @@ export interface RoomSounds {
   signCrash(): void;
   /** The door creaking open, 1.3 s, faint under everything else. */
   doorCreak(): void;
+  /** The door's knob shot: a dull metal clank and the latch giving. */
+  knobHit(): void;
   /** The door shot apart: a crack of wood and its planks hitting the carpet. */
   doorBreak(): void;
   /** The machine shorting out when the water reaches it: one burst of zaps. */
@@ -139,6 +141,7 @@ const SILENT: RoomSounds = {
   signSnap: noop,
   signCrash: noop,
   doorCreak: noop,
+  knobHit: noop,
   doorBreak: noop,
   zap: noop,
   short: noop,
@@ -472,6 +475,14 @@ export function createRoomSounds(audio: PrntrAudio): RoomSounds {
     },
     // a metal tick under two rings falling from 1.8 and 2.7 kHz, then a 120 Hz square with hiss
     // for each window the letters are on
+    // a clank lower and duller than a bolt's on the glass, then the latch's click 60 ms later
+    knobHit() {
+      const t = now();
+      noise(t, 0.04, { hp: 1500, lp: 6000, gain: 0.4, decay: 0.008 });
+      tone(t, 0.2, { f0: 1300, f1: 1050, gain: 0.25, decay: 0.04 });
+      tone(t, 0.08, { f0: 180, f1: 90, gain: 0.35, decay: 0.02 });
+      noise(t + 0.06, 0.02, { hp: 3000, gain: 0.3, decay: 0.003 });
+    },
     signHit(flicker) {
       const t = now();
       noise(t, 0.04, { hp: 3000, gain: 0.5, decay: 0.006 });
