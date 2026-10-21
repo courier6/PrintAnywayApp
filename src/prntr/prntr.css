@@ -165,18 +165,20 @@
 
 .prntr-card-name {
   color: #EDEDED;
-  font-size: 26px;
-  font-weight: 400;
-  letter-spacing: 0.32em;
-  padding-left: 0.32em; /* optical centring against the tracking */
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 0 0.1em 10px;
+  border-bottom: 1px solid #4A4A4A; /* a hairline under the name, like a letterhead */
   text-transform: uppercase;
 }
 
 .prntr-card-presents {
-  color: #9A9A9A;
-  font-size: 18px;
-  font-style: italic;
-  letter-spacing: 0.06em;
+  color: #8A8A8A;
+  font-size: 13px;
+  letter-spacing: 0.45em;
+  padding-left: 0.45em; /* optical centring against the tracking */
+  text-transform: uppercase;
 }
 
 .prntr-title-wrap {

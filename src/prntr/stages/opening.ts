@@ -82,7 +82,7 @@ export const opening: Stage = {
     const card = el('div', 'prntr-card');
     card.innerHTML =
       `<div class="prntr-card-brand">${LOGO}<div class="prntr-card-name">SIMPLE PRODUCTS</div></div>` +
-      '<div class="prntr-card-presents">presents…</div>';
+      '<div class="prntr-card-presents">presents</div>';
     root.append(card);
     // Under the card, as long as it is on: the jingle. Cut with the stage.
     const jingle = audio.context && audio.master ? playCardJingle(audio.context, audio.master, CARD_MS / 1000) : null;
