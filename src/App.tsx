@@ -27,6 +27,9 @@ const KIND_BY_CODE: Record<ErrorCode, ErrorKind> = {
   'PA-106': 'memory',
 };
 
+/** Print waits this long at most for the print pages to decode, then prints what has. */
+const PRINT_DECODE_MS = 5000;
+
 const scheduleIdle: (cb: () => void) => number =
   typeof window.requestIdleCallback === 'function'
     ? (cb) => window.requestIdleCallback(cb)
@@ -409,8 +412,12 @@ export default function App() {
       const pages = await collectAllRecolored(token);
       flushSync(() => setPrintImages(pages.map((p) => p.canvas.toDataURL('image/png'))));
       // The dialog snapshots the page: every image must be decoded by then, or it prints blank.
+      // A decode that never settles would otherwise hold both buttons until the next file.
       const images = Array.from(printRoot.current?.querySelectorAll('img') ?? []);
-      await Promise.all(images.map((img) => img.decode().catch(() => undefined)));
+      await Promise.race([
+        Promise.all(images.map((img) => img.decode().catch(() => undefined))),
+        new Promise((resolve) => setTimeout(resolve, PRINT_DECODE_MS)),
+      ]);
       if (token !== runToken.current) return;
       window.print();
     } catch (err) {
