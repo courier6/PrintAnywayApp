@@ -213,6 +213,8 @@ export interface SceneState {
   buttonBright: boolean;
   broken: Broken;
   clock: Clock;
+  /** The clock's hands spinning out of control while the machine shakes: ms into the spin, or null (still, 1:37). */
+  clockSpin: number | null;
   exit: ExitSign;
   /** How wide the door stands open on the storm, in px: 0 shut; up to 22 swung in (its knob shot, or the sign down). */
   doorGap: number;
@@ -245,7 +247,7 @@ export interface SceneState {
 /** Where the clock hangs (16×15) and where the post-it board does (20×18): swapped, the
  * board lower than the clock and next to the window. liminal.py had the
  * board at 66,40 and the clock at 112,36. */
-export const CLOCK_AT = { x: 68, y: 41 };
+export const CLOCK_AT = { x: 50, y: 41 };
 export const BOARD_AT = { x: 136, y: 46 };
 /** The first aid kit (13×10), on the wall at the lower right of the window. */
 export const KIT_AT = { x: 226, y: 79 };
@@ -877,7 +879,20 @@ export function drawRoom(p: Pix, s: SceneState): void {
   p.rect(ART_AT.x - 1, ART_AT.y - 1, ART_AT.x + ART_AT.w + 1, ART_AT.y + ART_AT.h + 1, 'D');
   p.clearRect(ART_AT.x, ART_AT.y, ART_AT.x + ART_AT.w, ART_AT.y + ART_AT.h);
   // the clock where the board was, the post-it board lower and by the window
-  if (s.clock.state === 'up') p.blit(CLOCK_AT.x, CLOCK_AT.y, SPR.CLOCK);
+  if (s.clock.state === 'up') {
+    if (s.clockSpin === null) p.blit(CLOCK_AT.x, CLOCK_AT.y, SPR.CLOCK);
+    else {
+      // the face without its hands, and the hands spinning: the long one fast and lurching, the short one backwards
+      p.blit(CLOCK_AT.x, CLOCK_AT.y, SPR.CLOCK, 1, { remap: { i: 'r' } });
+      const t = s.clockSpin;
+      const cx = CLOCK_AT.x + 7;
+      const cy = CLOCK_AT.y + 7;
+      const am = t * 0.03 + 2 * Math.sin(t / 230);
+      const ah = -t * 0.006;
+      line(p, cx, cy, Math.round(cx + 5 * Math.sin(am)), Math.round(cy - 5 * Math.cos(am)), 'i');
+      line(p, cx, cy, Math.round(cx + 3 * Math.sin(ah)), Math.round(cy - 3 * Math.cos(ah)), 'i');
+    }
+  }
   p.blit(BOARD_AT.x, BOARD_AT.y, s.broken.poster ? SPR.POSTER_TORN : SPR.POSTER);
   // the window: the blind down over the storm, its slat gaps lit by every strike; shot open, the storm itself
   p.rect(160, 36, 224, 90, 'e');

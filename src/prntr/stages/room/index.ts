@@ -311,7 +311,7 @@ const USB_PLUG_MS = 2200;
  * the player full health, once, and hangs open and empty after. No points. */
 const KIT_HIT = { x0: KIT_AT.x - 3, y0: KIT_AT.y - 3, x1: KIT_AT.x + 16, y1: KIT_AT.y + 13 };
 /** The clock's and the post-it board's hotspots: their sprites (CLOCK_AT, BOARD_AT in scene.ts) plus 4 px. */
-const CLOCK_HIT = { x0: 64, y0: 37, x1: 88, y1: 60 };
+const CLOCK_HIT = { x0: CLOCK_AT.x - 4, y0: CLOCK_AT.y - 4, x1: CLOCK_AT.x + 20, y1: CLOCK_AT.y + 19 };
 const BOARD_HIT = { x0: 132, y0: 42, x1: 160, y1: 68 };
 /** What the gun can break and where (virtual px, half-open rects): the clock and the board (the
  * poster) as their hotspots; the cooler's bottle (COOLER rows 0–7 at 2×), the plant's leaves (PLANT
@@ -337,6 +337,9 @@ const CLOCK_REST_X = 28;
 const CLOCK_ROLL_PX = 12;
 const CLOCK_IGNITE_PAD = 2;
 const CLOCK_BURN_SPEED = 28;
+/** While the machine shakes (the pounce and its landing, the mad tremble) the clock's hands spin out of
+ * control, and for CLOCK_SPIN_TAIL_MS after; then they are back at 1:37. Still under reduced motion. */
+const CLOCK_SPIN_TAIL_MS = 600;
 /** The USB stick's hit area in screen px (the handoff's 44 px for the sticker), whatever the scale. */
 const USB_HIT_PX = 44;
 
@@ -622,6 +625,7 @@ export const room: Stage = {
       buttonBright: false,
       broken: { clock: false, poster: false, tank: false, plant: false, vase: false, kit: false },
       clock: { state: 'up', x: CLOCK_AT.x, y: CLOCK_AT.y, rot: 0 },
+      clockSpin: null,
       exit: { state: 'up', x: EXIT_WALL.x, y: EXIT_WALL.y, tilt: 0, lit: true },
       doorGap: 0,
       doorBroken: false,
@@ -710,6 +714,9 @@ export const room: Stage = {
     let clockAt = 0;
     let clockX0 = CLOCK_AT.x;
     let clockRot0 = 0;
+    /** The clock's hands: spinning since spinFrom, until spinUntil. */
+    let spinFrom = 0;
+    let spinUntil = -Infinity;
     /** The machine is shorting out from this moment (the water jug broke); the fire takes SHORT_MS later. */
     let shortAt: number | null = null;
     let shortZaps = 0;
@@ -1826,6 +1833,7 @@ export const room: Stage = {
         ghosts: () => ghosts.length,
         name: () => lifeName.textContent,
         clock: () => ({ ...scene.clock }),
+        clockSpin: () => scene.clockSpin,
         wreck: () => scene.printer === 'wreck',
         pieces: () => scene.pieces.map((q) => [Math.round(q.x), Math.round(q.y)]),
         windowOpen: () => scene.windowOpen,
@@ -2249,6 +2257,13 @@ export const room: Stage = {
       } else {
         scene.shake = { x: 0, y: 0 };
       }
+      // The clock's hands spin while the machine moves: forward in the pounce, shaking as it lands, trembling mad.
+      const moving = landing !== null || (scene.machine.back > 0 && scene.machine.back < 1) || scene.shake.x !== 0 || scene.shake.y !== 0;
+      if (moving && !reduced && frozenAt === null) {
+        if (now >= spinUntil) spinFrom = now;
+        spinUntil = now + CLOCK_SPIN_TAIL_MS;
+      }
+      scene.clockSpin = now < spinUntil ? now - spinFrom : null;
       // The slot's red light is a DOM box over the canvas: it trembles with the machine.
       slotLight.style.transform = scene.shake.x || scene.shake.y ? `translate(${scene.shake.x * scale}px, ${scene.shake.y * scale}px)` : '';
       // The cross's trail, for the snakes' lagged hunt: the pointer, or on touch the last tap.
