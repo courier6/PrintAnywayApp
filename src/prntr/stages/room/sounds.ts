@@ -31,6 +31,8 @@ export interface RoomSounds {
   lightTick(): void;
   lidOpen(): void;
   lidShut(): void;
+  /** The machine pouncing forward: a swelling whoosh, then its landing thump at 0.35 s. */
+  pounce(): void;
   /** The scan's whine, rising over the 1.2 s sweep. */
   scanSweep(): void;
   /** The flash: an 80 ms white burst. */
@@ -112,6 +114,7 @@ const SILENT: RoomSounds = {
   lightTick: noop,
   lidOpen: noop,
   lidShut: noop,
+  pounce: noop,
   scanSweep: noop,
   scanBurst: noop,
   bulbPop: noop,
@@ -334,6 +337,15 @@ export function createRoomSounds(audio: PrntrAudio): RoomSounds {
       const t = now();
       tone(t, 0.22, { f0: 150, f1: 40, gain: 0.6, decay: 0.07 });
       noise(t, 0.12, { lp: 1200, gain: 0.3, decay: 0.025 });
+    },
+    // a whoosh swelling over 0.35 s (two bands of low noise, the second louder and brighter), then
+    // a thump: a tone falling 120 → 35 Hz with a burst of low noise
+    pounce() {
+      const t = now();
+      noise(t, 0.25, { lp: 500, gain: 0.15 });
+      noise(t + 0.15, 0.2, { lp: 1200, gain: 0.3 });
+      tone(t + 0.35, 0.18, { f0: 120, f1: 35, gain: 0.7, decay: 0.06 });
+      noise(t + 0.35, 0.1, { lp: 800, gain: 0.4, decay: 0.03 });
     },
     // a whine rising 800 → 2400 Hz over the 1.2 s sweep
     scanSweep() {

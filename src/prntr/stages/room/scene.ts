@@ -113,9 +113,15 @@ export interface Machine {
   flash: boolean;
   /** The panel is on: the display dark with text, the keys white (off: grey, blank). */
   power: boolean;
-  /** The display's text red (from the wake-up on) instead of green. */
+  /** The display's text and the button red (from the wake-up on) instead of green. */
   angry: boolean;
+  /** How far back it stands: 0 in its place, 1 at the back of the room (two thirds the size, its
+   * feet on 134). The beat brings it forward: the pounce. */
+  back: number;
 }
+
+/** The machine's size and foot line at `back`. */
+export const machineBack = (back: number): { sc: number; foot: number } => ({ sc: 1 - back / 3, foot: 146 - Math.round(12 * back) });
 
 /** The machine: 96 wide at x 72, its top edge (the lid's hinge) at y 80, its feet on 146. */
 export const MACHINE_AT = { x0: 72, y0: 80, x1: 168, y1: 146 };
@@ -398,7 +404,8 @@ export function drawMachine(p: Painter, s: MachineScene): void {
   }
   for (let i = 0; i < 4; i++) panel(112 + i * 6, 95, 116 + i * 6, 99, m.power ? 'w' : 'T');
   rect(112, 101, 114, 103, s.ledRed ? 'R' : 'K');
-  panel(146, 93, 162, 102, s.buttonBright ? 'Q' : 'R');
+  // the button: green while the room is quiet, red once the machine is angry, bright for a blink
+  panel(146, 93, 162, 102, s.buttonBright ? 'Q' : m.angry ? 'R' : 'n');
   if (s.buttonBright) rect(148, 94, 160, 95, 'W');
   // the output: a dark opening under the panel, the page in it while there is one
   panel(78, 107, 162, 115, 'G');
@@ -490,8 +497,41 @@ class LetterPix implements Painter {
   rect(x0: number, y0: number, x1: number, y1: number, key: PalKey): void {
     for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) this.set(x, y, key);
   }
+  clear(): void {
+    for (const r of this.rows) r.fill('.');
+  }
   sprite(): Sprite {
     return { w: this.w, h: this.h, rows: this.rows.map((r) => r.join('')) };
+  }
+}
+
+/** The machine drawn full size here (its shadow and standing lid included), to be sampled smaller when it stands back. */
+const BACK_PIX = new LetterPix(MACHINE_AT.x0, 40, 104, 112);
+
+/**
+ * The machine standing back: drawn full size into BACK_PIX, then every pixel of that put down
+ * at `sc` about the foot line's centre (120, `foot`), each covering the cell it maps onto (at
+ * least one px, so the outlines never drop out). Nearest neighbour; the shake applies after.
+ */
+function drawMachineBack(p: Pix, s: MachineScene): void {
+  const { sc, foot } = machineBack(s.machine.back);
+  BACK_PIX.clear();
+  drawMachine(BACK_PIX, { ...s, shake: { x: 0, y: 0 } });
+  const cx = 120;
+  const { x: ox, y: oy } = s.shake;
+  for (let y = 0; y < BACK_PIX.h; y++) {
+    const row = BACK_PIX.rows[y];
+    const sy = y + 40;
+    const dy = Math.round(foot + (sy - MACHINE_AT.y1) * sc);
+    const h = Math.max(1, Math.round(foot + (sy + 1 - MACHINE_AT.y1) * sc) - dy);
+    for (let x = 0; x < BACK_PIX.w; x++) {
+      const k = row[x];
+      if (k === '.') continue;
+      const sx = x + MACHINE_AT.x0;
+      const dx = Math.round(cx + (sx - cx) * sc);
+      const w = Math.max(1, Math.round(cx + (sx + 1 - cx) * sc) - dx);
+      p.rect(dx + ox, dy + oy, dx + w + ox, dy + h + oy, k as PalKey);
+    }
   }
 }
 
@@ -499,7 +539,7 @@ class LetterPix implements Painter {
 const MACHINE_SPRITE: Sprite = (() => {
   const lp = new LetterPix(MACHINE_AT.x0, MACHINE_AT.y0, MACHINE_AT.x1 - MACHINE_AT.x0, MACHINE_AT.y1 - MACHINE_AT.y0);
   drawMachine(lp, {
-    machine: { lid: 0, lamp: null, lampOut: false, flash: false, power: true, angry: true },
+    machine: { lid: 0, lamp: null, lampOut: false, flash: false, power: true, angry: true, back: 0 },
     shake: { x: 0, y: 0 },
     flashWhite: false,
     ledRed: true,
@@ -654,6 +694,9 @@ export function drawRoom(p: Pix, s: SceneState): void {
   if (s.printer === 'wreck') {
     // the burst machine: its pieces in the air and on the floor, the fire raging where it stood
     for (const pc of s.pieces) p.blit(Math.round(pc.x), Math.round(pc.y), pc.spr);
+  } else if (s.machine.back > 0) {
+    // standing back, before the pounce: smaller, higher on the carpet (no wear yet)
+    drawMachineBack(p, s);
   } else {
     drawMachine(p, s);
     if (!s.flashWhite) drawWear(p, MACHINE_AT.x0 + s.shake.x, MACHINE_AT.y0 + s.shake.y, s.damage, s.lights[1] ? 'A' : 'a');

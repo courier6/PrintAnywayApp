@@ -247,6 +247,14 @@ const STAPLE_EJECT = 0.15;
 const PAGE_TARGETS_X = [30, 75, 120, 165, 210];
 /** Where each of the five pages comes out, left to right along the slot. */
 const PAGE_ORIGINS_X = [94, 107, 120, 133, 146];
+/** The beat after the USB goes in: the machine pounces from the back of the room at POUNCE_AT, growing
+ * to its place over POUNCE_MS (a cut under reduced motion), lands two px low for LAND_MS and shakes for
+ * POUNCE_SHAKE_MS; then it wakes (a scan from WAKE_AT), and the fight starts as the flash ends. */
+const POUNCE_AT = 1600;
+const POUNCE_MS = 350;
+const LAND_MS = 100;
+const POUNCE_SHAKE_MS = 350;
+const WAKE_AT = POUNCE_AT + POUNCE_MS + POUNCE_SHAKE_MS;
 /** The USB stick on the carpet (USB at 2× at 172,136): its centre, and what finding it says before
  * the beat starts USB_PLUG_MS later (the handoff started the fight from the sticker). */
 const USB = { x: 182, y: 141 };
@@ -295,10 +303,12 @@ interface Hotspot {
   captions: [string, string];
 }
 
-/** Sprite bounds plus 4 virtual px; tested in this order (the tray page before the printer). */
+/** Sprite bounds plus 4 virtual px; tested in this order (the tray page before the printer). The
+ * machine stands back while the room is looked at (machineBack: 88–152 × 88–134, the page in its
+ * opening at 98–142 × 110–112). */
 const HOTSPOTS: Hotspot[] = [
-  { id: 'page', x0: 84, y0: 108, x1: 156, y1: 116, captions: ['A PAGE. BLANK.', 'A PAGE. BLANK.'] },
-  { id: 'printer', x0: 70, y0: 78, x1: 170, y1: 148, captions: ["A PRINTER. IT'S ON.", "IT'S WARM."] },
+  { id: 'page', x0: 96, y0: 108, x1: 144, y1: 114, captions: ['A PAGE. BLANK.', 'A PAGE. BLANK.'] },
+  { id: 'printer', x0: 84, y0: 86, x1: 156, y1: 138, captions: ["A PRINTER. IT'S ON.", "IT'S WARM."] },
   // Too frightening to go through (the handoff had LOCKED. / STILL LOCKED.).
   { id: 'door', x0: 6, y0: 27, x1: 48, y1: 112, captions: ['NOT IN THERE.', "IT KNOWS YOU'RE HERE."] },
   { id: 'poster', ...BOARD_HIT, captions: ['SIMPLE PRODUCTS. WE PRINT.', 'SIMPLE PRODUCTS. WE PRINT.'] },
@@ -553,7 +563,7 @@ export const room: Stage = {
       ledRed: false,
       trayPage: true,
       usb: true,
-      machine: { lid: 0, lamp: null, lampOut: false, flash: false, power: true, angry: false },
+      machine: { lid: 0, lamp: null, lampOut: false, flash: false, power: true, angry: false, back: 1 },
       flashWhite: false,
       buttonBright: false,
       broken: { clock: false, poster: false, tank: false, plant: false, vase: false, kit: false },
@@ -1652,6 +1662,10 @@ export const room: Stage = {
     }
 
     // ---- timelines (ms from the start of the phase) -----------------------
+    // The power light goes red and the lights go out; the machine pounces from the back of the
+    // room to its place (poseBack) and lands; then it wakes: the lid rises, the lamp sweeps, the
+    // flash (a scan, startScan); as the lid falls the display and the button go red and the
+    // fight is on.
     const STICKER_STEPS: [number, () => void][] = [
       [
         0,
@@ -1671,22 +1685,10 @@ export const room: Stage = {
           setCaption('');
         },
       ],
+      [POUNCE_AT, () => sounds.pounce()],
+      [WAKE_AT, () => startScan(performance.now())],
       [
-        1100,
-        () => {
-          scene.machine.lid = 1;
-          sounds.lidOpen();
-        },
-      ],
-      [
-        1600,
-        () => {
-          scene.machine.lid = 0;
-          sounds.lidShut();
-        },
-      ],
-      [
-        1900,
+        WAKE_AT + LID_MS + SWEEP_MS + WASH_MS,
         () => {
           scene.machine.angry = true;
           scene.trayPage = false;
@@ -1694,6 +1696,28 @@ export const room: Stage = {
         },
       ],
     ];
+    /** How far back the machine stands and its landing this frame: all the way back until the
+     * pounce, forward over POUNCE_MS easing in (a cut under reduced motion), then two px low for
+     * LAND_MS and shaking for POUNCE_SHAKE_MS. Null shake = none from the pounce. */
+    const poseBack = (now: number): { x: number; y: number } | null => {
+      const m = scene.machine;
+      if (phase !== 'look' && phase !== 'sticker') {
+        m.back = 0;
+        return null;
+      }
+      const t = phase === 'sticker' ? now - phaseAt - POUNCE_AT : -Infinity;
+      if (t < 0) {
+        m.back = 1;
+        return null;
+      }
+      const u = reduced ? 1 : Math.min(1, t / POUNCE_MS);
+      m.back = 1 - u * u;
+      if (reduced || t < POUNCE_MS || t >= POUNCE_MS + POUNCE_SHAKE_MS) return null;
+      const lt = t - POUNCE_MS;
+      if (frameCount % SHAKE_FRAMES === 0 || lt < 16) landShake = { x: Math.floor(Math.random() * 5) - 2, y: Math.floor(Math.random() * 5) - 2 + (lt < LAND_MS ? 2 : 0) };
+      return landShake;
+    };
+    let landShake = { x: 0, y: 0 };
     // The end: the machine in pieces, the fire (if there is one) raging on in
     // the dark room, the HUD gone, the tune; then out, WIN_END_MS after the burst. The lights stay
     // off and nothing comes back. (Until then it ended on the quiet room, lit again, the lid shut.)
@@ -1766,6 +1790,7 @@ export const room: Stage = {
         if (plugAt !== null && now >= plugAt) startSticker(now);
       } else if (phase === 'sticker') {
         stickerStep = runSteps(STICKER_STEPS, stickerStep, t);
+        poseScan(now);
       } else if (phase === 'fight') {
         if (hurtUntil && now >= hurtUntil) {
           hurtUntil = 0;
@@ -1962,9 +1987,12 @@ export const room: Stage = {
       if (flashFrames > 0) flashFrames--;
       scene.buttonBright = phase === 'fight' && scene.printer === 'up' && (mad || buttonBright(now));
       if (scene.printer === 'wreck') posePieces(now);
-      // The tremble: a new offset of ±1 px every few frames while the mad machine fights.
+      // The tremble: a new offset of ±1 px every few frames while the mad machine fights; the
+      // pounce's landing before that.
       frameCount++;
-      if (mad && phase === 'fight' && scene.printer === 'up' && frozenAt === null && !reduced) {
+      const landing = poseBack(now);
+      if (landing) scene.shake = landing;
+      else if (mad && phase === 'fight' && scene.printer === 'up' && frozenAt === null && !reduced) {
         if (frameCount % SHAKE_FRAMES === 0) scene.shake = { x: Math.floor(Math.random() * 3) - 1, y: -Math.floor(Math.random() * 2) };
       } else {
         scene.shake = { x: 0, y: 0 };
