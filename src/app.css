@@ -928,6 +928,32 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
   .print-root img + img {
     break-before: page;
   }
+
+  /* Printed from the browser's menu before the Print button: the page on screen,
+     not the app around it. */
+  .app:not(.has-print-pages) .no-print :is(.header, .toolbar, .pager, .pill-btn, .sidebar, .compare-caption, .print-reminder, .page-original, .page-flash, .drag-overlay) {
+    display: none !important;
+  }
+
+  .app:not(.has-print-pages) :is(.preview-grid, .preview-stage, .page-stack) {
+    display: block;
+    width: auto;
+    max-width: none;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    box-shadow: none;
+    background: none;
+    min-height: 0;
+  }
+
+  .app:not(.has-print-pages) .page-stack canvas {
+    display: block;
+    width: 100%;
+    height: auto;
+    max-height: 100vh;
+    object-fit: contain;
+  }
 }
 
 /* ---------- Motion & responsive ---------- */

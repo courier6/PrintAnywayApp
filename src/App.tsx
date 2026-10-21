@@ -138,6 +138,22 @@ export default function App() {
     return () => window.removeEventListener('beforeunload', onBeforeUnload);
   }, [hasDocument]);
 
+  // Cmd/Ctrl+P on a document is the Print button: every page, in the ink chosen,
+  // rather than the browser printing the app itself.
+  const printRef = useRef<() => void>(() => {});
+  printRef.current = () => void handlePrint();
+  useEffect(() => {
+    if (appState !== 'preview') return;
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 'p') {
+        e.preventDefault();
+        printRef.current();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [appState]);
+
   // Dev-only entrance: ?prntr=N opens Prntr at stage N as soon as the app loads,
   // with a stand-in page so nothing has to be uploaded first.
   // import.meta.env.DEV is a build-time constant, so builds drop this whole block;
@@ -248,6 +264,8 @@ export default function App() {
 
   function selectInk(index: number) {
     setInkIndex(index);
+    // The print pages are in the old ink; the next Print makes them again.
+    setPrintImages([]);
     const hex = inks[index].hex;
     inkRef.current = hex;
     // Visible page synchronously; the rest catch up in idle time.
