@@ -33,7 +33,7 @@ const RESPAWN_MS = 2000;
  * lands takes HIT_DAMAGE of it and the room flashes red for HURT_MS; the hit that empties it
  * costs a life (the death beat above), and the bar is full again when the beat is over. */
 const PLAYER_HEALTH = 100;
-const HIT_DAMAGE = { staple: 25, page: 34, firePage: 43, ink: 50, nut: 68, bolt: 68 } as const;
+const HIT_DAMAGE = { staple: 25, page: 34, firePage: 43, ink: 50, nut: 25, bolt: 50 } as const;
 const HURT_MS = 150;
 /** A lost heart's ghost floating up can be shot (± GHOST_HIT_PAD virtual px around it): it pops
  * like a balloon, its bits gone after POP_MS. No points: it was the player's. */
@@ -97,13 +97,19 @@ const STAPLE_SPIN_MS = 180;
 /** The marks on the glass (a staple stuck in, a bolt stuck point first): the oldest go past this many. */
 const GLASS_MARKS_MAX = 40;
 /** At half health or less the machine throws nuts and bolts too: out of the
- * slot and at the camera like the staples, spinning, a little quicker, twice a page's damage
- * (HIT_DAMAGE), BOLT_POINTS when shot. */
+ * slot and at the camera like the staples, spinning, a little quicker. A nut bounces off the glass
+ * for HIT_DAMAGE.nut and drops out of the frame; a bolt sticks for HIT_DAMAGE.bolt and stays as a
+ * mark (PRNTR-PLANNING.md P1.C). BOLT_POINTS when shot. */
 const BOLT_HEALTH = 0.5;
 const BOLT_MS = 1300;
 const BOLT_STAGGER_MS = 400;
 const BOLT_POINTS = 2;
 const BOLT_SPIN_MS = 100;
+/** A nut that landed drops out of the bottom of the frame: at 3×, a quarter turn every DROP_SPIN_MS,
+ * under DROP_GRAVITY px/s², gone after DROP_MS. */
+const DROP_MS = 900;
+const DROP_SPIN_MS = 90;
+const DROP_GRAVITY = 260;
 /** 1.8 s, then a quarter longer: they were landing too fast. */
 const PAGE_MS = 2250;
 /** While the machine burns, the pages it throws are on fire: a quarter more
@@ -404,6 +410,13 @@ interface Bit {
   color: PalKey;
 }
 
+/** A nut bouncing off the glass: where it hit, and when. */
+interface Drop {
+  x: number;
+  y: number;
+  at: number;
+}
+
 function el(tag: string, className: string, text?: string): HTMLElement {
   const node = document.createElement(tag);
   node.className = className;
@@ -634,6 +647,7 @@ export const room: Stage = {
     let pages: Page[] = [];
     let sprays: Spray[] = [];
     let bits: Bit[] = [];
+    let drops: Drop[] = [];
     let attackIndex = 0;
     let nextAttackAt = 0;
     let scanAt: number | null = null;
@@ -891,6 +905,7 @@ export const room: Stage = {
       staples = [];
       pages = [];
       sprays = [];
+      drops = [];
       scanAt = null;
       wash.classList.remove('is-on');
       washAt = 0;
@@ -946,6 +961,7 @@ export const room: Stage = {
       staples = [];
       pages = [];
       sprays = [];
+      drops = [];
       scanAt = null;
       scene.shake = { x: 0, y: 0 };
       nextAttackAt = Infinity;
@@ -994,6 +1010,7 @@ export const room: Stage = {
       staples = [];
       pages = [];
       sprays = [];
+      drops = [];
       scanAt = null;
       wash.classList.remove('is-on');
       washAt = 0;
@@ -1688,6 +1705,8 @@ export const room: Stage = {
         tubes: () => scene.tubes.map((t) => ({ ...t })),
         holes: () => scene.holes.map((h) => h.kind),
         marks: () => scene.marks.map((m) => ({ ...m })),
+        drops: () => drops.length,
+        thrown: () => staples.map((s) => ({ kind: s.kind, x: s.x, y: s.y, at: s.at, shot: s.shot, hit: s.hit })),
         ghosts: () => ghosts.length,
         name: () => lifeName.textContent,
         clock: () => ({ ...scene.clock }),
@@ -1905,11 +1924,13 @@ export const room: Stage = {
             if (s.kind === 'staple') sounds.stapleHit();
             else sounds.boltHit();
             hurt(s.kind, now);
-            // the mark it leaves: a staple sticks in the glass
-            if (s.kind === 'staple') addMark('staple', s.x, s.y);
+            // the mark it leaves: a staple or a bolt sticks in the glass; a nut bounces off and drops out of the frame
+            if (s.kind === 'nut') drops.push({ x: s.x, y: s.y, at: now });
+            else addMark(s.kind, s.x, s.y);
           }
         }
         staples = staples.filter((s) => !s.hit && !s.shot);
+        drops = drops.filter((d) => now - d.at < DROP_MS);
         for (const p of pages) {
           if (!p.fed && now >= p.at) {
             p.fed = true;
@@ -2098,6 +2119,13 @@ export const room: Stage = {
         const spr = thrownSprite(s, now);
         if (r.h < spr.h) fpix.blit(r.x, r.y, { w: spr.w, h: r.h, rows: spr.rows.slice(0, r.h) });
         else fpix.blit(r.x, r.y, spr, r.w / spr.w);
+      }
+      // A nut that bounced off: falling and rolling out of the bottom of the frame at 3× (gone at once under reduced motion).
+      for (const d of drops) {
+        const a = reduced ? DROP_MS : now - d.at;
+        if (a >= DROP_MS) continue;
+        const k = a / 1000;
+        fpix.blit(Math.floor(d.x - 10 + 8 * k), Math.floor(d.y + DROP_GRAVITY * k * k + 10 * k - 10), rotateSprite(SPR.NUT, Math.floor(a / DROP_SPIN_MS) % 4), 3);
       }
       // A burning page (thrown while the machine burns) carries flames up its face, from its
       // bottom edge, scaled with it; its paper is scorched at the edges.
