@@ -4,6 +4,7 @@ import type { ErrorCode } from '../lib/errors';
 import type { ExportFormat } from '../lib/exportFile';
 import type { Ink } from '../lib/inks';
 import { OTHER_TIP, PRINTER_TIPS } from '../lib/printerTips';
+import RisingGlyphs from './RisingGlyphs';
 import { PageCanvas } from './PageCanvas';
 import type { ErrorKind } from './ErrorState';
 import { PrintReminder } from './PrintReminder';
@@ -69,6 +70,8 @@ export function PreviewState({
   // Transient confirmation after a swatch click; flashKey restarts the
   // glow animation even when clicks come in quick succession.
   const [justInked, setJustInked] = useState(false);
+  // The way into Prntr has the pointer or the focus: glyphs rise above and below it only then.
+  const [omen, setOmen] = useState(false);
   const [flashKey, setFlashKey] = useState(0);
   const inkTimer = useRef<number | null>(null);
   const prevInk = useRef(inkIndex);
@@ -281,14 +284,22 @@ export function PreviewState({
                   <p>{OTHER_TIP.body2}</p>
                   <p>
                     {OTHER_TIP.lead}
-                    <button
-                      type="button"
-                      className="help-link"
-                      style={{ color: inkHex }}
-                      onClick={onOpenPrntr}
-                    >
-                      {OTHER_TIP.link}
-                    </button>
+                    {/* The link reads as plain text until it has the pointer or the focus; then glyphs
+                        rise above and sink below it (RisingGlyphs) and stop when it loses them. */}
+                    <span className="help-omen" style={{ color: inkHex }}>
+                      <button
+                        type="button"
+                        className="help-link"
+                        onClick={onOpenPrntr}
+                        onPointerEnter={() => setOmen(true)}
+                        onPointerLeave={() => setOmen(false)}
+                        onFocus={() => setOmen(true)}
+                        onBlur={() => setOmen(false)}
+                      >
+                        {OTHER_TIP.link}
+                      </button>
+                      <RisingGlyphs active={omen} />
+                    </span>
                     {OTHER_TIP.tail}
                   </p>
                 </div>
