@@ -53,10 +53,13 @@ export function classifyError(err: unknown): ErrorCode {
   if (
     (err instanceof Error && err.message === 'Canvas 2D context unavailable') ||
     err instanceof RangeError ||
-    err instanceof DOMException
+    (err instanceof DOMException && err.name === 'QuotaExceededError')
   ) {
     return 'PA-106';
   }
+  // Any other DOMException is not memory: a file moved or deleted since it was
+  // picked, or a cloud placeholder not downloaded yet (NotReadableError,
+  // NotFoundError) reads fine on a second try.
   return 'PA-100';
 }
 
