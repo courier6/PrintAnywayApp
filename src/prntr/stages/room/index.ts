@@ -1,7 +1,7 @@
 import { reducedMotion, wait } from '../../anim';
 import type { Handoff, Stage } from '../../types';
 import { H, Pix, W, rotateSprite } from './pixels';
-import { CLOCK_AT, KIT_AT, MACHINE_AT, MACHINE_PIECES, NOZZLES, SPR, drawFireFront, drawFlame, drawRoom, drawWindowWreck, fireRect, inDoorway, lampX, lidTop, type Broken, type ExitSign, type Hole, type SceneState } from './scene';
+import { CLOCK_AT, KIT_AT, MACHINE_AT, MACHINE_PIECES, NOZZLES, SPR, drawFireFront, drawFlame, drawRoom, drawWindowWreck, fireRect, inDoorway, lampX, lidTop, tubeX, type Broken, type ExitSign, type Hole, type SceneState, type Tube } from './scene';
 import { ART_AT, ART_SUB, renderVictory } from './art';
 import { PAL, type PalKey } from './palette';
 import { createRoomSounds, type FireSound, type Hum } from './sounds';
@@ -178,12 +178,21 @@ const SPRAY_EVERY_MS = 40;
 const SPRAY_FLIGHT_MS = 700;
 const SPRAY_ARC = 24;
 const NOZZLES_X = NOZZLES.map((n) => n.x);
-/** The machine's top edge (MACHINE.y0), the tube's head when it is up, and its mouth. */
+/** The machine's top edge (MACHINE.y0) and the tube's head when it is up; its mouth is 2 px into the head. */
 const TUBE_BASE = 80;
 const TUBE_TOP = 72;
-const TUBE_MOUTH = TUBE_TOP + 2;
 const TUBE_RISE_MS = 250;
 const NOZZLE_HIT_PAD = 4;
+/** The tubes only come up while the lid is shut (up, it would cover them): an ink attack waits for a
+ * scan to end, and a scan for the tubes to sink. As the machine nears half health (SNAKE_FROM to
+ * SNAKE_FULL of the damage) the tubes come up longer, to TUBE_TOP_SNAKE, and move like snakes: a wave
+ * of SNAKE_AMP px running up the hose every SNAKE_MS, the head swaying with it, the jet from wherever
+ * the head is. Still under reduced motion. */
+const SNAKE_FROM = 0.4;
+const SNAKE_FULL = 0.5;
+const TUBE_TOP_SNAKE = 52;
+const SNAKE_AMP = 7;
+const SNAKE_MS = 900;
 /** A tube shot blows up: the jet stops, its bits fly, the nozzle is dead for
  * the rest of the stage (its stump stays); with every nozzle dead the ink attack is gone. */
 const TUBE_POINTS = 5;
@@ -1055,13 +1064,27 @@ export const room: Stage = {
     const jetEnd = (s: Spray) => s.stoppedAt ?? s.at + SPRAY_MS;
     const splatAt = (s: Spray) => jetEnd(s) + SPRAY_FLIGHT_MS;
     const spraying = (s: Spray, now: number) => now >= s.at && s.stoppedAt === null && now < s.at + SPRAY_MS;
-    /** Where the particle launched at τ is at `now`: along an arc from the nozzle to the target, spreading a little. */
+    /** How much of a snake the tubes are now, 0 (a straight stub) to 1. */
+    const snakeU = () => Math.max(0, Math.min(1, (scene.damage - SNAKE_FROM) / (SNAKE_FULL - SNAKE_FROM)));
+    /** The tube on nozzle `nx` risen `up` (0 … 1) at `now`: its head's top, its wave. */
+    const poseTube = (nx: number, up: number, now: number): Tube => {
+      const su = snakeU();
+      const top = TUBE_TOP + (TUBE_TOP_SNAKE - TUBE_TOP) * su;
+      return { x: nx, top: Math.round(TUBE_BASE - (TUBE_BASE - top) * up), color: NOZZLES.find((n) => n.x === nx)!.color, amp: reduced ? 0 : SNAKE_AMP * su * up, ph: reduced ? 0 : (now / SNAKE_MS) * 2 * Math.PI + nx };
+    };
+    /** Where a jet's ink comes out now: the mouth of its tube, up and swaying as it is. */
+    const mouthOf = (s: Spray, now: number) => {
+      const tb = poseTube(s.nx, 1, now);
+      return { x: tubeX(tb, tb.top), y: tb.top + 2 };
+    };
+    /** Where the particle launched at τ is at `now`: along an arc from the mouth to the target, spreading a little. */
     const particlePose = (s: Spray, tau: number, now: number) => {
       const v = (now - tau) / SPRAY_FLIGHT_MS;
       const spread = (((tau * 7919) % 97) / 97 - 0.5) * 6 * v;
       const size = v < 0.4 ? 1 : v < 0.75 ? 2 : 3;
-      const x = s.nx + (s.x - s.nx) * v + spread;
-      const y = TUBE_MOUTH + (s.y - TUBE_MOUTH) * v - SPRAY_ARC * Math.sin(Math.PI * v);
+      const m = mouthOf(s, now);
+      const x = m.x + (s.x - m.x) * v + spread;
+      const y = m.y + (s.y - m.y) * v - SPRAY_ARC * Math.sin(Math.PI * v);
       return { x: Math.floor(x - size / 2), y: Math.floor(y - size / 2), size };
     };
     /** The splat's scale from how much of the jet has landed: 0 (nothing yet) to 4. */
@@ -1172,7 +1195,11 @@ export const room: Stage = {
       }
       // A spraying tube, its head or the hose over the edge: it blows up. The jet stops (what is
       // already in the air still lands), the tube's bits fly, and that nozzle never comes back.
-      const jet = sprays.find((s) => spraying(s, now) && x >= s.nx - 3 - NOZZLE_HIT_PAD && x < s.nx + 3 + NOZZLE_HIT_PAD && y >= TUBE_TOP - NOZZLE_HIT_PAD && y < TUBE_BASE + NOZZLE_HIT_PAD);
+      const jet = sprays.find((s) => {
+        if (!spraying(s, now)) return false;
+        const tb = poseTube(s.nx, 1, now);
+        return x >= s.nx - 3 - tb.amp - NOZZLE_HIT_PAD && x < s.nx + 3 + tb.amp + NOZZLE_HIT_PAD && y >= tb.top - NOZZLE_HIT_PAD && y < TUBE_BASE + NOZZLE_HIT_PAD;
+      });
       if (jet) {
         explodeTube(jet, now);
         addScore(TUBE_POINTS, now);
@@ -1358,11 +1385,12 @@ export const room: Stage = {
       sounds.tubeBurst();
       flashFrames = 1;
       if (reduced) return;
+      const m = mouthOf(jet, now);
       for (let i = 0; i < 16; i++) {
         const a = -Math.PI * (0.1 + Math.random() * 0.8);
         const v = 30 + Math.random() * 90;
         const color: PalKey = i < 5 ? 'K' : i < 9 ? 'g' : i < 12 ? 'i' : jet.color;
-        bits.push({ x: jet.nx - 3 + Math.random() * 6, y: TUBE_TOP + Math.random() * 6, vx: Math.cos(a) * v, vy: Math.sin(a) * v, g: 240, born: now, life: 350 + Math.random() * 450, size: 1 + (i % 3 === 0 ? 1 : 0), color });
+        bits.push({ x: m.x - 3 + Math.random() * 6, y: m.y - 2 + Math.random() * 6, vx: Math.cos(a) * v, vy: Math.sin(a) * v, g: 240, born: now, life: 350 + Math.random() * 450, size: 1 + (i % 3 === 0 ? 1 : 0), color });
       }
     };
     // The ink lands in the fire: a hiss and steam, and the fire is smaller by
@@ -1451,6 +1479,13 @@ export const room: Stage = {
       const nozzles = NOZZLES_X.filter((x) => !scene.stubs.includes(x));
       if (mad && nozzles.length) kinds.push('ink');
       if (score >= HI * BOLT_HEALTH) kinds.push('bolts');
+      // Nothing while the lid is up (a scan is on), and no scan while a tube is up: the lid would
+      // cover it. The attack waits; a forced one keeps.
+      const tubesUp = sprays.some((s) => now >= s.at - TUBE_RISE_MS && now < jetEnd(s) + TUBE_RISE_MS);
+      if (scanAt !== null || ((forcedKind ?? kinds[attackIndex % kinds.length]) === 'scan' && tubesUp)) {
+        nextAttackAt = now + 100;
+        return;
+      }
       const kind = forcedKind ?? kinds[attackIndex++ % kinds.length];
       forcedKind = null;
       if (kind === 'bolts') {
@@ -1897,7 +1932,11 @@ export const room: Stage = {
       const rects: { x: number; y: number; w: number; h: number }[] = [];
       for (const s of staples) if (now >= s.at && !s.hit && !s.shot) rects.push(staplePose(s, now));
       for (const p of pages) if (now >= p.at && !p.shot && p.landedAt === null) rects.push(pagePose(p, now));
-      for (const s of sprays) if (spraying(s, now)) rects.push({ x: s.nx - 3, y: TUBE_TOP, w: 6, h: TUBE_BASE - TUBE_TOP });
+      for (const s of sprays) {
+        if (!spraying(s, now)) continue;
+        const tb = poseTube(s.nx, 1, now);
+        rects.push({ x: s.nx - 3 - Math.round(tb.amp), y: tb.top, w: 6 + 2 * Math.round(tb.amp), h: TUBE_BASE - tb.top });
+      }
       if (scene.buttonBright) rects.push({ ...BUTTON, x: BUTTON.x + scene.shake.x, y: BUTTON.y + scene.shake.y });
       while (glows.children.length < rects.length) glows.append(el('div', 'prntr-room-glow'));
       Array.from(glows.children).forEach((n, i) => {
@@ -2001,18 +2040,18 @@ export const room: Stage = {
       }
       // The slot's red light is a DOM box over the canvas: it trembles with the machine.
       slotLight.style.transform = scene.shake.x || scene.shake.y ? `translate(${scene.shake.x * scale}px, ${scene.shake.y * scale}px)` : '';
-      // The tubes up behind the machine: rising before the jet, sinking after it, one per nozzle.
+      // The tubes up behind the machine: rising before the jet, sinking after it, one per nozzle
+      // (the most risen of its jets), snaking as the machine's health goes.
       const tubes = new Map<number, number>();
       for (const s of sprays) {
         const from = s.at - TUBE_RISE_MS;
         const to = jetEnd(s) + TUBE_RISE_MS;
         if (now < from || now >= to) continue;
         const up = reduced ? 1 : now < s.at ? (now - from) / TUBE_RISE_MS : now < jetEnd(s) ? 1 : (to - now) / TUBE_RISE_MS;
-        const top = Math.round(TUBE_BASE - (TUBE_BASE - TUBE_TOP) * up);
-        tubes.set(s.nx, Math.min(top, tubes.get(s.nx) ?? Infinity));
+        tubes.set(s.nx, Math.max(up, tubes.get(s.nx) ?? 0));
       }
       scene.tubes = [];
-      for (const [x, top] of tubes) scene.tubes.push({ x, top, color: sprays.find((s) => s.nx === x && now >= s.at - TUBE_RISE_MS && now < jetEnd(s) + TUBE_RISE_MS)!.color });
+      for (const [nx, up] of tubes) scene.tubes.push(poseTube(nx, up, now));
       // The ink on the far half of its flight goes behind the machine: it is sprayed from behind it.
       scene.inkBehind = [];
       for (const s of sprays) {

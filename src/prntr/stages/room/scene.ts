@@ -162,12 +162,18 @@ export function inDoorway(h: Hole, doorGap: number): boolean {
   return h.kind === 'door' && h.x + 1 > 13 && h.x - 1 <= 13 + doorGap;
 }
 
-/** An ink tube up from behind the machine: its x, its head's top row, the ink in its mouth. */
+/** An ink tube up from behind the machine: its nozzle's x, its head's top row, the ink in its
+ * mouth, and its snaking: a wave of `amp` px along the hose at phase `ph` (0 = straight). */
 export interface Tube {
   x: number;
   top: number;
   color: PalKey;
+  amp: number;
+  ph: number;
 }
+
+/** The hose's centre at row y: the wave runs up it from the machine's edge (90), a cycle every ~22 rows. */
+export const tubeX = (tb: Tube, y: number): number => Math.round(tb.x + tb.amp * Math.sin(tb.ph + (90 - y) * 0.28));
 
 export interface SceneState {
   /** Left, right fluorescent panel. */
@@ -738,13 +744,15 @@ export function drawRoom(p: Pix, s: SceneState): void {
     p.rect(230, 133, 232, 135, 'V');
     p.rect(226, 136, 228, 138, 'v');
   }
-  // the ink tubes up from behind the machine: a ribbed hose, its head, the ink in its mouth;
-  // the machine covers the hose's foot, the ink in the air is drawn over them
+  // the ink tubes up from behind the machine: a ribbed hose (row by row, so it can snake), its
+  // head, the ink in its mouth; the machine covers the hose's foot, the ink in the air is drawn over them
   for (const tb of s.tubes) {
-    p.rect(tb.x - 2, tb.top + 4, tb.x - 1, 90, 'K');
-    p.rect(tb.x + 1, tb.top + 4, tb.x + 2, 90, 'K');
-    for (let y = tb.top + 4; y < 90; y++) p.rect(tb.x - 1, y, tb.x + 1, y + 1, (y - tb.top) % 2 === 0 ? 'G' : 'i');
-    p.blit(tb.x - 3, tb.top, SPR.TUBE_HEAD, 1, { remap: { c: tb.color } });
+    for (let y = tb.top + 4; y < 90; y++) {
+      const cx = tubeX(tb, y);
+      p.rect(cx - 2, y, cx + 2, y + 1, 'K');
+      p.rect(cx - 1, y, cx + 1, y + 1, (y - tb.top) % 2 === 0 ? 'G' : 'i');
+    }
+    p.blit(tubeX(tb, tb.top) - 3, tb.top, SPR.TUBE_HEAD, 1, { remap: { c: tb.color } });
   }
   // the stumps of the tubes shot to pieces: a ragged end of hose just over the edge
   for (const x of s.stubs) {
