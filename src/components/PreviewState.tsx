@@ -133,7 +133,7 @@ export function PreviewState({
               : t('preview.download', { format: downloadFormat.toUpperCase() })}
           </button>
           <button className="btn-primary toolbar-print" onClick={onPrint} disabled={busy !== null}>
-            {t('preview.print')}
+            {busy === 'print' ? t('preview.preparing') : t('preview.print')}
           </button>
         </div>
       </div>
