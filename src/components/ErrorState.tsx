@@ -24,7 +24,7 @@ interface Props {
 const RETRY: Record<ErrorKind, boolean> = {
   unsupported: false,
   password: false,
-  'damaged-pdf': true,
+  'damaged-pdf': false,
   heic: false,
   image: true,
   memory: true,
