@@ -970,16 +970,18 @@ export const room: Stage = {
       frozenAt = now;
       lives = 0;
       drawPips();
-      creditEl.textContent = 'CREDIT 00';
+      // the credit left from the two the coin gave is what the CONTINUE? asks for: it blinks
       creditEl.classList.remove('is-glowing', 'is-after');
+      if (!reduced) creditEl.classList.add('is-blinking');
       countEl.textContent = '9';
       continueEl.hidden = false;
       sounds.death();
-      ctx.announce('Continue?');
+      ctx.announce('Continue? Credit 1.');
     };
-    // Yes: the credit comes back, the fight resumes with the last heart.
+    // Yes: the last credit is spent, the fight resumes with the last heart. No credit, no second CONTINUE?.
     const continueYes = (now: number) => {
-      creditEl.textContent = 'CREDIT 01';
+      creditEl.textContent = 'CREDIT 00';
+      creditEl.classList.remove('is-blinking');
       creditEl.classList.add('is-after');
       audio.play(audio.cues.creditA);
       continueEl.hidden = true;
@@ -1005,7 +1007,7 @@ export const room: Stage = {
       phaseAt = now;
       nextAttackAt = now + ATTACK_GAP_MS;
       scheduleBlink(now, BLINK_MIN_MS);
-      ctx.announce('Credit 1. Last life.');
+      ctx.announce('Credit 0. Last life.');
     };
     const hideHint = () => {
       hintEl.hidden = true;
@@ -1024,6 +1026,8 @@ export const room: Stage = {
       outcome = 'over';
       hideHint();
       continueEl.hidden = true;
+      // the count ran out: the credit is left unspent, and stops blinking
+      creditEl.classList.remove('is-blinking');
       overEl.hidden = false;
       overText.hidden = false;
       sounds.gameOver();
