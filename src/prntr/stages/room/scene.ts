@@ -48,7 +48,7 @@ export interface Broken {
   plant: boolean;
   /** The pot. */
   vase: boolean;
-  /** The first aid kit, shot open: it gave the player full health, once. */
+  /** The first aid kit (a pouch), shot open: it gave the player full health, once. */
   kit: boolean;
 }
 
@@ -260,7 +260,7 @@ export interface SceneState {
  * board at 66,40 and the clock at 112,36. */
 export const CLOCK_AT = { x: 50, y: 41 };
 export const BOARD_AT = { x: 136, y: 46 };
-/** The first aid kit (13×10), on the wall at the lower right of the window. */
+/** The first aid kit (13×10), a green pouch hanging on the wall at the lower right of the window. */
 export const KIT_AT = { x: 226, y: 79 };
 
 /** A cheap hash to 0..1, so a flame column flickers on its own without random state. */
@@ -957,7 +957,7 @@ export function drawRoom(p: Pix, s: SceneState): void {
     }
     for (const cx of [176, 208]) for (let y = 39; y < 87; y++) if ((y - BLIND_TOP) % BLIND_PITCH >= 3) p.set(cx, y, 'e');
   }
-  // the first aid kit by the window's lower right corner, green where a kit is red
+  // the first aid kit by the window's lower right corner: a green pouch, its cross white
   p.blit(KIT_AT.x, KIT_AT.y, s.broken.kit ? SPR.KIT_OPEN : SPR.KIT);
   // the bullet holes, under the cooler, the plant and the machine, which stand in front of the wall
   drawHoles(p, s);
