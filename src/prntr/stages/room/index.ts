@@ -2837,6 +2837,8 @@ export const room: Stage = {
         if (done) return;
         done = true;
         cancelAnimationFrame(raf);
+        rippleBack?.dispose();
+        rippleFront?.dispose();
         hum.stop();
         fireSound?.stop();
         stormSound?.stop(0.5);
