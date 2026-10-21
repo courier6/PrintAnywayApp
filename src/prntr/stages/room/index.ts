@@ -1,7 +1,7 @@
 import { reducedMotion, wait } from '../../anim';
 import type { Handoff, Stage } from '../../types';
 import { H, Pix, W, rotateSprite } from './pixels';
-import { CLOCK_AT, KIT_AT, KNOB, MACHINE_AT, MACHINE_PIECES, NOZZLES, SPR, drawFireFront, drawFlame, drawMarks, drawRoom, drawWindowWreck, fireRect, inDoorway, knobX, lampX, markBox, tubeX, type Broken, type ExitSign, type Hole, type Mark, type SceneState, type Tube } from './scene';
+import { CLOCK_AT, KIT_AT, KNOB, MACHINE_AT, MACHINE_PIECES, NOZZLES, SPR, drawFireFront, drawFlame, drawMarks, drawRoom, drawWindowWreck, figLeaf, fireRect, inDoorway, knobX, lampX, markBox, tubeX, type Broken, type ExitSign, type Hole, type Mark, type SceneState, type Tube } from './scene';
 import { ART_AT, ART_SUB, renderVictory } from './art';
 import { PAL, type PalKey } from './palette';
 import { createRoomSounds, type FireSound, type Hum } from './sounds';
@@ -345,8 +345,8 @@ const BREAKABLES: { id: keyof Broken; x0: number; y0: number; x1: number; y1: nu
   { id: 'tank', x0: 48, y0: 90, x1: 76, y1: 108, sound: 'shatter' },
   { id: 'plant', x0: 190, y0: 93, x1: 239, y1: 119, sound: 'rustle' },
   { id: 'vase', x0: 203, y0: 119, x1: 226, y1: 136, sound: 'shatter' },
-  // the fig behind the monstera (which is in front, so it is tried first): its crown, then its planter
-  { id: 'fig', x0: 172, y0: 56, x1: 213, y1: 90, sound: 'rustle' },
+  // the fig behind the monstera (which is in front, so it is tried first): its crown (only on a leaf, figLeaf), then its planter
+  { id: 'fig', x0: 165, y0: 53, x1: 220, y1: 110, sound: 'rustle' },
   { id: 'figPot', x0: 180, y0: 115, x1: 204, y1: 131, sound: 'shatter' },
 ];
 /** The clock shot: it falls off the wall over CLOCK_FALL_MS, drifting to
@@ -414,7 +414,7 @@ const HOTSPOTS: Hotspot[] = [
   { id: 'art', x0: ART_AT.x - 4, y0: ART_AT.y - 4, x1: ART_AT.x + ART_AT.w + 4, y1: ART_AT.y + ART_AT.h + 4, captions: ['THE WINGED VICTORY. A PRINT.', 'SHE HAS NO HEAD.'] },
   // the monstera is in front of the fig, the fig in front of the window: tried in that order
   { id: 'plant', x0: 190, y0: 92, x1: 240, y1: 138, captions: ["A PLANT. IT'S REAL.", "A PLANT. IT'S REAL."] },
-  { id: 'fig', x0: 172, y0: 56, x1: 213, y1: 131, captions: ['A FIG. OLDER THAN THE OFFICE.', 'IT LEANS TOWARD THE PRINTER.'] },
+  { id: 'fig', x0: 165, y0: 53, x1: 220, y1: 131, captions: ['A FIG. OLDER THAN THE OFFICE.', 'IT LEANS TOWARD THE PRINTER.'] },
   { id: 'window', x0: 156, y0: 32, x1: 228, y1: 94, captions: ['UNABLE TO OPEN.', 'STILL UNABLE TO OPEN.'] },
   { id: 'cooler', x0: 46, y0: 88, x1: 78, y1: 140, captions: ['WATER COOLER. FULL.', 'STILL FULL.'] },
 ];
@@ -1486,7 +1486,7 @@ export const room: Stage = {
         ctx.announce('First aid. Health full.');
         return;
       }
-      const thing = BREAKABLES.find((b) => !scene.broken[b.id] && !(b.id === 'fig' && scene.broken.figPot) && x >= b.x0 && x < b.x1 && y >= b.y0 && y < b.y1);
+      const thing = BREAKABLES.find((b) => !scene.broken[b.id] && !(b.id === 'fig' && (scene.broken.figPot || !figLeaf(x, y))) && x >= b.x0 && x < b.x1 && y >= b.y0 && y < b.y1);
       if (thing) {
         scene.broken[thing.id] = true;
         // the pot shot takes the plant with it (one break's points); the leaves shot leave the pot
@@ -1840,7 +1840,8 @@ export const room: Stage = {
         return;
       }
       // The ceiling, wall, carpet and the light: nothing, and the caption stays.
-      const h = HOTSPOTS.find((h) => v.x >= h.x0 && v.x < h.x1 && v.y >= h.y0 && v.y < h.y1);
+      // the fig only on its leaves or about its planter: between them the window is seen, and captioned
+      const h = HOTSPOTS.find((h) => v.x >= h.x0 && v.x < h.x1 && v.y >= h.y0 && v.y < h.y1 && (h.id !== 'fig' || v.y >= 110 || figLeaf(v.x, v.y)));
       if (!h) return;
       const n = (clicks.get(h.id) ?? 0) + 1;
       clicks.set(h.id, n);

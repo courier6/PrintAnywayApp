@@ -278,10 +278,22 @@ export const COOLER_SHOT_AT = { x: 51, y: 103 };
 /** The weeping fig by the window, behind the monstera: its tree (or bare) and its planter (or the shards); it
  * falls about FIG_AT.pivot, the foot of its trunk, by up to FIG_LEAN radians toward the machine, and comes to
  * rest against the machine's back right corner (the machine is drawn after it, in front). */
-export const FIG_AT = { tree: { x: 172, y: 56 }, bare: { x: 176, y: 62 }, pot: { x: 181, y: 116 }, shards: { x: 177, y: 121 }, pivot: { x: 192, y: 126 } };
+export const FIG_AT = { tree: { x: 166, y: 52 }, bare: { x: 166, y: 52 }, pot: { x: 181, y: 116 }, shards: { x: 177, y: 121 }, pivot: { x: 192, y: 126 } };
 export const FIG_LEAN = 0.5;
 /** The fig's crown, for the flames when it burns: its centre on the standing tree. */
-const FIG_CROWN = { x: 192, y: 73 };
+const FIG_CROWN = { x: 192, y: 72 };
+/** A leaf of the standing fig at (x, y), or within a px of it: its crown is shot only there, and a shot through its
+ * gaps goes on to the blind behind. */
+export function figLeaf(x: number, y: number): boolean {
+  const s = SPR.FIG;
+  for (let dy = -1; dy <= 1; dy++) {
+    for (let dx = -1; dx <= 1; dx++) {
+      const k = s.rows[Math.floor(y) + dy - FIG_AT.tree.y]?.[Math.floor(x) + dx - FIG_AT.tree.x];
+      if (k === 'V' || k === 'v' || k === 'n') return true;
+    }
+  }
+  return false;
+}
 
 /** Blits a sprite turned by a radians toward the left (its top going left) about a pivot: each pixel of the
  * turned box takes the sprite pixel that turns onto it (nearest), so nothing gaps. */
