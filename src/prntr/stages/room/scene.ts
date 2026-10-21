@@ -206,6 +206,8 @@ export interface SceneState {
   exit: ExitSign;
   /** How wide the door stands open on the storm, in px: 0 shut; 2 cracked by the sign; up to 22 swung in. */
   doorGap: number;
+  /** The door shot apart (the twelfth hole): gone, its planks on the carpet, the doorway full of storm. */
+  doorBroken: boolean;
   /** The storm outside this frame. */
   storm: StormView;
   fire: Fire | null;
@@ -799,7 +801,7 @@ function drawHoles(p: Pix, s: SceneState): void {
       p.set(h.x, h.y - 1, 'X');
       p.set(h.x, h.y + 1, 'X');
       p.set(h.x, h.y, 'K');
-    } else if (!inDoorway(h, s.doorGap) && !(h.kind === 'window' && s.windowOpen)) {
+    } else if (!inDoorway(h, s.doorGap) && !(h.kind === 'door' && s.doorBroken) && !(h.kind === 'window' && s.windowOpen)) {
       drawStorm(p, { x0: h.x - 1, y0: h.y - 1, x1: h.x + 1, y1: h.y + 1 }, s.storm);
     }
   }
@@ -830,16 +832,30 @@ export function drawRoom(p: Pix, s: SceneState): void {
   for (let y = 109; y < H; y++) {
     for (let x = 0; x < W; x++) p.set(x, y, (x + y) % 2 === 0 ? 'C' : 'x');
   }
-  // the door in its frame, shut on the storm; cracked by the sign or swung by the shots it shows it
+  // the door in its frame, shut on the storm; cracked by the sign or swung by the shots it shows it;
+  // shot apart, it is gone and the doorway is the storm
   p.rect(10, 40, 44, 108, 'E');
-  p.rect(13, 43, 41, 108, 'D');
-  if (s.doorGap > 0) {
-    drawStorm(p, { x0: 13, y0: 43, x1: 13 + s.doorGap, y1: 108 }, s.storm);
-    // the door's leading edge
-    p.rect(13 + s.doorGap, 43, 14 + s.doorGap, 108, 'E');
+  if (s.doorBroken) {
+    drawStorm(p, { x0: 13, y0: 43, x1: 41, y1: 108 }, s.storm);
+    // the door in pieces: two planks on the carpet, one leaning on the frame, a splinter on the hinge
+    p.rect(2, 112, 30, 115, 'D');
+    p.rect(2, 112, 30, 113, 'E');
+    p.rect(20, 117, 46, 120, 'D');
+    p.rect(20, 119, 46, 120, 'E');
+    line(p, 41, 70, 47, 112, 'D');
+    line(p, 42, 70, 48, 112, 'D');
+    line(p, 40, 70, 46, 112, 'E');
+    p.rect(13, 43, 15, 50, 'D');
+  } else {
+    p.rect(13, 43, 41, 108, 'D');
+    if (s.doorGap > 0) {
+      drawStorm(p, { x0: 13, y0: 43, x1: 13 + s.doorGap, y1: 108 }, s.storm);
+      // the door's leading edge
+      p.rect(13 + s.doorGap, 43, 14 + s.doorGap, 108, 'E');
+    }
+    const kx = 36 + Math.min(s.doorGap, 4);
+    p.rect(kx, 76, kx + 2, 78, 'K');
   }
-  const kx = 36 + Math.min(s.doorGap, 4);
-  p.rect(kx, 76, kx + 2, 78, 'K');
   // the EXIT sign: on the wall, hanging loose, falling, or on the floor in front of the door
   const sign = s.exit;
   if (sign.state === 'down') p.blit(Math.round(sign.x), Math.round(sign.y), SPR.EXIT_BROKEN);
