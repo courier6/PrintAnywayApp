@@ -481,6 +481,7 @@ export default function App() {
             fileName={fileName}
             downloadFormat={format}
             pageCount={pageCount}
+            renderedCount={processedCount}
             currentPage={currentPage}
             onPageChange={goToPage}
             inks={inks}

@@ -596,6 +596,16 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
   gap: 10px;
 }
 
+.preview-progress {
+  margin-top: -8px;
+  font-size: 12.5px;
+  color: var(--ink-75);
+}
+
+.preview-progress.is-done {
+  visibility: hidden;
+}
+
 .pager-btn {
   width: 28px;
   height: 28px;
@@ -947,7 +957,7 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
 
   /* Printed from the browser's menu before the Print button: the page on screen,
      not the app around it. */
-  .app:not(.has-print-pages) .no-print :is(.header, .toolbar, .pager, .pill-btn, .sidebar, .compare-caption, .print-reminder, .page-original, .page-flash, .drag-overlay) {
+  .app:not(.has-print-pages) .no-print :is(.header, .toolbar, .pager, .preview-progress, .pill-btn, .sidebar, .compare-caption, .print-reminder, .page-original, .page-flash, .drag-overlay) {
     display: none !important;
   }
 
