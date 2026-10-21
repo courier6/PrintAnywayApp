@@ -19,7 +19,7 @@ export const SPR = {
   PAGE_SMALL: parseSprite(SPRITES.PAGE_SMALL),
   PAGE_PRINTED: parseSprite(SPRITES.PAGE_PRINTED),
   POSTER_TORN: parseSprite(SPRITES.POSTER_TORN),
-  TANK_BROKEN: parseSprite(SPRITES.TANK_BROKEN),
+  COOLER_SHOT: parseSprite(SPRITES.COOLER_SHOT),
   PLANT_BARE: parseSprite(SPRITES.PLANT_BARE),
   POT_BROKEN: parseSprite(SPRITES.POT_BROKEN),
   EXIT_BROKEN: parseSprite(SPRITES.EXIT_BROKEN),
@@ -31,7 +31,6 @@ export const SPR = {
 /** The clock at each quarter turn, for rolling. */
 const CLOCK_ROT = [0, 1, 2, 3].map((q) => rotateSprite(SPR.CLOCK, q));
 /** The cooler below its bottle, the plant's leaves and its pot, so each half can break alone. */
-const COOLER_BODY = sliceRows(SPR.COOLER, 8, 22);
 const PLANT_TOP = sliceRows(SPR.PLANT, 0, 10);
 const PLANT_POT = sliceRows(SPR.PLANT, 10, 16);
 /** The bare plant lying on the carpet, its top to the left: the pot shot from under it. */
@@ -260,6 +259,9 @@ export interface SceneState {
  * board at 66,40 and the clock at 112,36. */
 export const CLOCK_AT = { x: 50, y: 41 };
 export const BOARD_AT = { x: 136, y: 46 };
+/** The water cooler (22×46), and with its bottle shot (22×33): at the room's own resolution. */
+export const COOLER_AT = { x: 51, y: 90 };
+export const COOLER_SHOT_AT = { x: 51, y: 103 };
 /** The USB stick on the carpet, its lanyard and its shadow (39×8, at the room's own resolution). */
 export const USB_AT = { x: 157, y: 138 };
 /** The first aid kit (13×10), a green pouch hanging on the wall at the lower right of the window. */
@@ -970,10 +972,9 @@ export function drawRoom(p: Pix, s: SceneState): void {
     // the water on the carpet, the stump of the bottle, the cooler itself
     p.rect(46, 135, 78, 137, 'L');
     p.rect(42, 137, 82, 139, 'l');
-    p.blit(50, 92, SPR.TANK_BROKEN, 2);
-    p.blit(50, 108, COOLER_BODY, 2);
+    p.blit(COOLER_SHOT_AT.x, COOLER_SHOT_AT.y, SPR.COOLER_SHOT);
   } else {
-    p.blit(50, 92, SPR.COOLER, 2);
+    p.blit(COOLER_AT.x, COOLER_AT.y, SPR.COOLER);
   }
   // the clock off the wall: falling, rolling or lying in front of the cooler, burning as it goes
   const ck = s.clock;

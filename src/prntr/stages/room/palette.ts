@@ -107,30 +107,56 @@ G......G
 G......G
 G......G
 `,
-  // 12 × 22
+  // 22 × 46 at 51,90: the water cooler at the room's own resolution (round 2 of the objects sheet, #6):
+  // a ribbed bottle, its air at the top and a glint down its side, on a collar; a cream body with a recessed bay,
+  // a red hot tap and a blue cold one side by side over a grilled drip tray, a vent at its foot
   COOLER: `
-...KKKKKK...
-..KllllllK..
-..KlWlllLK..
-..KLLLLLLK..
-..KLLLLLLK..
-..KLLLLLLK..
-..KLLLLLLK..
-...KKKKKK...
-..KKbbbbKK..
-.KddddddddK.
-.KddddddddK.
-.KddKKddddK.
-.KddKcddddK.
-.KddddddddK.
-.KddddddddK.
-.KddddddddK.
-.KddddddddK.
-.KddddddddK.
-.KddddddddK.
-.KddddddddK.
-.KddddddddK.
-.KKKKKKKKKK.
+.....KKKKKKKKKKKK.....
+.....KllllllllllK.....
+...KKllllllllllllKK...
+...KlWllllllllllllK...
+...KlWllllllllllllK...
+...KhWhhhhhhhhhhhhK...
+...KLWLLLLLLLLLLLLK...
+...KLWLLLLLLLLLLLLK...
+...KhWhhhhhhhhhhhhK...
+...KLWLLLLLLLLLLLLK...
+...KLWLLLLLLLLLLLLK...
+...KhWhhhhhhhhhhhhK...
+...KLWLLLLLLLLLLLLK...
+...KKWKKLLLLLLKKKKK...
+........KhhhhK........
+........KLLLLK........
+........KKKKKK........
+.....KKKKKKKKKKKK.....
+.....KggggggggggK.....
+.....KggggggggggK.....
+KKKKKKKKKKKKKKKKKKKKKK
+KwwbbbbbbbbbbbbbbddddK
+KwwbbbbbbbbbbbbbbddddK
+KwwbKKKKKKKKKKKKKKdddK
+KwwbKXKKKKKXKKKKKKdddK
+KwwbKGKRRRKGKcccKKdddK
+KwwbKGKRRRKGKcccKKdddK
+KwwbKGKKKKKGKKKKKKdddK
+KwwbKGGGKGGGGGKGGKdddK
+KwwbKGGGKGGGGGKGGKdddK
+KwwbKGGGGGGGGGGGGKdddK
+KwwbKGGGGGGGGGGGGKdddK
+KwwbKgKgKgKgKgKgKKdddK
+KwwbKggggggggggggKdddK
+KwwbKKKKKKKKKKKKKKdddK
+KwwbbbbbbbbbbbbbbddddK
+KwwbbbbbbbbbbbbbbddddK
+KwwbbbbbbbbbbbbbbddddK
+KwwbbbbbbbbbbbbbbddddK
+KwwbbbbbbbbbbbbbbddddK
+KwwbbbbbbbbbbbbbbddddK
+KwwbeeeeeeeeeeeeeedddK
+KwwbbbbbbbbbbbbbbddddK
+KwwbeeeeeeeeeeeeeedddK
+KwwbbbbbbbbbbbbbbddddK
+KKKKKKKKKKKKKKKKKKKKKK
 `,
   // 14 × 16
   PLANT: `
@@ -335,16 +361,41 @@ KrrrrrK.............
 KrrrKK..............
 KKKK................
 `,
-  // 12 × 8: the cooler's bottle shot: a jagged stump of it on the neck (COOLER rows 0–7).
-  TANK_BROKEN: `
-............
-............
-............
-..K......K..
-..KL....LK..
-..KLl..lLK..
-..KLLlLLLK..
-...KKKKKK...
+  // 22 × 33 at 51,103: the cooler with its bottle shot: the jagged neck left in the collar, the body
+  COOLER_SHOT: `
+............L.........
+.........L....L.......
+..........l..W........
+.......LLLLLLLLL......
+.....KKKKKKKKKKKK.....
+.....KggggggggggK.....
+.....KggggggggggK.....
+KKKKKKKKKKKKKKKKKKKKKK
+KwwbbbbbbbbbbbbbbddddK
+KwwbbbbbbbbbbbbbbddddK
+KwwbKKKKKKKKKKKKKKdddK
+KwwbKXKKKKKXKKKKKKdddK
+KwwbKGKRRRKGKcccKKdddK
+KwwbKGKRRRKGKcccKKdddK
+KwwbKGKKKKKGKKKKKKdddK
+KwwbKGGGKGGGGGKGGKdddK
+KwwbKGGGKGGGGGKGGKdddK
+KwwbKGGGGGGGGGGGGKdddK
+KwwbKGGGGGGGGGGGGKdddK
+KwwbKgKgKgKgKgKgKKdddK
+KwwbKggggggggggggKdddK
+KwwbKKKKKKKKKKKKKKdddK
+KwwbbbbbbbbbbbbbbddddK
+KwwbbbbbbbbbbbbbbddddK
+KwwbbbbbbbbbbbbbbddddK
+KwwbbbbbbbbbbbbbbddddK
+KwwbbbbbbbbbbbbbbddddK
+KwwbbbbbbbbbbbbbbddddK
+KwwbeeeeeeeeeeeeeedddK
+KwwbbbbbbbbbbbbbbddddK
+KwwbeeeeeeeeeeeeeedddK
+KwwbbbbbbbbbbbbbbddddK
+KKKKKKKKKKKKKKKKKKKKKK
 `,
   // 14 × 10: the plant shot: bare stems (PLANT rows 0–9); its leaves lie on the carpet.
   PLANT_BARE: `
