@@ -2645,15 +2645,17 @@ export const room: Stage = {
       scene.clockSpin = now < spinUntil ? now - spinFrom : null;
       // The lights flicker back on now and then while the machine is nearly dead.
       const flickering = phase === 'fight' && scene.printer === 'up' && scene.damage >= FLICKER_FROM && !reduced;
-      if (frozenAt === null) {
-        for (let i = 0; i < 2; i++) {
-          const off = flickerOff[i];
-          if (off !== null && (now >= off || !flickering)) {
-            flickerOff[i] = null;
-            scene.lights[i] = false;
-            sounds.lightTick();
-          }
+      // A lit panel goes out on its time, and at once when the flicker is over (the fight phase ended, the machine
+      // burst) or the room freezes (a death): a 60–220 ms flash is not held through a freeze.
+      for (let i = 0; i < 2; i++) {
+        const off = flickerOff[i];
+        if (off !== null && (!flickering || frozenAt !== null || now >= off)) {
+          flickerOff[i] = null;
+          scene.lights[i] = false;
+          sounds.lightTick();
         }
+      }
+      if (frozenAt === null) {
         if (flickering && now >= flickerNext) {
           const on = FLICKER_ON_MIN + Math.random() * (FLICKER_ON_MAX - FLICKER_ON_MIN);
           const which = Math.random() < FLICKER_BOTH ? [0, 1] : [Math.floor(Math.random() * 2)];
