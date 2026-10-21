@@ -1,9 +1,15 @@
-import type { FileKind } from './loadDocument';
+import type { FileKind, PageSize } from './loadDocument';
 
-const PAGE_WIDTH_PT = 612; // US Letter width; height follows each page's aspect
+const PHOTO_WIDTH_PT = 612; // a photo has no page size: US Letter wide, height by its aspect
 
 /** What a download is saved as: PDFs stay PDFs, photos stay photos. */
 export type ExportFormat = 'pdf' | 'png' | 'jpg';
+
+/** A recolored page to export, with its source's size in points when it had one. */
+export interface ExportPage {
+  canvas: HTMLCanvasElement;
+  sizePt: PageSize | null;
+}
 
 /** HEIC downloads as JPG: browsers can't encode HEIC. */
 export function exportFormat(kind: FileKind): ExportFormat {
@@ -12,14 +18,14 @@ export function exportFormat(kind: FileKind): ExportFormat {
 
 /** Saves the recolored pages as `format` and triggers a download. */
 export async function exportRecolored(
-  canvases: HTMLCanvasElement[],
+  pages: ExportPage[],
   sourceName: string,
   format: ExportFormat,
 ): Promise<void> {
   const blob =
     format === 'pdf'
-      ? await buildPdf(canvases)
-      : await canvasBlob(canvases[0], format === 'png' ? 'image/png' : 'image/jpeg');
+      ? await buildPdf(pages)
+      : await canvasBlob(pages[0].canvas, format === 'png' ? 'image/png' : 'image/jpeg');
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
@@ -28,16 +34,17 @@ export async function exportRecolored(
   setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }
 
-/** One PDF page per canvas, each US Letter wide. */
-async function buildPdf(canvases: HTMLCanvasElement[]): Promise<Blob> {
+/** One PDF page per canvas, at its source page's size (Letter wide for a photo). */
+async function buildPdf(pages: ExportPage[]): Promise<Blob> {
   const { PDFDocument } = await import('pdf-lib');
   const doc = await PDFDocument.create();
-  for (const canvas of canvases) {
+  for (const { canvas, sizePt } of pages) {
     const bytes = await (await canvasBlob(canvas, 'image/jpeg')).arrayBuffer();
     const image = await doc.embedJpg(bytes);
-    const height = PAGE_WIDTH_PT * (canvas.height / canvas.width);
-    const page = doc.addPage([PAGE_WIDTH_PT, height]);
-    page.drawImage(image, { x: 0, y: 0, width: PAGE_WIDTH_PT, height });
+    const width = sizePt?.width ?? PHOTO_WIDTH_PT;
+    const height = sizePt?.height ?? PHOTO_WIDTH_PT * (canvas.height / canvas.width);
+    const page = doc.addPage([width, height]);
+    page.drawImage(image, { x: 0, y: 0, width, height });
   }
   const pdfBytes = await doc.save();
   // Copy into a fresh ArrayBuffer-backed view: pdf-lib types its output as

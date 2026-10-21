@@ -914,10 +914,45 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
     display: block;
   }
 
+  /* One sheet per page: as wide as the sheet allows, never taller than it (an A4
+     page on Letter, a phone screenshot), scaled to fit rather than split. */
   .print-root img {
     display: block;
     width: 100%;
-    break-after: page;
+    height: auto;
+    max-height: 100vh;
+    object-fit: contain;
+    break-inside: avoid;
+  }
+
+  .print-root img + img {
+    break-before: page;
+  }
+
+  /* Printed from the browser's menu before the Print button: the page on screen,
+     not the app around it. */
+  .app:not(.has-print-pages) .no-print :is(.header, .toolbar, .pager, .pill-btn, .sidebar, .compare-caption, .print-reminder, .page-original, .page-flash, .drag-overlay) {
+    display: none !important;
+  }
+
+  .app:not(.has-print-pages) :is(.preview-grid, .preview-stage, .page-stack) {
+    display: block;
+    width: auto;
+    max-width: none;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    box-shadow: none;
+    background: none;
+    min-height: 0;
+  }
+
+  .app:not(.has-print-pages) .page-stack canvas {
+    display: block;
+    width: 100%;
+    height: auto;
+    max-height: 100vh;
+    object-fit: contain;
   }
 }
 

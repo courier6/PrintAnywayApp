@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ChangeEvent, type CSSProperties } from 'react';
+import { flushSync } from 'react-dom';
 import { Header } from './components/Header';
 import { EmptyState } from './components/EmptyState';
 import { ProcessingState } from './components/ProcessingState';
@@ -12,7 +13,7 @@ import { GOLD_INK, INKS } from './lib/inks';
 import { fileKind, loadDocument, prefetchPdfjs, type SourceDocument } from './lib/loadDocument';
 import { classifyError, logAppError, type ErrorCode } from './lib/errors';
 import { DocumentReplacedError, PageStore } from './lib/pageStore';
-import { exportFormat, exportRecolored, type ExportFormat } from './lib/exportFile';
+import { exportFormat, exportRecolored, type ExportFormat, type ExportPage } from './lib/exportFile';
 
 type AppState = 'empty' | 'processing' | 'preview' | 'error' | 'prntr';
 
@@ -76,6 +77,7 @@ export default function App() {
   const docRef = useRef<SourceDocument | null>(null);
   const idleHandle = useRef<number | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
+  const printRoot = useRef<HTMLDivElement>(null);
   const handleFileRef = useRef<(file: File) => void>(() => {});
   handleFileRef.current = (file) => void handleFile(file);
 
@@ -137,6 +139,22 @@ export default function App() {
     window.addEventListener('beforeunload', onBeforeUnload);
     return () => window.removeEventListener('beforeunload', onBeforeUnload);
   }, [hasDocument]);
+
+  // Cmd/Ctrl+P on a document is the Print button: every page, in the ink chosen,
+  // rather than the browser printing the app itself.
+  const printRef = useRef<() => void>(() => {});
+  printRef.current = () => void handlePrint();
+  useEffect(() => {
+    if (appState !== 'preview') return;
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 'p') {
+        e.preventDefault();
+        printRef.current();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [appState]);
 
   // Dev-only entrance: ?prntr=N opens Prntr at stage N as soon as the app loads,
   // with a stand-in page so nothing has to be uploaded first.
@@ -218,9 +236,9 @@ export default function App() {
       store.reset(doc.pageCount);
       setPageCount(doc.pageCount);
       for (let i = 0; i < doc.pageCount; i++) {
-        const source = await doc.renderPage(i);
+        const { canvas, sizePt } = await doc.renderPage(i);
         if (token !== runToken.current) return;
-        store.setSource(i, source);
+        store.setSource(i, canvas, sizePt);
         store.ensureRecolored(i, inkRef.current);
         setProcessedCount(i + 1);
         setPagesVersion((v) => v + 1);
@@ -248,6 +266,8 @@ export default function App() {
 
   function selectInk(index: number) {
     setInkIndex(index);
+    // The print pages are in the old ink; the next Print makes them again.
+    setPrintImages([]);
     const hex = inks[index].hex;
     inkRef.current = hex;
     // Visible page synchronously; the rest catch up in idle time.
@@ -325,7 +345,7 @@ export default function App() {
     setInkIndex(INKS.length);
     inkRef.current = GOLD_INK.hex;
     store.reset(1);
-    store.setSource(0, page);
+    store.setSource(0, page, { width: 612, height: 792 }); // US Letter
     store.ensureRecolored(0, inkRef.current);
     setPageCount(1);
     setProcessedCount(1);
@@ -341,13 +361,13 @@ export default function App() {
   }, [prntrDrop]);
 
   // Throws DocumentReplacedError once the document it started on is replaced.
-  async function collectAllRecolored(token: number): Promise<HTMLCanvasElement[]> {
-    const out: HTMLCanvasElement[] = [];
+  async function collectAllRecolored(token: number): Promise<ExportPage[]> {
+    const out: ExportPage[] = [];
     for (let i = 0; i < store.pageCount; i++) {
       await store.whenSourceReady(i);
       if (token !== runToken.current) throw new DocumentReplacedError();
       const canvas = store.ensureRecolored(i, inkRef.current);
-      if (canvas) out.push(canvas);
+      if (canvas) out.push({ canvas, sizePt: store.getSizePt(i) });
     }
     return out;
   }
@@ -359,10 +379,11 @@ export default function App() {
     setExportError(null);
     setBusy('print');
     try {
-      const canvases = await collectAllRecolored(token);
-      setPrintImages(canvases.map((c) => c.toDataURL('image/png')));
-      // Let React commit the print pages before opening the dialog.
-      await new Promise((r) => setTimeout(r, 60));
+      const pages = await collectAllRecolored(token);
+      flushSync(() => setPrintImages(pages.map((p) => p.canvas.toDataURL('image/png'))));
+      // The dialog snapshots the page: every image must be decoded by then, or it prints blank.
+      const images = Array.from(printRoot.current?.querySelectorAll('img') ?? []);
+      await Promise.all(images.map((img) => img.decode().catch(() => undefined)));
       if (token !== runToken.current) return;
       window.print();
     } catch (err) {
@@ -381,8 +402,8 @@ export default function App() {
     setExportError(null);
     setBusy('download');
     try {
-      const canvases = await collectAllRecolored(token);
-      await exportRecolored(canvases, fileName || 'document', format);
+      const pages = await collectAllRecolored(token);
+      await exportRecolored(pages, fileName || 'document', format);
     } catch (err) {
       if (token !== runToken.current || err instanceof DocumentReplacedError) return;
       reportExportError(err);
@@ -493,7 +514,7 @@ export default function App() {
         style={{ display: 'none' }}
         onChange={onInputChange}
       />
-      <div className="print-root" aria-hidden="true">
+      <div className="print-root" ref={printRoot} aria-hidden="true">
         {printImages.map((src, i) => (
           <img key={i} src={src} alt="" />
         ))}
