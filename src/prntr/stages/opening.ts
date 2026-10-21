@@ -228,7 +228,8 @@ export const opening: Stage = {
     }
     await at(d + CREDIT_AFTER_TITLE_MS);
     if (signal.aborted) return { kind: 'start' };
-    credit.textContent = 'CREDIT 01';
+    // two credits: one for the game, one for its CONTINUE?
+    credit.textContent = 'CREDIT 02';
     credit.classList.remove('is-glowing');
     credit.classList.add('is-after');
     storm.setWeather('storm');
@@ -241,9 +242,11 @@ export const opening: Stage = {
     }
     cutCue();
     audio.play(audio.cues.creditA);
-    ctx.announce('Credit 1. Press start button.');
+    ctx.announce('Credit 2. Press start button.');
 
     await nextInput(root, signal);
+    // the start spends one; the room's HUD shows the one left in the same place
+    credit.textContent = 'CREDIT 01';
     // one last strike as the title is left; its thunder rolls on under the room's hum
     if (!signal.aborted) await wait(storm.finale(), signal);
     storm.stop();

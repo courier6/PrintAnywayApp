@@ -633,6 +633,11 @@
   animation: prntr-after 600ms linear forwards;
 }
 
+/* CONTINUE? spends the credit left: it blinks while the count runs. */
+.prntr-room-credit.is-blinking {
+  animation: prntr-blink 1s step-end infinite;
+}
+
 /* At the INSERT COIN line (top 660 on the 800 frame), set like the closed captions on an old
    TV: white capitals on an opaque black box that hugs each row with a
    character's width of black either side, rows stacked with no gap, no outline or shadow. */
