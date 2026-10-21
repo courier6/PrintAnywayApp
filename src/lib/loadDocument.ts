@@ -133,7 +133,7 @@ async function loadPdf(file: File): Promise<SourceDocument> {
   const { pdfjsLib, worker } = await getPdfWorker();
   const data = await file.arrayBuffer();
   const assets = `${import.meta.env.BASE_URL}${__PDFJS_PATH__}`;
-  const pdf = await pdfjsLib.getDocument({
+  const task = pdfjsLib.getDocument({
     data,
     worker,
     // Fetched only when a page needs them: the decoders for scanned images
@@ -143,7 +143,18 @@ async function loadPdf(file: File): Promise<SourceDocument> {
     cMapPacked: true,
     standardFontDataUrl: `${assets}standard_fonts/`,
     iccUrl: `${assets}iccs/`,
-  }).promise;
+  });
+  let pdf: Awaited<typeof task.promise>;
+  try {
+    pdf = await task.promise;
+  } catch (err) {
+    // A load that fails (a password, a damaged file) still holds what the worker parsed
+    // until its task is destroyed, and nothing else holds the task.
+    void task.destroy().catch(() => undefined);
+    // The worker itself gone: the next file starts a fresh one instead of failing too.
+    if (worker.destroyed) pdfWorker = null;
+    throw err;
+  }
   if (pdf.numPages === 0) {
     void pdf.destroy();
     throw new EmptyPdfError();
