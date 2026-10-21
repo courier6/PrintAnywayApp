@@ -408,6 +408,9 @@ const FLICKER_GAP_MAX = 1600;
 const FLICKER_BOTH = 0.2;
 /** The USB stick's hit area in screen px (the handoff's 44 px for the sticker), whatever the scale. */
 const USB_HIT_PX = 44;
+/** How far a thrown thing's glow and the fire's light reach past the sprite, virtual px: the gradient's fade. */
+const GLOW_PAD = 7;
+const FIRE_GLOW_PAD = 12;
 
 interface Hotspot {
   id: string;
@@ -2468,11 +2471,12 @@ export const room: Stage = {
         const hx = tubeX(tb, tb.top);
         rects.push({ x: Math.min(s.nx, hx) - 3 + scene.shake.x, y: tb.top + scene.shake.y, w: Math.abs(hx - s.nx) + 6, h: TUBE_BASE - tb.top });
       }
-      // the thrown things (the staples, nuts and bolts, then the pages) get a filled inside too
-      const thrown = rects.slice(0, staples.filter((s) => now >= s.at && !s.hit && !s.shot).length + pages.filter((p) => now >= p.at && !p.shot && p.landedAt === null).length);
+      // the thrown things (the staples, nuts and bolts, then the pages) glow under the front layer, as one
+      // gradient on a box GLOW_PAD wider a side; the tubes and the button keep the outer glow over everything
+      const thrown = rects.splice(0, staples.filter((s) => now >= s.at && !s.hit && !s.shot).length + pages.filter((p) => now >= p.at && !p.shot && p.landedAt === null).length);
       if (scene.buttonBright) rects.push({ ...BUTTON, x: BUTTON.x + scene.shake.x, y: BUTTON.y + scene.shake.y });
       placeGlows(glows, 'prntr-room-glow', rects);
-      placeGlows(glowFills, 'prntr-room-glow-fill', thrown);
+      placeGlows(glowFills, 'prntr-room-glow-fill', thrown.map((r) => ({ x: r.x - GLOW_PAD, y: r.y - GLOW_PAD, w: r.w + 2 * GLOW_PAD, h: r.h + 2 * GLOW_PAD })));
     };
     const placeGlows = (layer: HTMLElement, cls: string, rects: { x: number; y: number; w: number; h: number }[]) => {
       while (layer.children.length < rects.length) layer.append(el('div', cls));
@@ -2548,10 +2552,10 @@ export const room: Stage = {
       scene.fire = { u: fireU(now), t: reduced ? 0 : now, v: spreadU(now) };
       const r = fireRect(scene.fire.u);
       fireLight.hidden = false;
-      fireLight.style.left = `${r.x0 * scale}px`;
-      fireLight.style.top = `${r.y0 * scale}px`;
-      fireLight.style.width = `${(r.x1 - r.x0) * scale}px`;
-      fireLight.style.height = `${(r.y1 - r.y0) * scale}px`;
+      fireLight.style.left = `${(r.x0 - FIRE_GLOW_PAD) * scale}px`;
+      fireLight.style.top = `${(r.y0 - FIRE_GLOW_PAD) * scale}px`;
+      fireLight.style.width = `${(r.x1 - r.x0 + 2 * FIRE_GLOW_PAD) * scale}px`;
+      fireLight.style.height = `${(r.y1 - r.y0 + 2 * FIRE_GLOW_PAD) * scale}px`;
       fireLight.style.opacity = reduced ? '0.8' : String(0.65 + 0.35 * Math.abs(Math.sin(now / 90)));
     };
     // The storm outside: a near strike (its bolt in the door's or the window's view), far lightning
