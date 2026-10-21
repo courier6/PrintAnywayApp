@@ -1198,7 +1198,8 @@ export const room: Stage = {
       const jet = sprays.find((s) => {
         if (!spraying(s, now)) return false;
         const tb = poseTube(s.nx, 1, now);
-        return x >= s.nx - 3 - tb.amp - NOZZLE_HIT_PAD && x < s.nx + 3 + tb.amp + NOZZLE_HIT_PAD && y >= tb.top - NOZZLE_HIT_PAD && y < TUBE_BASE + NOZZLE_HIT_PAD;
+        const { x: sx, y: sy } = scene.shake;
+        return x >= s.nx - 3 - tb.amp - NOZZLE_HIT_PAD + sx && x < s.nx + 3 + tb.amp + NOZZLE_HIT_PAD + sx && y >= tb.top - NOZZLE_HIT_PAD + sy && y < TUBE_BASE + NOZZLE_HIT_PAD + sy;
       });
       if (jet) {
         explodeTube(jet, now);
@@ -1386,6 +1387,8 @@ export const room: Stage = {
       flashFrames = 1;
       if (reduced) return;
       const m = mouthOf(jet, now);
+      m.x += scene.shake.x;
+      m.y += scene.shake.y;
       for (let i = 0; i < 16; i++) {
         const a = -Math.PI * (0.1 + Math.random() * 0.8);
         const v = 30 + Math.random() * 90;
@@ -1693,6 +1696,8 @@ export const room: Stage = {
         lid: () => scene.machine.lid,
         lamp: () => (scene.machine.lamp === null ? null : lampX(scene.machine.lamp)),
         bulb: () => bulbOut,
+        /** The machine's shake this frame (the tremble, the landing): what is attached to it moves with it. */
+        shake: () => ({ ...scene.shake }),
       };
     }
 
@@ -1935,7 +1940,7 @@ export const room: Stage = {
       for (const s of sprays) {
         if (!spraying(s, now)) continue;
         const tb = poseTube(s.nx, 1, now);
-        rects.push({ x: s.nx - 3 - Math.round(tb.amp), y: tb.top, w: 6 + 2 * Math.round(tb.amp), h: TUBE_BASE - tb.top });
+        rects.push({ x: s.nx - 3 - Math.round(tb.amp) + scene.shake.x, y: tb.top + scene.shake.y, w: 6 + 2 * Math.round(tb.amp), h: TUBE_BASE - tb.top });
       }
       if (scene.buttonBright) rects.push({ ...BUTTON, x: BUTTON.x + scene.shake.x, y: BUTTON.y + scene.shake.y });
       while (glows.children.length < rects.length) glows.append(el('div', 'prntr-room-glow'));

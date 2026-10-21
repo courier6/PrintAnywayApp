@@ -196,7 +196,8 @@ export interface SceneState {
   /** How wide the door stands open on black, in px: ajar at 6; once the sign is down it swings in. */
   doorGap: number;
   fire: Fire | null;
-  /** The mad machine's tremble: it is drawn this far off its place. */
+  /** The mad machine's tremble (and the pounce's landing): the machine and everything attached to
+   * it (the tubes, the stumps, the ink still behind it) are drawn this far off their place. */
   shake: { x: number; y: number };
   /** The ink in the air behind the machine this frame: the jets come up from behind it. */
   inkBehind: InkDot[];
@@ -757,25 +758,28 @@ export function drawRoom(p: Pix, s: SceneState): void {
     p.rect(226, 136, 228, 138, 'v');
   }
   // the ink tubes up from behind the machine: a ribbed hose (row by row, so it can snake), its
-  // head, the ink in its mouth; the machine covers the hose's foot, the ink in the air is drawn over them
+  // head, the ink in its mouth; the machine covers the hose's foot, the ink in the air is drawn over
+  // them. They are attached to the machine, so they shake with it (PRNTR-PLANNING.md P3).
+  const { x: sx, y: sy } = s.shake;
   for (const tb of s.tubes) {
     for (let y = tb.top + 4; y < 90; y++) {
-      const cx = tubeX(tb, y);
-      p.rect(cx - 2, y, cx + 2, y + 1, 'K');
-      p.rect(cx - 1, y, cx + 1, y + 1, (y - tb.top) % 2 === 0 ? 'G' : 'i');
+      const cx = tubeX(tb, y) + sx;
+      p.rect(cx - 2, y + sy, cx + 2, y + sy + 1, 'K');
+      p.rect(cx - 1, y + sy, cx + 1, y + sy + 1, (y - tb.top) % 2 === 0 ? 'G' : 'i');
     }
-    p.blit(tubeX(tb, tb.top) - 3, tb.top, SPR.TUBE_HEAD, 1, { remap: { c: tb.color } });
+    p.blit(tubeX(tb, tb.top) - 3 + sx, tb.top + sy, SPR.TUBE_HEAD, 1, { remap: { c: tb.color } });
   }
   // the stumps of the tubes shot to pieces: a ragged end of hose just over the edge
-  for (const x of s.stubs) {
-    p.rect(x - 2, 77, x + 2, 90, 'K');
-    p.rect(x - 1, 78, x + 1, 90, 'i');
-    p.set(x - 2, 77, 'A');
-    p.set(x + 1, 77, 'A');
-    p.set(x, 78, 'G');
+  for (const x0 of s.stubs) {
+    const x = x0 + sx;
+    p.rect(x - 2, 77 + sy, x + 2, 90 + sy, 'K');
+    p.rect(x - 1, 78 + sy, x + 1, 90 + sy, 'i');
+    p.set(x - 2, 77 + sy, 'A');
+    p.set(x + 1, 77 + sy, 'A');
+    p.set(x, 78 + sy, 'G');
   }
-  // the ink sprayed from behind the machine, where it is still behind it
-  for (const d of s.inkBehind) p.rect(d.x, d.y, d.x + d.size, d.y + d.size, d.color);
+  // the ink sprayed from behind the machine, where it is still behind it: it has not left yet
+  for (const d of s.inkBehind) p.rect(d.x + sx, d.y + sy, d.x + d.size + sx, d.y + d.size + sy, d.color);
   // the printer; its shadow falls the other way. Nothing points it out.
   if (s.printer === 'wreck') {
     // the burst machine: its pieces in the air and on the floor, the fire raging where it stood
