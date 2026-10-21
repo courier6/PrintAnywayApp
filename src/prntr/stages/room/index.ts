@@ -1,7 +1,7 @@
 import { reducedMotion, wait } from '../../anim';
 import type { Handoff, Stage } from '../../types';
 import { H, Pix, W, rotateSprite } from './pixels';
-import { CLOCK_AT, KIT_AT, KNOB, MACHINE_AT, MACHINE_PIECES, NOZZLES, SPR, drawFireFront, drawFlame, drawMarks, drawRoom, drawWindowWreck, fireRect, inDoorway, knobX, lampX, tubeX, type Broken, type ExitSign, type Hole, type Mark, type SceneState, type Tube } from './scene';
+import { CLOCK_AT, KIT_AT, KNOB, MACHINE_AT, MACHINE_PIECES, NOZZLES, SPR, drawFireFront, drawFlame, drawMarks, drawRoom, drawWindowWreck, fireRect, inDoorway, knobX, lampX, markBox, tubeX, type Broken, type ExitSign, type Hole, type Mark, type SceneState, type Tube } from './scene';
 import { ART_AT, ART_SUB, renderVictory } from './art';
 import { PAL, type PalKey } from './palette';
 import { createRoomSounds, type FireSound, type Hum } from './sounds';
@@ -106,8 +106,9 @@ const BOLT_MS = 1300;
 const BOLT_STAGGER_MS = 400;
 const BOLT_POINTS = 2;
 const BOLT_SPIN_MS = 100;
-/** A nut that landed drops out of the bottom of the frame: at 3×, a quarter turn every DROP_SPIN_MS,
- * under DROP_GRAVITY px/s², gone after DROP_MS. */
+/** A nut that landed, or a staple or a bolt shot off the glass, drops out of the bottom of the frame:
+ * a nut at 3×, a staple or a bolt at 4× as it was stuck, a quarter turn every DROP_SPIN_MS, under
+ * DROP_GRAVITY px/s², gone after DROP_MS. */
 const DROP_MS = 900;
 const DROP_SPIN_MS = 90;
 const DROP_GRAVITY = 260;
@@ -441,8 +442,9 @@ interface Bit {
   color: PalKey;
 }
 
-/** A nut bouncing off the glass: where it hit, and when. */
+/** A nut bouncing off the glass, or a staple or a bolt shot off it: what, where it was, and when. */
 interface Drop {
+  kind: 'nut' | 'staple' | 'bolt';
   x: number;
   y: number;
   at: number;
@@ -1301,6 +1303,30 @@ export const room: Stage = {
         addScore(staple.kind === 'staple' ? STAPLE_POINTS : BOLT_POINTS, now);
         return;
       }
+      // On the glass, on the player's side of it: a landed page slides off at once; a staple or a bolt
+      // stuck in it is knocked out and drops out of the frame. No points: it is about seeing. The ink
+      // cannot be shot off (a shot through it goes on to what is behind).
+      const stuck = pages.find((p) => {
+        if (p.shot || p.landedAt === null || now - p.landedAt >= PAGE_LANDED_MS) return false;
+        const lx = Math.floor(p.x1 - 20);
+        const ly = Math.floor(p.y1 - 26);
+        return x >= lx - 2 && x < lx + 52 && y >= ly - 2 && y < ly + 54;
+      });
+      if (stuck) {
+        stuck.landedAt = now - PAGE_LANDED_MS;
+        sounds.whoosh();
+        return;
+      }
+      for (let i = scene.marks.length - 1; i >= 0; i--) {
+        const mk = scene.marks[i];
+        const b = markBox(mk);
+        if (x < b.x0 || x >= b.x1 || y < b.y0 || y >= b.y1) continue;
+        scene.marks.splice(i, 1);
+        drops.push({ kind: mk.kind, x: mk.x, y: mk.y, at: now });
+        if (mk.kind === 'staple') sounds.stapleHit();
+        else sounds.boltHit();
+        return;
+      }
       // A spraying tube, its head or the hose over the edge: it blows up. The jet stops (what is
       // already in the air still lands), the tube's bits fly, and that nozzle never comes back.
       const jet = sprays.find((s) => {
@@ -1829,6 +1855,8 @@ export const room: Stage = {
         holes: () => scene.holes.map((h) => h.kind),
         marks: () => scene.marks.map((m) => ({ ...m })),
         drops: () => drops.length,
+        /** The pages on the glass: where each landed, and whether it is sliding off yet. */
+        landed: () => pages.filter((p) => p.landedAt !== null).map((p) => ({ x: p.x1, y: p.y1, sliding: performance.now() - p.landedAt! >= PAGE_LANDED_MS })),
         thrown: () => staples.map((s) => ({ kind: s.kind, x: s.x, y: s.y, at: s.at, shot: s.shot, hit: s.hit })),
         ghosts: () => ghosts.length,
         name: () => lifeName.textContent,
@@ -2050,7 +2078,7 @@ export const room: Stage = {
             else sounds.boltHit();
             hurt(s.kind, now);
             // the mark it leaves: a staple or a bolt sticks in the glass; a nut bounces off and drops out of the frame
-            if (s.kind === 'nut') drops.push({ x: s.x, y: s.y, at: now });
+            if (s.kind === 'nut') drops.push({ kind: 'nut', x: s.x, y: s.y, at: now });
             else addMark(s.kind, s.x, s.y);
           }
         }
@@ -2309,12 +2337,15 @@ export const room: Stage = {
         if (r.h < spr.h) fpix.blit(r.x, r.y, { w: spr.w, h: r.h, rows: spr.rows.slice(0, r.h) });
         else fpix.blit(r.x, r.y, spr, r.w / spr.w);
       }
-      // A nut that bounced off: falling and rolling out of the bottom of the frame at 3× (gone at once under reduced motion).
+      // A nut that bounced off, a staple or a bolt shot off: falling and turning out of the bottom of the
+      // frame (gone at once under reduced motion).
       for (const d of drops) {
         const a = reduced ? DROP_MS : now - d.at;
         if (a >= DROP_MS) continue;
         const k = a / 1000;
-        fpix.blit(Math.floor(d.x - 10 + 8 * k), Math.floor(d.y + DROP_GRAVITY * k * k + 10 * k - 10), rotateSprite(SPR.NUT, Math.floor(a / DROP_SPIN_MS) % 4), 3);
+        const sc = d.kind === 'nut' ? 3 : 4;
+        const spr = rotateSprite(d.kind === 'nut' ? SPR.NUT : d.kind === 'staple' ? SPR.STAPLE : SPR.BOLT, Math.floor(a / DROP_SPIN_MS) % 4);
+        fpix.blit(Math.floor(d.x - (spr.w * sc) / 2 + 8 * k), Math.floor(d.y + DROP_GRAVITY * k * k + 10 * k - (spr.h * sc) / 2), spr, sc);
       }
       // A burning page (thrown while the machine burns) carries flames up its face, from its
       // bottom edge, scaled with it; its paper is scorched at the edges.

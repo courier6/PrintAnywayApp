@@ -167,6 +167,13 @@ export interface Mark {
   y: number;
 }
 
+/** Where a mark on the glass can be shot off: a staple's crown and its legs, a bolt's head (±1 px). */
+export function markBox(m: Mark): { x0: number; y0: number; x1: number; y1: number } {
+  const cx = Math.floor(m.x);
+  const cy = Math.floor(m.y);
+  return m.kind === 'staple' ? { x0: cx - 18, y0: cy - 5, x1: cx + 18, y1: cy + 9 } : { x0: cx - 15, y0: cy - 15, x1: cx + 15, y1: cy + 15 };
+}
+
 /** The blind's slats: one every BLIND_PITCH rows from BLIND_TOP, three rows of slat and a 2 px gap on the storm. */
 export const BLIND_TOP = 39;
 export const BLIND_PITCH = 5;
