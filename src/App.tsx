@@ -11,7 +11,7 @@ import { t, useLocale } from './i18n';
 import { GOLD_INK, INKS } from './lib/inks';
 import { fileKind, loadDocument, prefetchPdfjs, type SourceDocument } from './lib/loadDocument';
 import { classifyError, logAppError, type ErrorCode } from './lib/errors';
-import { PageStore } from './lib/pageStore';
+import { DocumentReplacedError, PageStore } from './lib/pageStore';
 import { exportFormat, exportRecolored, type ExportFormat } from './lib/exportFile';
 
 type AppState = 'empty' | 'processing' | 'preview' | 'error' | 'prntr';
@@ -56,6 +56,8 @@ export default function App() {
   const [showPrintReminder, setShowPrintReminder] = useState(false);
   const [printImages, setPrintImages] = useState<string[]>([]);
   const [busy, setBusy] = useState<'print' | 'download' | null>(null);
+  // A print or download that failed (not one stopped by a new document).
+  const [exportError, setExportError] = useState<ErrorCode | null>(null);
   const [dragging, setDragging] = useState(false);
   const [, setPagesVersion] = useState(0);
   const [prntrStage, setPrntrStage] = useState(0);
@@ -179,20 +181,33 @@ export default function App() {
     if (file) void handleFile(file);
   }
 
-  async function handleFile(file: File) {
+  // What every new document replaces, a file or the certificate: work still running
+  // for the old one (the token tells it to stop), its parsed file, its print pages.
+  function startDocument(name: string, exportAs: ExportFormat | null): number {
     const token = ++runToken.current;
-    lastFile.current = file;
+    if (idleHandle.current !== null) {
+      cancelIdle(idleHandle.current);
+      idleHandle.current = null;
+    }
+    releaseDocument();
     setShowPrintReminder(false);
     setPrintImages([]);
     setHolding(false);
-    setFileName(file.name);
+    setBusy(null);
+    setExportError(null);
+    setFileName(name);
+    if (exportAs) setFormat(exportAs);
+    setCurrentPage(0);
+    return token;
+  }
+
+  async function handleFile(file: File) {
+    lastFile.current = file;
     const kind = fileKind(file);
-    if (kind) setFormat(exportFormat(kind));
+    const token = startDocument(file.name, kind && exportFormat(kind));
     setPageCount(0);
     setProcessedCount(0);
-    setCurrentPage(0);
     setAppState('processing');
-    releaseDocument();
     try {
       const doc = await loadDocument(file);
       if (token !== runToken.current) {
@@ -216,6 +231,8 @@ export default function App() {
       }
     } catch (err) {
       if (token !== runToken.current) return;
+      // A print or download waiting on the pages that will never come gives up.
+      store.reset(0);
       const code = classifyError(err);
       logAppError(code, err, lastFile.current);
       setErrorInfo({ code, kind: KIND_BY_CODE[code] });
@@ -301,14 +318,8 @@ export default function App() {
   // The certificate becomes the loaded document: one page, a PDF to download, recoloured
   // in the chosen ink like any other. A document still processing is dropped.
   function loadCertificate({ id, page }: Certificate) {
-    runToken.current++;
-    releaseDocument();
     lastFile.current = null;
-    setShowPrintReminder(false);
-    setPrintImages([]);
-    setHolding(false);
-    setFileName(`prntr-certificate-${id.slice(-9).replace('-', '')}.pdf`);
-    setFormat('pdf');
+    startDocument(`prntr-certificate-${id.slice(-9).replace('-', '')}.pdf`, 'pdf');
     // the certificate comes up in gold, the secret ink, which stays on offer from here on
     setGoldUnlocked(true);
     setInkIndex(INKS.length);
@@ -318,7 +329,6 @@ export default function App() {
     store.ensureRecolored(0, inkRef.current);
     setPageCount(1);
     setProcessedCount(1);
-    setCurrentPage(0);
     setPagesVersion((v) => v + 1);
     prntrReturn.current = 'preview';
   }
@@ -330,10 +340,12 @@ export default function App() {
     return () => window.clearTimeout(id);
   }, [prntrDrop]);
 
-  async function collectAllRecolored(): Promise<HTMLCanvasElement[]> {
+  // Throws DocumentReplacedError once the document it started on is replaced.
+  async function collectAllRecolored(token: number): Promise<HTMLCanvasElement[]> {
     const out: HTMLCanvasElement[] = [];
     for (let i = 0; i < store.pageCount; i++) {
       await store.whenSourceReady(i);
+      if (token !== runToken.current) throw new DocumentReplacedError();
       const canvas = store.ensureRecolored(i, inkRef.current);
       if (canvas) out.push(canvas);
     }
@@ -342,28 +354,48 @@ export default function App() {
 
   async function handlePrint() {
     if (busy) return;
+    const token = runToken.current;
     setShowPrintReminder(true);
+    setExportError(null);
     setBusy('print');
     try {
-      const canvases = await collectAllRecolored();
+      const canvases = await collectAllRecolored(token);
       setPrintImages(canvases.map((c) => c.toDataURL('image/png')));
       // Let React commit the print pages before opening the dialog.
       await new Promise((r) => setTimeout(r, 60));
+      if (token !== runToken.current) return;
       window.print();
+    } catch (err) {
+      if (token !== runToken.current || err instanceof DocumentReplacedError) return;
+      setShowPrintReminder(false);
+      reportExportError(err);
     } finally {
-      setBusy(null);
+      // A new document has already reset busy, and may be exporting itself.
+      if (token === runToken.current) setBusy(null);
     }
   }
 
   async function handleDownload() {
     if (busy) return;
+    const token = runToken.current;
+    setExportError(null);
     setBusy('download');
     try {
-      const canvases = await collectAllRecolored();
+      const canvases = await collectAllRecolored(token);
       await exportRecolored(canvases, fileName || 'document', format);
+    } catch (err) {
+      if (token !== runToken.current || err instanceof DocumentReplacedError) return;
+      reportExportError(err);
     } finally {
-      setBusy(null);
+      if (token === runToken.current) setBusy(null);
     }
+  }
+
+  // An encoder out of memory, a canvas too large to export, a chunk that would not load.
+  function reportExportError(err: unknown) {
+    const code = classifyError(err);
+    logAppError(code, err, lastFile.current);
+    setExportError(code);
   }
 
   function handleRetry() {
@@ -414,6 +446,8 @@ export default function App() {
             onPrint={() => void handlePrint()}
             onDownload={() => void handleDownload()}
             busy={busy}
+            exportError={exportError && { code: exportError, kind: KIND_BY_CODE[exportError] }}
+            onDismissExportError={() => setExportError(null)}
             showReminder={showPrintReminder}
             onDismissReminder={() => setShowPrintReminder(false)}
             onOpenPrntr={() => enterPrntr(0)}

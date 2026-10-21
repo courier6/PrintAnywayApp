@@ -100,8 +100,10 @@ export async function loadDocument(file: File): Promise<SourceDocument> {
 // Browsers (Safari aside) can't decode HEIC natively; the decoder is imported
 // only when a HEIC file actually arrives so the common path stays light.
 async function decodeHeic(file: File): Promise<Blob> {
+  // Outside the try: a decoder that fails to load (offline, or a deploy since
+  // the page opened) is PA-100, worth a retry, not a damaged photo.
+  const { heicTo } = await import('heic-to');
   try {
-    const { heicTo } = await import('heic-to');
     return await heicTo({ blob: file, type: 'image/png' });
   } catch (err) {
     throw new HeicDecodeError(err instanceof Error ? err.message : String(err));

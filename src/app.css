@@ -853,6 +853,13 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
   color: var(--ink);
 }
 
+.export-error-code {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--ink-65);
+}
+
 /* ---------- Print output ---------- */
 
 .print-root {
