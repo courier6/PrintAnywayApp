@@ -74,6 +74,25 @@ function goldLut(ramp: [string, string, string]): Uint8Array {
   return lut;
 }
 
+const lut32Cache = new Map<string, Uint32Array>();
+// ImageData bytes are R, G, B, A in memory; a Uint32 view reads them in the
+// platform's byte order (little-endian on every browser that ships today).
+const LITTLE_ENDIAN = new Uint8Array(new Uint32Array([1]).buffer)[0] === 1;
+
+/** inkLut packed as one RGBA word per luminance, for writing a pixel in one store. */
+function inkLut32(inkHex: string): Uint32Array {
+  const cached = lut32Cache.get(inkHex);
+  if (cached) return cached;
+  const lut = inkLut(inkHex);
+  const packed = new Uint32Array(256);
+  for (let v = 0; v < 256; v++) {
+    const [r, g, b] = [lut[v * 3], lut[v * 3 + 1], lut[v * 3 + 2]];
+    packed[v] = LITTLE_ENDIAN ? ((255 << 24) | (b << 16) | (g << 8) | r) >>> 0 : ((r << 24) | (g << 16) | (b << 8) | 255) >>> 0;
+  }
+  lut32Cache.set(inkHex, packed);
+  return packed;
+}
+
 /** 256-entry luminance→RGB lookup table for one ink. */
 function inkLut(inkHex: string): Uint8Array {
   const cached = lutCache.get(inkHex);
@@ -110,8 +129,9 @@ export function recolorToCanvas(
   target?: HTMLCanvasElement,
 ): HTMLCanvasElement {
   const canvas = target ?? document.createElement('canvas');
-  canvas.width = width;
-  canvas.height = height;
+  // Assigning a size, even the same one, reallocates and clears the canvas.
+  if (canvas.width !== width) canvas.width = width;
+  if (canvas.height !== height) canvas.height = height;
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('Canvas 2D context unavailable');
   const img = ctx.createImageData(width, height);
@@ -134,14 +154,9 @@ export function recolorToCanvas(
     ctx.putImageData(img, 0, 0);
     return canvas;
   }
-  const lut = inkLut(inkHex);
-  for (let p = 0, i = 0; p < lum.length; p++, i += 4) {
-    const v = lum[p] * 3;
-    d[i] = lut[v];
-    d[i + 1] = lut[v + 1];
-    d[i + 2] = lut[v + 2];
-    d[i + 3] = 255;
-  }
+  const lut = inkLut32(inkHex);
+  const out = new Uint32Array(d.buffer, d.byteOffset, lum.length);
+  for (let p = 0; p < lum.length; p++) out[p] = lut[lum[p]];
   ctx.putImageData(img, 0, 0);
   return canvas;
 }
