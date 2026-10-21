@@ -474,6 +474,9 @@ interface Spray {
   color: (typeof NOZZLES)[number]['color'];
   /** Aimed at the fire, not the player: landing, it puts out what it touches. */
   fire: boolean;
+  /** Where the jet's first ink hit the glass (set as it lands): the aim locks there, and the splat builds
+   * and runs down there instead of following the cross. Null until then. */
+  landing: { x: number; y: number } | null;
   /** The nozzle was shot at this moment: the jet stops, what is in the air still lands. */
   stoppedAt: number | null;
   /** The whole jet has landed: the hit has been taken. */
@@ -1293,14 +1296,17 @@ export const room: Stage = {
       return { x: tubeX(tb, tb.top), y: tb.top + 2 };
     };
     /** Where the particle launched at τ goes: at the cross as it was HUNT_LAG_MS before, while the tubes
-     * snake and there was a cross; else the jet's own point (random, or the fire). */
+     * snake and there was a cross; else the jet's own point (random, or the fire). Once the jet's first ink
+     * has hit the glass, every particle launched after it goes where that one landed: the splat stays put. */
     const aimAt = (s: Spray, tau: number) => {
       if (s.fire || snakeU() <= 0) return { x: s.x, y: s.y };
+      if (s.landing && tau >= s.at + SPRAY_FLIGHT_MS) return s.landing;
       const c = crossAgo(HUNT_LAG_MS, tau);
       return c ? { x: c.x, y: c.y } : { x: s.x, y: s.y };
     };
-    /** Where the jet is landing now: the target of the particle landing at `now` (the last one's once the jet has ended). */
-    const landingOf = (s: Spray, now: number) => aimAt(s, Math.max(s.at, Math.min(jetEnd(s), now - SPRAY_FLIGHT_MS)));
+    /** Where the jet is landing: where its first ink hit, once it has; before that the target of the particle landing
+     * at `now`. */
+    const landingOf = (s: Spray, now: number) => s.landing ?? aimAt(s, Math.max(s.at, Math.min(jetEnd(s), now - SPRAY_FLIGHT_MS)));
     /** Where the particle launched at τ is at `now`: along an arc from the mouth to its target, spreading a little. */
     const particlePose = (s: Spray, tau: number, now: number) => {
       const v = (now - tau) / SPRAY_FLIGHT_MS;
@@ -1963,7 +1969,7 @@ export const room: Stage = {
           nextAttackAt = now + gap;
           return;
         }
-        sprays.push({ nx: BLACK_X, x: BLACK_X, y: TUBE_TOP, at: now + TUBE_RISE_MS, color: 'z', fire: false, stoppedAt: null, done: true, fed: false, dud: true });
+        sprays.push({ nx: BLACK_X, x: BLACK_X, y: TUBE_TOP, at: now + TUBE_RISE_MS, color: 'z', fire: false, landing: null, stoppedAt: null, done: true, fed: false, dud: true });
         nextAttackAt = now + TUBE_RISE_MS + SPRAY_MS + TUBE_RISE_MS + gap;
         return;
       }
@@ -1989,7 +1995,7 @@ export const room: Stage = {
             y = r.y0 + (r.y1 - r.y0) * 0.6 + (Math.random() - 0.5) * 8;
           }
           const nx = nozzles[Math.floor(Math.random() * nozzles.length)];
-          sprays.push({ nx, x, y, at: now + TUBE_RISE_MS + i * SPRAY_STAGGER_MS, color: NOZZLES.find((n) => n.x === nx)!.color, fire: atFire, stoppedAt: null, done: false, fed: false, dud: false });
+          sprays.push({ nx, x, y, at: now + TUBE_RISE_MS + i * SPRAY_STAGGER_MS, color: NOZZLES.find((n) => n.x === nx)!.color, fire: atFire, landing: null, stoppedAt: null, done: false, fed: false, dud: false });
         }
         nextAttackAt = now + TUBE_RISE_MS + (SPRAY_COUNT - 1) * SPRAY_STAGGER_MS + SPRAY_MS + SPRAY_FLIGHT_MS + gap;
       } else if (kind === 'scan') {
@@ -2429,6 +2435,8 @@ export const room: Stage = {
             if (s.dud) sounds.inkDud();
             else sounds.inkSpray();
           }
+          // the first ink on the glass: the jet's aim locks there
+          if (!s.landing && !s.dud && now >= s.at + SPRAY_FLIGHT_MS) s.landing = landingOf(s, now);
           if (!s.done && s.stoppedAt === null && now >= splatAt(s)) {
             s.done = true;
             sounds.inkSplat();
