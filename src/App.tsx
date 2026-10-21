@@ -80,16 +80,20 @@ export default function App() {
   const printRoot = useRef<HTMLDivElement>(null);
   const handleFileRef = useRef<(file: File) => void>(() => {});
   handleFileRef.current = (file) => void handleFile(file);
+  // Prntr has the screen: a file dragged over it is not taken (it would end the game
+  // and replace the document unseen).
+  const inPrntr = useRef(false);
+  inPrntr.current = appState === 'prntr';
 
-  // Window-level drag-and-drop: dropping a file anywhere, in any state,
-  // replaces the loaded document without confirmation. The depth counter
+  // Window-level drag-and-drop: dropping a file anywhere, in any state but
+  // Prntr, replaces the loaded document without confirmation. The depth counter
   // keeps the overlay from flickering as the drag crosses child elements.
   useEffect(() => {
     const depth = { current: 0 };
     const isFileDrag = (e: globalThis.DragEvent) =>
       Array.from(e.dataTransfer?.types ?? []).includes('Files');
     const onDragEnter = (e: globalThis.DragEvent) => {
-      if (!isFileDrag(e)) return;
+      if (!isFileDrag(e) || inPrntr.current) return;
       prefetchPdfjs();
       depth.current++;
       setDragging(true);
@@ -106,6 +110,10 @@ export default function App() {
       depth.current = 0;
       setDragging(false);
       if (!isFileDrag(e)) return;
+      if (inPrntr.current) {
+        e.preventDefault(); // nor may the browser open the file in place of the app
+        return;
+      }
       // The empty/error DropZone handles its own drops (and prevents default);
       // don't process the same file twice.
       if (e.defaultPrevented) return;
