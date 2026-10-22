@@ -11,7 +11,6 @@ export const PAL = {
   v: '#3E8E4E', V: '#2E6E3E', p: '#B86B3A', s: '#FFF6CC', e: '#A8A08A', R: '#B8140A',
   /** Not in palette.json: the bright red the open machine's button blinks. */
   Q: '#FF2A1A',
-  I: '#1e3a5f', // the player's ink (pixels.ts setInk overrides it from ctx.inkHex when the room starts)
   /** The storm's own colours, from stage 0's storm (storm.ts): outside the room, outside palette.json. */
   N: '#0B0D16', // the night sky, the building's silhouette
   M: '#181C2C', // the building's windows, the cloud bank

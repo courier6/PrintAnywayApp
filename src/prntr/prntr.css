@@ -383,7 +383,8 @@
 /* The scan's one inverted frame. */
 .prntr-room-canvas.is-inverted,
 .prntr-room-art.is-inverted,
-.prntr-room-front.is-inverted {
+.prntr-room-front.is-inverted,
+.prntr-room-doc.is-inverted {
   filter: invert(1);
 }
 
@@ -411,6 +412,17 @@
   pointer-events: none;
 }
 
+/* The player's page's content (PRNTR-FIRE.md §18): a canvas at the screen's resolution over the front
+   layer, filling the hole the front leaves inside the thrown page's frame; the page's frame, char and
+   flames are the front's. Not pixelated: the page looks as it does in the app. */
+.prntr-room-doc {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
 /* The slam's ripple (PRNTR-SLAM.md): WebGL canvases at the screen's resolution over the room canvas
    (with the print) and over the front layer, drawing them bent. Shown only while the ripple runs; the 2D
    canvases they are drawn from go see-through meanwhile (they stay in the accessibility tree). The DOM
@@ -430,7 +442,8 @@
 
 .prntr-room-frame.is-rippling .prntr-room-canvas,
 .prntr-room-frame.is-rippling .prntr-room-art,
-.prntr-room-frame.is-rippling .prntr-room-front {
+.prntr-room-frame.is-rippling .prntr-room-front,
+.prntr-room-frame.is-rippling .prntr-room-doc {
   opacity: 0;
 }
 

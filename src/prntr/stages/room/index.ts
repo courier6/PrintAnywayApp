@@ -1,7 +1,7 @@
 import { reducedMotion, wait } from '../../anim';
 import type { Handoff, RunStats, Stage } from '../../types';
-import { H, Pix, W, frameScale, rotateSprite, setInk } from './pixels';
-import { docSprites } from './docpage';
+import { H, Pix, W, frameScale, rotateSprite } from './pixels';
+import { DocContent, docFine } from './docpage';
 import { ashFlecks, burnFine, flakes, frontFire } from './burnpage';
 import { ART_BREAK_SHOTS, BADGE_AT, CLOCK_AT, FIRE_TICK_MS, GLASS, KIT_AT, KNOB, MACHINE_AT, MACHINE_PIECES, NOZZLES, SPR, drawFireFront, drawFlames, drawMarks, drawRoom, drawWindowWreck, figEmitters, figLeaf, fireEmitters, fireRect, inDoorway, knobX, lampX, markBox, monsteraEmitters, tubeX, type Broken, type Emitter, type ExitSign, type Hole, type Mark, type Rect, type SceneState, type Tube } from './scene';
 import { ART_AT, ART_SUB, renderVictory } from './art';
@@ -528,7 +528,7 @@ interface Page {
   shot: boolean;
   /** The feed sound has played. */
   fed: boolean;
-  /** The player's page (the middle one of the volley): drawn from the document from 2× on. */
+  /** The player's page (the middle one of the volley): its content is the document, on the doc canvas (§18). */
   doc: boolean;
   /** Its burning front's seed (600 + x1, the flames' seed in flight). */
   seed: number;
@@ -576,8 +576,7 @@ export const room: Stage = {
     if (signal.aborted) return { kind: 'start' };
     const reduced = reducedMotion();
     const sounds = createRoomSounds(audio);
-    setInk(ctx.inkHex);
-    const DOC = docSprites(ctx.page, ctx.inkHex);
+    const DOC = new DocContent(ctx.page);
     root.replaceChildren();
 
     // ---- DOM: the pixel layer, the three overlays, the HUD ----------------
@@ -609,6 +608,13 @@ export const room: Stage = {
     front.setAttribute('aria-hidden', 'true');
     const fg = front.getContext('2d', { willReadFrequently: true });
     if (!fg) throw new Error('prntr: no 2d context');
+    // The player's page's content on a canvas at the screen's resolution over the front layer, filling the hole
+    // the front leaves inside the thrown page's frame (PRNTR-FIRE.md §18); sized in fit().
+    const doc = document.createElement('canvas');
+    doc.className = 'prntr-room-doc';
+    doc.setAttribute('aria-hidden', 'true');
+    const dg = doc.getContext('2d');
+    if (!dg) throw new Error('prntr: no 2d context');
     // The print on the wall: its own canvas under the room canvas, seen through the hole the
     // room leaves over the print's rect, at ART_SUB cells to the room's pixel, so it is finer
     // than anything around it and behind everything the room draws (the lid, the tubes).
@@ -625,9 +631,10 @@ export const room: Stage = {
     const fpix = new Pix();
     // The slam's ripple: the room (the print under its hole) and the front layer redrawn bent by WebGL, each
     // over the 2D canvas it comes from, while the ripple runs. None under reduced motion, none without WebGL.
-    // (The print's canvas is uploaded as it is: it changes only where a shot holes it.)
+    // (The print's canvas is uploaded as it is: it changes only where a shot holes it. The doc canvas fills the
+    // front's hole in the player's page, bent with it.)
     const rippleBack = reduced ? null : RippleView.create('prntr-room-ripple', { src: pix.image, x: 0, y: 0, w: W, h: H }, { src: art, ...ART_AT });
-    const rippleFront = rippleBack && RippleView.create('prntr-room-ripple', { src: fpix.image, x: 0, y: 0, w: W, h: H });
+    const rippleFront = rippleBack && RippleView.create('prntr-room-ripple', { src: fpix.image, x: 0, y: 0, w: W, h: H }, { src: doc, x: 0, y: 0, w: W, h: H });
     const light = el('div', 'prntr-room-light');
     const spill = el('div', 'prntr-room-spill');
     // The fire's light: an unpixelated orange glow sized to the flames each frame; one more over the burning
@@ -774,12 +781,14 @@ export const room: Stage = {
     const deathEl = el('div', 'prntr-room-death');
     deathEl.setAttribute('aria-hidden', 'true');
     deathEl.hidden = true;
-    frame.append(art, canvas, ...(rippleBack ? [rippleBack.canvas] : []), light, spill, fireLight, figLight, machineLight, slotLight, holeLights, windowLight, glowFills, redLight, front, ...(rippleFront ? [rippleFront.canvas] : []), stormWash, wash, glows, badgeGlow, hud, cursor, hurtEl, deathEl, continueEl, badgeEl, overEl);
+    frame.append(art, canvas, ...(rippleBack ? [rippleBack.canvas] : []), light, spill, fireLight, figLight, machineLight, slotLight, holeLights, windowLight, glowFills, redLight, front, doc, ...(rippleFront ? [rippleFront.canvas] : []), stormWash, wash, glows, badgeGlow, hud, cursor, hurtEl, deathEl, continueEl, badgeEl, overEl);
     wrap.append(frame);
     root.append(wrap);
 
     // ---- fit: the largest scale that is a whole number of device px per virtual px, letterboxed in black --------
     let scale = 1;
+    /** Device px to the virtual px on the doc canvas (frameScale makes it whole). */
+    let docPx = 1;
     const fit = () => {
       scale = frameScale(root.clientWidth, root.clientHeight);
       frame.style.width = `${W * scale}px`;
@@ -792,6 +801,9 @@ export const room: Stage = {
       const px = Math.round(scale * (window.devicePixelRatio || 1));
       rippleBack?.resize(px);
       rippleFront?.resize(px);
+      doc.width = W * px;
+      doc.height = H * px;
+      docPx = px;
     };
     fit();
     window.addEventListener('resize', fit, { signal });
@@ -2483,7 +2495,7 @@ export const room: Stage = {
         },
         bolts: () => staples.filter((s) => s.kind !== 'staple').length,
         burningPages: () => pages.filter((p) => p.burning && !p.shot).length,
-        docPage: () => { const p = pages.find((q) => q.doc); return p ? { burning: p.burning, shot: p.shot, landed: p.landedAt !== null, burn: burnOf(p, performance.now()), gone: gone(p, performance.now()) } : null; },
+        docPage: () => { const p = pages.find((q) => q.doc); return p ? { burning: p.burning, shot: p.shot, landed: p.landedAt !== null, y1: p.y1, burn: burnOf(p, performance.now()), gone: gone(p, performance.now()) } : null; },
         deadTubes: () => [...scene.stubs],
         sprays: () => sprays.length,
         tubes: () => scene.tubes.map((t) => ({ ...t })),
@@ -3114,6 +3126,8 @@ export const room: Stage = {
       // What the machine throws goes on the front layer, over the slot's light, and the fire's
       // front flames with it: the flames on the burning machine were behind that glow too.
       fpix.clear();
+      dg.setTransform(1, 0, 0, 1, 0, 0);
+      dg.clearRect(0, 0, doc.width, doc.height);
       if (scene.windowOpen) drawWindowWreck(fpix);
       if (scene.fire) drawFireFront(fpix, scene.fire, scene.printer === 'wreck' ? scene.pieces : null);
       // The marks on the glass, under the things in flight, the landed pages and the ink.
@@ -3147,10 +3161,16 @@ export const room: Stage = {
         if (p.shot || now < p.at || p.landedAt !== null) continue;
         const r = pagePose(p, now);
         const spr = SPR.PAGE_PRINTED;
-        if (r.h < spr.h) { fpix.blit(r.x, r.y, { w: spr.w, h: r.h, rows: spr.rows.slice(0, r.h) }); continue; }
+        if (r.h < spr.h) {
+          // rising out of the slot: the rows above the slot so far; the player's page shows its content from the first
+          fpix.blit(r.x, r.y, { w: spr.w, h: r.h, rows: spr.rows.slice(0, r.h) }, 1, p.doc ? { fine: docFine(1) } : {});
+          if (p.doc) DOC.draw(dg, docPx, r.x, r.y, 1, 'w', { rows: r.h });
+          continue;
+        }
         if (gone(p, now)) continue;
-        const big = p.doc && r.sc === 2, b = burnOf(p, now);
-        fpix.blit(r.x, r.y, big ? DOC.flying : spr, big ? 1 : r.sc, p.burning ? { remap: { K: 'G', w: 'r' }, fine: burnFine(13, r.sc, b, p.seed, tick) } : {});
+        const b = burnOf(p, now), burn = p.burning ? burnFine(13, r.sc, b, p.seed, tick) : undefined;
+        fpix.blit(r.x, r.y, spr, r.sc, { ...(p.burning ? { remap: { K: 'G', w: 'r' } } : {}), fine: p.doc ? docFine(r.sc, burn) : burn });
+        if (p.doc) DOC.draw(dg, docPx, r.x, r.y, r.sc, p.burning ? 'r' : 'w', { fine: burn });
         if (p.burning) flying.push(...frontFire(r.x, r.y, r.w, r.h, r.sc, b, p.seed, tick));
       }
       if (flying.length) drawFlames(fpix, 'pages', flying, reduced ? 0 : now);
@@ -3162,8 +3182,9 @@ export const room: Stage = {
         const slide = lt > PAGE_LANDED_MS ? ((lt - PAGE_LANDED_MS) / PAGE_SLIDE_MS) * 80 : 0;
         const lx = Math.floor(p.x1 - 20);
         const ly = Math.floor(p.y1 - 26 + slide);
-        const b = burnOf(p, now);
-        fpix.blit(lx, ly, p.doc ? DOC.landed : SPR.PAGE_PRINTED, p.doc ? 1 : 4, { skew: 10, ...(p.burning ? { remap: { K: 'G', w: 'r' }, fine: burnFine(13, 4, b, p.seed + 100, tick) } : {}) });
+        const b = burnOf(p, now), burn = p.burning ? burnFine(13, 4, b, p.seed + 100, tick) : undefined;
+        fpix.blit(lx, ly, SPR.PAGE_PRINTED, 4, { skew: 10, ...(p.burning ? { remap: { K: 'G', w: 'r' } } : {}), fine: p.doc ? docFine(4, burn) : burn });
+        if (p.doc) DOC.draw(dg, docPx, lx, ly, 4, p.burning ? 'r' : 'w', { skew: 10, fine: burn });
         if (p.burning) {
           landed.push(...frontFire(lx + 3, ly, 40, 52, 4, b, 700 + p.x1, tick));
           ashFlecks((x, y, k) => fpix.set(x, y, k), p.landedAt, now, lx, ly, 52, p.seed + 100, (t) => burnOf(p, t));
@@ -3253,6 +3274,7 @@ export const room: Stage = {
       canvas.classList.toggle('is-inverted', invertFrame);
       art.classList.toggle('is-inverted', invertFrame);
       front.classList.toggle('is-inverted', invertFrame);
+      doc.classList.toggle('is-inverted', invertFrame);
       rippleBack?.canvas.classList.toggle('is-inverted', invertFrame);
       rippleFront?.canvas.classList.toggle('is-inverted', invertFrame);
       invertFrame = false;
