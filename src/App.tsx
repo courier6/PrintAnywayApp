@@ -361,13 +361,13 @@ export default function App() {
     setCurrentPage(clamped);
   }
 
-  // Prntr takes over the viewport with the page shown now (or a page it is handed,
-  // which only the dev entrance does); see PRNTR-ARCHITECTURE.md.
+  // Prntr takes over the viewport with the document's first page, whatever page is shown (or a page it is
+  // handed, which only the dev entrance does); see PRNTR-ARCHITECTURE.md. The room prints it (PRNTR-FIRE.md §14).
   function enterPrntr(stage: number, page?: { source: HTMLCanvasElement; recolored: HTMLCanvasElement }) {
     if (!page) {
       if (appState !== 'preview') return;
-      const recolored = store.ensureRecolored(currentPage, inkRef.current);
-      const source = store.getSource(currentPage);
+      const recolored = store.ensureRecolored(0, inkRef.current);
+      const source = store.getSource(0);
       if (!recolored || !source) return;
       page = { source, recolored };
     }

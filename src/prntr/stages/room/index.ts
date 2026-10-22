@@ -1,6 +1,7 @@
 import { reducedMotion, wait } from '../../anim';
 import type { Handoff, RunStats, Stage } from '../../types';
-import { H, Pix, W, frameScale, rotateSprite } from './pixels';
+import { H, Pix, W, frameScale, rotateSprite, setInk } from './pixels';
+import { docSprites } from './docpage';
 import { ART_BREAK_SHOTS, BADGE_AT, CLOCK_AT, FIRE_TICK_MS, GLASS, KIT_AT, KNOB, MACHINE_AT, MACHINE_PIECES, NOZZLES, SPR, drawFireFront, drawFlames, drawMarks, drawRoom, drawWindowWreck, figEmitters, figLeaf, fireEmitters, fireRect, inDoorway, knobX, lampX, markBox, monsteraEmitters, tubeX, type Broken, type Emitter, type ExitSign, type Hole, type Mark, type Rect, type SceneState, type Tube } from './scene';
 import { ART_AT, ART_SUB, renderVictory } from './art';
 import { PAL, type PalKey } from './palette';
@@ -523,6 +524,8 @@ interface Page {
   shot: boolean;
   /** The feed sound has played. */
   fed: boolean;
+  /** The player's page (the middle one of the volley): drawn from the document from 2× on. */
+  doc: boolean;
 }
 
 /** A particle on the front layer (steam off the snuffed fire): thrown from x,y at born, under gravity g, for life ms. */
@@ -556,7 +559,7 @@ function el(tag: string, className: string, text?: string): HTMLElement {
 /**
  * Stage 1, the room: look around, click the sticker, fight the machine to 1337, one
  * second of quiet, out; or run out of hearts and it is over. Design: prntr/design/PRNTR-HANDOFF-STAGE-1.md §2–§3 (local);
- * spec: PRNTR-STAGE-1.md. The page in ctx.page is not used: the room is not about it.
+ * spec: PRNTR-STAGE-1.md. The middle page of every volley is the player's page (PRNTR-FIRE.md §14).
  */
 export const room: Stage = {
   name: 'room',
@@ -567,6 +570,8 @@ export const room: Stage = {
     if (signal.aborted) return { kind: 'start' };
     const reduced = reducedMotion();
     const sounds = createRoomSounds(audio);
+    setInk(ctx.inkHex);
+    const DOC = docSprites(ctx.page, ctx.inkHex);
     root.replaceChildren();
 
     // ---- DOM: the pixel layer, the three overlays, the HUD ----------------
@@ -1379,14 +1384,14 @@ export const room: Stage = {
       const u = Math.min(1, (now - p.at) / PAGE_MS);
       if (u < PAGE_EJECT) {
         const rows = Math.max(1, Math.ceil((u / PAGE_EJECT) * SPR.PAGE_PRINTED.h));
-        return { x: p.x0 - 5, y: SLOT.y - rows, w: 10, h: rows };
+        return { x: p.x0 - 5, y: SLOT.y - rows, w: 10, h: rows, sc: 1 };
       }
       const v = (u - PAGE_EJECT) / (1 - PAGE_EJECT);
       const sc = v < 0.5 ? 1 : 2;
       const y0 = SLOT.y - 6.5;
       const x = p.x0 + (p.x1 - p.x0) * v;
       const y = y0 + (p.y1 - y0) * v;
-      return { x: Math.floor(x - 5 * sc), y: Math.floor(y - 6.5 * sc), w: 10 * sc, h: 13 * sc };
+      return { x: Math.floor(x - 5 * sc), y: Math.floor(y - 6.5 * sc), w: 10 * sc, h: 13 * sc, sc };
     };
     /** A thrown thing's sprite: a staple tumbles a quarter turn every STAPLE_SPIN_MS, a nut or a bolt every BOLT_SPIN_MS. */
     const thrownSprite = (s: Staple, now: number) => {
@@ -2199,7 +2204,7 @@ export const room: Stage = {
         nextAttackAt = now + 2 * STAPLE_STAGGER_MS + STAPLE_MS + gap;
       } else {
         PAGE_TARGETS_X.forEach((x1, i) => {
-          pages.push({ burning: fireAt !== null, x0: PAGE_ORIGINS_X[i], x1, y1: 60 + Math.random() * 70, at: now + i * PAGE_STAGGER_MS, landedAt: null, shot: false, fed: false });
+          pages.push({ burning: fireAt !== null, x0: PAGE_ORIGINS_X[i], x1, y1: 60 + Math.random() * 70, at: now + i * PAGE_STAGGER_MS, landedAt: null, shot: false, fed: false, doc: i === 2 });
         });
         nextAttackAt = now + 4 * PAGE_STAGGER_MS + PAGE_MS + gap;
       }
@@ -2460,6 +2465,7 @@ export const room: Stage = {
         },
         bolts: () => staples.filter((s) => s.kind !== 'staple').length,
         burningPages: () => pages.filter((p) => p.burning && !p.shot).length,
+        docPage: () => { const p = pages.find((q) => q.doc); return p ? { burning: p.burning, shot: p.shot, landed: p.landedAt !== null, burn: 0, gone: false } : null; },
         deadTubes: () => [...scene.stubs],
         sprays: () => sprays.length,
         tubes: () => scene.tubes.map((t) => ({ ...t })),
@@ -3126,7 +3132,7 @@ export const room: Stage = {
         const r = pagePose(p, now);
         const spr = SPR.PAGE_PRINTED;
         if (r.h < spr.h) fpix.blit(r.x, r.y, { w: spr.w, h: r.h, rows: spr.rows.slice(0, r.h) });
-        else fpix.blit(r.x, r.y, spr, r.w / spr.w, p.burning ? { remap: { K: 'G', w: 'r' } } : {});
+        else fpix.blit(r.x, r.y, p.doc && r.sc === 2 ? DOC.flying : spr, p.doc && r.sc === 2 ? 1 : r.w / spr.w, p.burning ? { remap: { K: 'G', w: 'r' } } : {});
         if (p.burning && r.h >= spr.h) flying.push(...pageFire(r.x, r.y, r.w, r.h, 600 + p.x1));
       }
       if (flying.length) drawFlames(fpix, 'pages', flying, reduced ? 0 : now);
@@ -3138,7 +3144,7 @@ export const room: Stage = {
         const slide = lt > PAGE_LANDED_MS ? ((lt - PAGE_LANDED_MS) / PAGE_SLIDE_MS) * 80 : 0;
         const lx = Math.floor(p.x1 - 20);
         const ly = Math.floor(p.y1 - 26 + slide);
-        fpix.blit(lx, ly, SPR.PAGE_PRINTED, 4, { skew: 10, ...(p.burning ? { remap: { K: 'G', w: 'r' } } : {}) });
+        fpix.blit(lx, ly, p.doc ? DOC.landed : SPR.PAGE_PRINTED, p.doc ? 1 : 4, { skew: 10, ...(p.burning ? { remap: { K: 'G', w: 'r' } } : {}) });
         if (p.burning) landed.push(...pageFire(lx + 3, ly, 40, 52, 700 + p.x1));
       }
       if (landed.length) drawFlames(fpix, 'pagesLanded', landed, reduced ? 0 : now);

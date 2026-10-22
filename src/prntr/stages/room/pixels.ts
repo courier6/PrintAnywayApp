@@ -60,6 +60,12 @@ const RGB = Object.fromEntries(
   }),
 ) as Record<PalKey, [number, number, number]>;
 
+/** The player's ink: the I key takes the app's ink colour for the run (the room's one colour not in the sheet). */
+export function setInk(hex: string): void {
+  const n = parseInt(hex.slice(1), 16);
+  RGB.I = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+
 export interface BlitOptions {
   /** Draw one palette key as another (the EXIT sign's n → R, the sticker's c → R). */
   remap?: Partial<Record<string, PalKey>>;
