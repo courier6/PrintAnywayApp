@@ -80,7 +80,9 @@ export function PreviewState({
   // glow animation even when clicks come in quick succession.
   const [justInked, setJustInked] = useState(false);
   // The way into Prntr has the pointer or the focus: glyphs rise above and below it only then.
-  const [omen, setOmen] = useState(false);
+  // The link's glyphs run while it has the pointer or the focus: two flags, so one leaving does not end the other's.
+  const [omenHover, setOmenHover] = useState(false);
+  const [omenFocus, setOmenFocus] = useState(false);
   const [flashKey, setFlashKey] = useState(0);
   const inkTimer = useRef<number | null>(null);
   const prevInk = useRef(inkIndex);
@@ -372,14 +374,14 @@ export function PreviewState({
                         type="button"
                         className="help-link"
                         onClick={onOpenPrntr}
-                        onPointerEnter={() => setOmen(true)}
-                        onPointerLeave={() => setOmen(false)}
-                        onFocus={() => setOmen(true)}
-                        onBlur={() => setOmen(false)}
+                        onPointerEnter={() => setOmenHover(true)}
+                        onPointerLeave={() => setOmenHover(false)}
+                        onFocus={() => setOmenFocus(true)}
+                        onBlur={() => setOmenFocus(false)}
                       >
                         {OTHER_TIP.link}
                       </button>
-                      <RisingGlyphs active={omen} />
+                      <RisingGlyphs active={omenHover || omenFocus} />
                     </span>
                     {OTHER_TIP.tail}
                   </p>
