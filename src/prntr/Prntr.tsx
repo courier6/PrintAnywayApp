@@ -71,6 +71,16 @@ export default function Prntr({ source, recolored, inkHex, stage, audioContext, 
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
+  // While Prntr is up the page does not zoom: iOS zooms into a text field set in a small face (the badge's name) and
+  // does not zoom back out, which would leave the fixed game screen cropped. Restored on unmount.
+  useEffect(() => {
+    const meta = document.querySelector('meta[name="viewport"]');
+    const before = meta?.getAttribute('content') ?? null;
+    if (!meta || before === null) return;
+    meta.setAttribute('content', `${before}, maximum-scale=1.0`);
+    return () => meta.setAttribute('content', before);
+  }, []);
+
   useEffect(() => {
     const stageEl = stageRef.current;
     if (!stageEl) return;

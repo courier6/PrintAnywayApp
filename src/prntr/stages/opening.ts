@@ -1,7 +1,7 @@
 import { nextInput, reducedMotion, wait } from '../anim';
 import type { Stage } from '../types';
 import { playBeep, playCardJingle } from './jingle';
-import { H, W } from './room/pixels';
+import { frameScale } from './room/pixels';
 import { startGlitchPulse, startStorm, type StormSlot } from './storm';
 
 /** 0 = every letter on the baseline, 1 = approved, 2 = twice as messy. */
@@ -119,6 +119,11 @@ export const opening: Stage = {
     const { root, signal, audio } = ctx;
     const reduced = reducedMotion();
     root.replaceChildren();
+    // The room's frame scale, on the stage's root: the title is sized by it and the arcade layer is placed by it, so on
+    // a phone, where the frame is small, the word fits above the prompt and the footer instead of over them.
+    const fit = () => root.style.setProperty('--s', String(frameScale(root.clientWidth, root.clientHeight)));
+    fit();
+    window.addEventListener('resize', fit, { signal });
 
     // Beats 1–2: the card, 1.25s in total (in 250ms, hold, out 250ms).
     const card = el('div', 'prntr-card');
@@ -189,9 +194,6 @@ export const opening: Stage = {
     // centred), so INSERT COIN and the footer sit where the room's HUD will put its caption
     // and CREDIT, and nothing jumps at the cut.
     const arcade = el('div', 'prntr-arcade');
-    const fit = () => arcade.style.setProperty('--s', String(Math.max(1, Math.floor(Math.min(root.clientWidth / W, root.clientHeight / H)))));
-    fit();
-    window.addEventListener('resize', fit, { signal });
     const promptRow = el('div', 'prntr-prompt-row');
     const prompt = el('div', 'prntr-prompt', 'INSERT COIN');
     if (!reduced) prompt.classList.add('is-blinking');

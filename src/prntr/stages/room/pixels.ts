@@ -4,6 +4,16 @@ import { PAL, type PalKey } from './palette';
 export const W = 240;
 export const H = 160;
 
+/**
+ * The scale (CSS px per virtual px) of the largest frame that fits a w × h box and whose virtual px are
+ * a whole number of device px: 1 on a 1× screen, 4/3 on a 3× phone 390 wide (a 320-wide frame; a whole CSS
+ * px there would be 1, a 240-wide frame). Never under one device px per virtual px.
+ */
+export function frameScale(w: number, h: number): number {
+  const dpr = window.devicePixelRatio || 1;
+  return Math.max(1, Math.floor(Math.min(w / W, h / H) * dpr)) / dpr;
+}
+
 export interface Sprite {
   w: number;
   h: number;

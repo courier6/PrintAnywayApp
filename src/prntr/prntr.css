@@ -25,6 +25,8 @@
   background: #000000;
   color: #EDEDED;
   outline: none;
+  /* no pinch or double-tap zoom in any stage (the room had it; the opening did not, and a zoomed-in page could be entered) */
+  touch-action: none;
 }
 
 .prntr-stage {
@@ -195,7 +197,7 @@
   gap: 4px;
   font-family: 'Comic Sans MS', 'Comic Sans', 'Comic Neue', cursive;
   font-weight: 700;
-  font-size: min(220px, 27vw);
+  font-size: min(220px, 27vw, calc(56px * var(--s, 5)));
   line-height: 1;
   letter-spacing: -0.02em;
 }
@@ -259,6 +261,7 @@
   font-size: 28px;
   letter-spacing: 0.08em;
   text-align: center;
+  white-space: nowrap;
 }
 
 .prntr-prompt.is-blinking {
@@ -276,6 +279,7 @@
   color: #EDEDED;
   font-size: 13px;
   letter-spacing: 0.06em;
+  white-space: nowrap;
 }
 
 .prntr-credit.is-glowing {
@@ -327,9 +331,9 @@
   .prntr-card-logo path { stroke-width: 2; }
   .prntr-card-name { font-size: 18px; padding-bottom: 6px; }
   .prntr-card-presents { font-size: 11px; }
-  .prntr-title { gap: 2px; font-size: min(112px, 23.4vw); }
+  .prntr-title { gap: 2px; font-size: min(112px, 23.4vw, calc(56px * var(--s, 5))); }
   .prntr-prompt { font-size: 16px; letter-spacing: 0.06em; }
-  .prntr-footer { font-size: 9px; }
+  .prntr-footer { font-size: 8px; gap: 8px; }
   .prntr-copyright-corrupt { font-size: 11px; }
 }
 
@@ -1328,7 +1332,8 @@
 .prntr-room-frame.is-small .prntr-room-life { height: 10px; border-width: 2px; }
 /* small frames: CREDIT and the shots fill the bottom row, so the bar sits just above CREDIT */
 .prntr-room-frame.is-small .prntr-room-life { left: calc(8px * var(--s)); right: auto; width: calc(90px * var(--s)); bottom: calc(6px * var(--s) + 14px); }
-.prntr-room-frame.is-small .prntr-room-health-name { top: calc(14px * var(--s) - 10px); font-size: 7px; }
+/* small frames: the score row above the bar is full (SCORE, HI), so the machine's name goes under its bar */
+.prntr-room-frame.is-small .prntr-room-health-name { top: calc(14px * var(--s) + 15px); font-size: 7px; }
 /* small frames: CREDIT is right under the bar, so the name goes over it */
 .prntr-room-frame.is-small .prntr-room-life-name { left: calc(8px * var(--s)); bottom: calc(6px * var(--s) + 26px); font-size: 7px; }
 .prntr-room-frame.is-small .prntr-room-pips { gap: 6px; bottom: calc(6px * var(--s) + 24px); }

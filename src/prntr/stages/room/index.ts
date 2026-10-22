@@ -1,6 +1,6 @@
 import { reducedMotion, wait } from '../../anim';
 import type { Handoff, RunStats, Stage } from '../../types';
-import { H, Pix, W, rotateSprite } from './pixels';
+import { H, Pix, W, frameScale, rotateSprite } from './pixels';
 import { BADGE_AT, CLOCK_AT, GLASS, KIT_AT, KNOB, MACHINE_AT, MACHINE_PIECES, NOZZLES, SPR, drawFireFront, drawFlame, drawMarks, drawRoom, drawWindowWreck, figLeaf, fireRect, inDoorway, knobX, lampX, markBox, tubeX, type Broken, type ExitSign, type Hole, type Mark, type SceneState, type Tube } from './scene';
 import { ART_AT, ART_SUB, renderVictory } from './art';
 import { PAL, type PalKey } from './palette';
@@ -415,8 +415,9 @@ const RED_LIGHTS_FROM = 0.4;
 /** The USB stick's hit area in screen px (the handoff's 44 px for the sticker), whatever the scale. */
 const USB_HIT_PX = 44;
 /** The badge's hotspot and hit box: its sprite (BADGE_AT in scene.ts) plus about 4 px. */
-const BADGE_HIT = { x0: 5, y0: 116, x1: 28, y1: 134 };
-const inBadge = (x: number, y: number) => x >= BADGE_HIT.x0 && x < BADGE_HIT.x1 && y >= BADGE_HIT.y0 && y < BADGE_HIT.y1;
+const BADGE_HIT = { x0: 5, y0: 116, x1: 32, y1: 134 };
+/** `pad`: virtual px more on every side (the touch form, so a finger need not be exact). */
+const inBadge = (x: number, y: number, pad = 0) => x >= BADGE_HIT.x0 - pad && x < BADGE_HIT.x1 + pad && y >= BADGE_HIT.y0 - pad && y < BADGE_HIT.y1 + pad;
 const cleanName = (s: string) => s.toUpperCase().replace(/[^A-Z0-9 ]/g, '').replace(/ +/g, ' ').trim().slice(0, NAME_MAX);
 /** The radius of the badge's pulse, virtual px. */
 const BADGE_GLOW_R = 16;
@@ -750,15 +751,18 @@ export const room: Stage = {
     wrap.append(frame);
     root.append(wrap);
 
-    // ---- fit: the largest whole-number scale, letterboxed in black --------
+    // ---- fit: the largest scale that is a whole number of device px per virtual px, letterboxed in black --------
     let scale = 1;
     const fit = () => {
-      scale = Math.max(1, Math.floor(Math.min(root.clientWidth / W, root.clientHeight / H)));
+      scale = frameScale(root.clientWidth, root.clientHeight);
       frame.style.width = `${W * scale}px`;
       frame.style.height = `${H * scale}px`;
       frame.style.setProperty('--s', String(scale));
       frame.classList.toggle('is-small', scale <= 3);
-      const px = scale * (window.devicePixelRatio || 1);
+      // the badge card (120 virtual px wide, every rule of it in var(--s)) is read and typed on, so on touch it is up to twice
+      // the room's scale, and never wider than the frame
+      badgeEl.style.setProperty('--s', String(touch ? Math.min(2 * scale, (W * scale * 0.94) / 120) : scale));
+      const px = Math.round(scale * (window.devicePixelRatio || 1));
       rippleBack?.resize(px);
       rippleFront?.resize(px);
     };
@@ -2180,7 +2184,9 @@ export const room: Stage = {
         setCaption(USB_CAPTION);
         return;
       }
-      if (scene.badge === 'floor' && inBadge(v.x, v.y)) {
+      // on touch the box grows until it is as tall as the USB's 44 screen px (its own height is 18 virtual px)
+      const badgePad = touch ? Math.max(0, Math.ceil(USB_HIT_PX / 2 / scale) - 9) : 0;
+      if (scene.badge === 'floor' && inBadge(v.x, v.y, badgePad)) {
         openBadge();
         return;
       }
