@@ -173,6 +173,8 @@ export const NOZZLES: { x: number; color: 'c' | 'm' | 'y' | 'z' }[] = [
   { x: 132, color: 'y' },
   { x: 144, color: 'z' },
 ];
+/** The machine's ink caps' top row: from here down a tube's hose is behind its cap and the machine. */
+export const CAPS_TOP = 77;
 
 /** An ink particle on the far half of its flight, drawn behind the machine. */
 export interface InkDot {
@@ -1043,7 +1045,7 @@ export function drawMachine(p: Painter, s: MachineScene): void {
   rect(73, 90, 74, 143, 'd');
   rect(166, 90, 167, 143, 'g');
   // the ink caps on the back ledge; the shut lid covers their lower rows
-  for (const n of NOZZLES) panel(n.x - 3, 77, n.x + 3, 81, n.color);
+  for (const n of NOZZLES) panel(n.x - 3, CAPS_TOP, n.x + 3, 81, n.color);
   if (m.lid < 0.05) {
     // shut: a lighter slab on the top with a rim and the handle on its front edge
     panel(76, 80, 164, 90, 'T');
@@ -1417,6 +1419,21 @@ export function drawWallHole(p: Pix, since: number, near: number, lit: boolean, 
   }
 }
 
+/** The ink tubes up from behind the machine, their rows above `below`: a ribbed hose (row by row, so it can snake),
+ * its head, the ink in its mouth. They are attached to the machine, so they shake with it (PRNTR-PLANNING.md P3).
+ * The room draws them to 90, under the machine; the lit layer's mask to CAPS_TOP (PRNTR-GLOWS.md). */
+export function drawTubes(p: Pix, s: Pick<SceneState, 'tubes' | 'shake'>, below: number): void {
+  const { x: sx, y: sy } = s.shake;
+  for (const tb of s.tubes) {
+    for (let y = tb.top + 4; y < below; y++) {
+      const cx = tubeX(tb, y) + sx;
+      p.rect(cx - 2, y + sy, cx + 2, y + sy + 1, 'K');
+      p.rect(cx - 1, y + sy, cx + 1, y + sy + 1, (y - tb.top) % 2 === 0 ? 'G' : 'i');
+    }
+    p.blit(tubeX(tb, tb.top) - 3 + sx, tb.top + sy, SPR.TUBE_HEAD, 1, { remap: { c: tb.color } });
+  }
+}
+
 /**
  * The room, a port of room() in prntr/design/stage1/art/liminal.py, the authoritative
  * layout. Every number is a virtual pixel.
@@ -1579,18 +1596,9 @@ export function drawRoom(p: Pix, s: SceneState): void {
   }
   else if (s.broken.plant) p.blit(MONSTERA_AT.bare.x, MONSTERA_AT.bare.y, SPR.MONSTERA_BARE);
   else p.blit(MONSTERA_AT.whole.x, MONSTERA_AT.whole.y, SPR.MONSTERA);
-  // the ink tubes up from behind the machine: a ribbed hose (row by row, so it can snake), its
-  // head, the ink in its mouth; the machine covers the hose's foot, the ink in the air is drawn over
-  // them. They are attached to the machine, so they shake with it (PRNTR-PLANNING.md P3).
+  // the ink tubes up from behind the machine; the machine covers the hose's foot, the ink in the air is drawn over them
+  drawTubes(p, s, 90);
   const { x: sx, y: sy } = s.shake;
-  for (const tb of s.tubes) {
-    for (let y = tb.top + 4; y < 90; y++) {
-      const cx = tubeX(tb, y) + sx;
-      p.rect(cx - 2, y + sy, cx + 2, y + sy + 1, 'K');
-      p.rect(cx - 1, y + sy, cx + 1, y + sy + 1, (y - tb.top) % 2 === 0 ? 'G' : 'i');
-    }
-    p.blit(tubeX(tb, tb.top) - 3 + sx, tb.top + sy, SPR.TUBE_HEAD, 1, { remap: { c: tb.color } });
-  }
   // the stumps of the tubes shot to pieces: a ragged end of hose just over the edge
   for (const x0 of s.stubs) {
     const x = x0 + sx;

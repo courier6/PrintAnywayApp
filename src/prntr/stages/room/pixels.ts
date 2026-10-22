@@ -137,6 +137,20 @@ export class Pix {
     }
   }
 
+  /** This buffer cleared, then `src`'s pixels copied wherever `mask` is opaque (the lit layer: the room's own
+   * pixels where a glowing subject shows, whatever is drawn over it; PRNTR-GLOWS.md). */
+  copyMasked(src: Pix, mask: Pix): void {
+    const d = this.d, s = src.d, m = mask.d;
+    d.fill(0);
+    for (let i = 3; i < d.length; i += 4) {
+      if (!m[i]) continue;
+      d[i - 3] = s[i - 3];
+      d[i - 2] = s[i - 2];
+      d[i - 1] = s[i - 1];
+      d[i] = s[i];
+    }
+  }
+
   present(g: CanvasRenderingContext2D): void {
     g.putImageData(this.image, 0, 0);
   }
