@@ -787,7 +787,7 @@ export const room: Stage = {
       flashWhite: false,
       buttonBright: false,
       broken: { clock: false, poster: false, tank: false, plant: false, vase: false, kit: false, fig: false, figPot: false },
-      fig: { fall: 0, burning: false },
+      fig: { fall: 0, burning: false, burn: 0 },
       clock: { state: 'up', x: CLOCK_AT.x, y: CLOCK_AT.y, rot: 0 },
       clockSpin: null,
       exit: { state: 'up', x: EXIT_WALL.x, y: EXIT_WALL.y, tilt: 0, lit: true },

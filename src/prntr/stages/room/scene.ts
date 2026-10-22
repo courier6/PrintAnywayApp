@@ -58,11 +58,13 @@ export interface Broken {
   figPot: boolean;
 }
 
-/** The fig after its planter is shot: how far it has fallen (0 standing … 1 leaning on the machine), and
- * whether it has caught from the fire and burns. */
+/** The fig after its planter is shot: how far it has fallen (0 standing … 1 leaning on the machine), whether
+ * it has caught from the fire and burns, and how far along the burning is: 0 just caught, 1 lit from the crown
+ * to the foot (FIG_LIGHT_MS later), on past 1 as it burns down (PRNTR-FIRE.md). */
 export interface Fig {
   fall: number;
   burning: boolean;
+  burn: number;
 }
 
 /**
@@ -375,33 +377,264 @@ export function drawFlame(p: Pix, cx: number, w: number, h: number, floor: numbe
 /** A later flame's own growth: 0 until the fire reaches `from`, 1 when it is full. */
 const later = (u: number, from: number) => Math.max(0, Math.min(1, (u - from) / (1 - from)));
 
+// ---- The fire (PRNTR-FIRE.md): 90s sprite flames on the room's grid, stepped at 10 frames a second ----
+
+/** One flame: a tongue of half-width w and height h standing at (x, floor), in room px. */
+export interface Emitter {
+  x: number;
+  floor: number;
+  w: number;
+  h: number;
+  seed: number;
+}
+
+/** The fire's frame rate: each frame is held this long, the next is a step. The glows flicker in step. */
+export const FIRE_TICK_MS = 100;
+
+const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
+
+/** Value noise: a 128×128 lattice of fixed randoms (an LCG from 12345), smoothstep between them, wrapping. */
+const LAT = 128;
+const lat = new Float32Array(LAT * LAT);
+{
+  let s = 12345;
+  for (let i = 0; i < lat.length; i++) {
+    s = (Math.imul(s, 1664525) + 1013904223) >>> 0;
+    lat[i] = s / 4294967296;
+  }
+}
+function vnoise(x: number, y: number): number {
+  const xi = Math.floor(x), yi = Math.floor(y), fx = x - xi, fy = y - yi;
+  const sx = fx * fx * (3 - 2 * fx), sy = fy * fy * (3 - 2 * fy);
+  const i0 = (((yi % LAT) + LAT) % LAT) * LAT, i1 = ((((yi + 1) % LAT) + LAT) % LAT) * LAT;
+  const x0 = ((xi % LAT) + LAT) % LAT, x1 = (((xi + 1) % LAT) + LAT) % LAT;
+  const a = lat[i0 + x0] + (lat[i0 + x1] - lat[i0 + x0]) * sx;
+  const b = lat[i1 + x0] + (lat[i1 + x1] - lat[i1 + x0]) * sx;
+  return a + (b - a) * sy;
+}
+/** Two octaves of it: the body of the tongues and the finer cuts. */
+const noise2 = (x: number, y: number) => 0.65 * vnoise(x, y) + 0.35 * vnoise(x * 2.1 + 7.3, y * 2.1 + 3.1);
+
+/** The scratch field one layer's flames are summed into (max), room-sized; `cells` are its banded result. */
+const field = new Float32Array(W * H);
+interface FlameCache {
+  tick: number;
+  key: string;
+  cells: Uint8Array;
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
+}
+const flameCaches = new Map<string, FlameCache>();
+/** Cell codes 1..4 → the palette: the rim, the outside, the body, the core. */
+const FLAME_KEYS: readonly PalKey[] = ['R', 'o', 'y', 's'];
+
 /**
- * The fire in three layers, so it sits among the things it burns rather than in front of
- * them: `back`, two smaller flames behind the cooler on the floor further in (they
- * come as the fire grows and round it out); `mid`, the main flame, in front of the cooler
- * and behind the machine. The third, `drawFireFront`, goes on the stage's front canvas.
+ * One emitter into the field at the tick's time tq: a teardrop envelope (a dome at the foot, narrowing
+ * faster toward the tip), swaying and pulsing with time, with the noise scrolling up through it so it cuts
+ * fat lobes that pinch off above the nominal tip. Cells keep the highest value of any flame in the layer.
  */
-function drawFire(p: Pix, f: Fire, layer: 'back' | 'mid'): void {
-  const r = fireRect(f.u);
-  const h = r.y1 - r.y0;
-  if (layer === 'mid') drawFlame(p, (r.x0 + r.x1) / 2, (r.x1 - r.x0) / 2, h, r.y1, 0, f.t);
-  else {
-    drawFlame(p, 50, 7 * later(f.u, 0.35), 0.9 * h * later(f.u, 0.35), 142, 100, f.t);
-    drawFlame(p, 70, 6 * later(f.u, 0.55), 0.95 * h * later(f.u, 0.55), 142, 200, f.t);
+function emitInto(e: Emitter, tq: number): void {
+  const w = e.w, h = e.h;
+  if (w < 0.5 || h < 1) return;
+  const x0 = Math.max(0, Math.floor(e.x - w - 2)), x1 = Math.min(W - 1, Math.ceil(e.x + w + 2));
+  const y1 = Math.min(H - 1, Math.ceil(e.floor) - 1), y0 = Math.max(0, Math.floor(e.floor - h * 1.35));
+  const ts = tq * 0.016, seed = e.seed;
+  const fq = Math.min(0.42, Math.max(0.09, 1.3 / w)) * 0.7; // the noise's grain follows the flame's size; coarse, for fat lobes
+  const pulse = 1 + 0.1 * Math.sin(tq / 170 + seed);
+  for (let y = y0; y <= y1; y++) {
+    const sy = y + 0.5, q = (e.floor - sy) / (h * pulse); // 0 at the floor … 1 at the nominal tip, beyond for the licks
+    const sway = Math.sin(tq / 260 + seed + sy * 0.18) * 0.9 * q * (1 + 0.6 * q);
+    const qq = Math.min(1, q);
+    const half = w * (1 - 0.3 * qq - 0.45 * qq * qq) + 0.4;
+    for (let x = x0; x <= x1; x++) {
+      const sx = x + 0.5, k = (sx - e.x - sway) / half;
+      if (k <= -1 || k >= 1) continue;
+      const across = Math.sqrt(1 - k * k);
+      const n0 = noise2(sx * fq + seed * 0.11, sy * fq * 0.75 - ts + seed * 0.07);
+      const n = clamp01((n0 - 0.5) * 3 + 0.5); // the noise stretched, so it cuts the lobes apart
+      let v = across * (1.05 - 0.7 * q) * (0.3 + 1.05 * n) - 0.08 - 0.22 * q;
+      if (q > 1) v -= (q - 1) * 1.5; // what is above the nominal tip dies quickly
+      const i = y * W + x;
+      if (v > field[i]) field[i] = v;
+    }
   }
 }
 
 /**
- * The fire's front layer: a low lick at the machine's foot and the cooler's base, and the
- * flames on the machine once it spreads. Drawn on the front canvas, so
- * they are in front of the slot's red light like the pages, under the things the machine throws.
+ * Draws a layer of flames: the emitters summed into one field at the current tick, banded to the palette
+ * (a one-px dark rim where the fire meets air to the left, right and above; orange inside it, a yellow body,
+ * a cream core; the yellow/orange edge shifting every other tick like a cycled palette) and put on `p`.
+ * The banded cells are cached per layer and rebuilt only when the tick changes or the emitters' rounded
+ * sizes and places do, so the fire steps at 10 fps whatever the frame rate, and is still under reduced
+ * motion (t = 0) but still grows.
+ */
+export function drawFlames(p: Pix, layer: string, emitters: Emitter[], t: number): void {
+  const tick = Math.floor(t / FIRE_TICK_MS);
+  let key = '';
+  for (const e of emitters) key += `${Math.round(e.x)},${Math.round(e.floor)},${Math.round(e.w)},${Math.round(e.h)};`;
+  let c = flameCaches.get(layer);
+  if (!c) {
+    c = { tick: -1, key: '', cells: new Uint8Array(W * H), x0: 0, y0: 0, x1: -1, y1: -1 };
+    flameCaches.set(layer, c);
+  }
+  if (c.tick !== tick || c.key !== key) {
+    c.tick = tick;
+    c.key = key;
+    field.fill(0);
+    c.cells.fill(0);
+    const tq = tick * FIRE_TICK_MS;
+    for (const e of emitters) emitInto(e, tq);
+    const shift = tick & 1 ? 0.05 : -0.05;
+    let x0 = W, y0 = H, x1 = -1, y1 = -1;
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        const i = y * W + x, v = field[i];
+        if (v < 0.2) continue;
+        const rim = x === 0 || x === W - 1 || y === 0 || field[i - 1] < 0.2 || field[i + 1] < 0.2 || field[i - W] < 0.2;
+        const u = v + shift;
+        c.cells[i] = rim ? 1 : u > 0.92 ? 4 : u > 0.5 ? 3 : 2;
+        if (x < x0) x0 = x;
+        if (x > x1) x1 = x;
+        if (y < y0) y0 = y;
+        if (y > y1) y1 = y;
+      }
+    }
+    c.x0 = x0;
+    c.y0 = y0;
+    c.x1 = x1;
+    c.y1 = y1;
+  }
+  for (let y = c.y0; y <= c.y1; y++) {
+    for (let x = c.x0; x <= c.x1; x++) {
+      const k = c.cells[y * W + x];
+      if (k) p.set(x, y, FLAME_KEYS[k - 1]);
+    }
+  }
+}
+
+/**
+ * The fire's flames by layer, from its state: `back`, two flames behind the cooler on the floor further in
+ * (they come as the fire grows); `mid`, the main fire as three licks inside fireRect (the footprint the glow
+ * and the snuffing jet use), in front of the cooler and behind the machine; `front`, a low lick at the
+ * machine's foot; `machine`, the flames on the machine once the fire spreads (v > 0): up its left side,
+ * along its foot and, past 45 %, over its top edge. `front` and `machine` go on the front canvas.
+ */
+export function fireEmitters(f: Fire): { back: Emitter[]; mid: Emitter[]; front: Emitter[]; machine: Emitter[] } {
+  const r = fireRect(f.u), hh = r.y1 - r.y0, w = (r.x1 - r.x0) / 2, cx = (r.x0 + r.x1) / 2;
+  const back = [
+    { x: 50, floor: 142, w: 7 * later(f.u, 0.35), h: 0.9 * hh * later(f.u, 0.35), seed: 100 },
+    { x: 70, floor: 142, w: 6 * later(f.u, 0.55), h: 0.95 * hh * later(f.u, 0.55), seed: 200 },
+  ];
+  const mid = [
+    { x: cx, floor: r.y1, w: w * 0.8, h: hh, seed: 0 },
+    { x: cx - w * 0.55, floor: r.y1, w: w * 0.5, h: hh * 0.7, seed: 11 },
+    { x: cx + w * 0.5, floor: r.y1, w: w * 0.5, h: hh * 0.78, seed: 23 },
+  ];
+  const front = [{ x: 76, floor: 146, w: 5 * later(f.u, 0.2), h: 0.3 * hh * later(f.u, 0.2), seed: 300 }];
+  const machine: Emitter[] = [];
+  if (f.v > 0) {
+    const v = Math.min(1, f.v);
+    machine.push({ x: 73, floor: 146, w: 4 + 3 * v, h: 20 + 46 * v, seed: 400 });
+    const reach = 72 + 96 * v;
+    for (let x = 84; x < reach; x += 13) {
+      const age = Math.min(1, (reach - x) / 40), rr = hash(x * 3);
+      machine.push({ x: x + 4 * Math.sin(x), floor: 146, w: (6 + 4 * age) * (0.8 + 0.4 * rr), h: (12 + 40 * age) * (0.6 + 0.8 * hash(x * 5)), seed: 500 + x });
+    }
+    if (v > 0.45) {
+      const top = (v - 0.45) / 0.55, reachTop = 72 + 96 * top;
+      for (let x = 74; x < reachTop; x += 12) {
+        machine.push({ x: x + 3 * hash(x), floor: 80, w: 4 + 2 * hash(x + 1), h: (7 + 11 * Math.min(1, (reachTop - x) / 30)) * (0.6 + 0.8 * hash(x * 7)), seed: 700 + x });
+      }
+    }
+  }
+  return { back, mid, front, machine };
+}
+
+/** The fig's crown once the tree leans on the machine (FIG_CROWN turned by FIG_LEAN about the pivot). */
+const FIG_TURNED_CROWN = (() => {
+  const a = FIG_LEAN, dx = FIG_CROWN.x - FIG_AT.pivot.x, dy = FIG_CROWN.y - FIG_AT.pivot.y;
+  return { x: FIG_AT.pivot.x + dx * Math.cos(a) + dy * Math.sin(a), y: FIG_AT.pivot.y - dx * Math.sin(a) + dy * Math.cos(a) };
+})();
+/** A cell of the leaning fig a flame stands on: its foot, how far it is from the crown (0) toward the foot
+ * of the trunk (1), whether it is mostly leaves, its seed. */
+interface FigCell {
+  x: number;
+  y: number;
+  d: number;
+  leafy: boolean;
+  seed: number;
+}
+/**
+ * The leaning tree's opaque pixels (the same turn as blitLeaning at FIG_LEAN) bucketed into 7×7 cells; a cell
+ * with six or more pixels is a flame standing on its lowest pixel at its mean x. Computed once per sprite.
+ */
+function figCells(s: Sprite): FigCell[] {
+  const a = FIG_LEAN, c = Math.cos(a), sn = Math.sin(a), x0 = FIG_AT.tree.x, y0 = FIG_AT.tree.y, pv = FIG_AT.pivot;
+  const corners = [[x0, y0], [x0 + s.w, y0], [x0, y0 + s.h], [x0 + s.w, y0 + s.h]].map(([x, y]) => { const dx = x - pv.x, dy = y - pv.y; return [pv.x + dx * c + dy * sn, pv.y - dx * sn + dy * c]; });
+  const bx0 = Math.floor(Math.min(...corners.map((q) => q[0]))), bx1 = Math.ceil(Math.max(...corners.map((q) => q[0])));
+  const by0 = Math.floor(Math.min(...corners.map((q) => q[1]))), by1 = Math.ceil(Math.max(...corners.map((q) => q[1])));
+  const cells = new Map<string, { n: number; sx: number; floor: number; wood: number }>();
+  for (let y = by0; y <= by1; y++) {
+    for (let x = bx0; x <= bx1; x++) {
+      const dx = x + 0.5 - pv.x, dy = y + 0.5 - pv.y;
+      const sx = Math.floor(pv.x + dx * c - dy * sn) - x0, sy = Math.floor(pv.y + dx * sn + dy * c) - y0;
+      if (sx < 0 || sy < 0 || sx >= s.w || sy >= s.h) continue;
+      const k = s.rows[sy][sx];
+      if (k === '.') continue;
+      const key = `${Math.floor(x / 7)},${Math.floor(y / 7)}`;
+      const cell = cells.get(key) ?? { n: 0, sx: 0, floor: -1, wood: 0 };
+      cell.n++;
+      cell.sx += x + 0.5;
+      cell.floor = Math.max(cell.floor, y + 1);
+      if (k === 'E' || k === 'D') cell.wood++;
+      cells.set(key, cell);
+    }
+  }
+  const out: FigCell[] = [];
+  const reach = Math.hypot(FIG_AT.pivot.x - FIG_TURNED_CROWN.x, FIG_AT.pivot.y - FIG_TURNED_CROWN.y);
+  for (const cell of cells.values()) {
+    if (cell.n < 6) continue;
+    const x = cell.sx / cell.n, y = cell.floor;
+    const d = Math.min(1, Math.hypot(x - FIG_TURNED_CROWN.x, y - FIG_TURNED_CROWN.y) / reach);
+    out.push({ x, y, d, leafy: cell.wood < cell.n / 2, seed: out.length * 37 + 900 });
+  }
+  return out;
+}
+const FIG_CELLS = { tree: figCells(SPR.FIG), bare: figCells(SPR.FIG_BARE) };
+
+/**
+ * The burning fig's flames at `burn` (Fig.burn): every other cell of the leaning tree (by its seed) gets one,
+ * lit from the crown down the trunk as burn goes 0 → 1, bigger on leafy cells, and dying back by up to 45 %
+ * as burn goes 1 → 2. `bare` picks the tree with its leaves shot off.
+ */
+export function figEmitters(burn: number, bare: boolean): Emitter[] {
+  const out: Emitter[] = [];
+  const dieback = 1 - 0.45 * clamp01(burn - 1);
+  for (const c of bare ? FIG_CELLS.bare : FIG_CELLS.tree) {
+    if (hash(c.seed + 3) > 0.5) continue;
+    const g = clamp01((burn - c.d * 0.75) / 0.25);
+    if (g <= 0) continue;
+    const rw = (0.75 + 0.5 * hash(c.seed)) * 1.5, rh = (0.7 + 0.7 * hash(c.seed + 1)) * 1.35;
+    out.push({ x: c.x, floor: c.y, w: (c.leafy ? 3.6 : 2.8) * rw * g * dieback, h: (c.leafy ? 13 : 9) * rh * g * dieback, seed: c.seed });
+  }
+  return out;
+}
+
+/** The fire's back and mid layers in the room (drawRoom); the front canvas gets drawFireFront. */
+function drawFire(p: Pix, f: Fire, layer: 'back' | 'mid'): void {
+  drawFlames(p, layer, fireEmitters(f)[layer], f.t);
+}
+
+/**
+ * The fire's front layer: the low lick at the machine's foot and the flames on the machine once it
+ * spreads. Drawn on the front canvas, so they are in front of the slot's red light like the pages, under
+ * the things the machine throws.
  */
 export function drawFireFront(p: Pix, f: Fire): void {
-  const r = fireRect(f.u);
-  const h = r.y1 - r.y0;
-  drawFlame(p, 76, 5 * later(f.u, 0.2), 0.3 * h * later(f.u, 0.2), 146, 300, f.t);
-  // onto the machine from its left side, until the whole of it is in flames (72–168 × 80–146)
-  if (f.v > 0) drawFlame(p, 80 + 40 * f.v, 8 + 42 * f.v, 20 + 48 * f.v, 146, 400, f.t);
+  const e = fireEmitters(f);
+  drawFlames(p, 'front', e.front.concat(e.machine), f.t);
 }
 
 /** The storm this frame: the rain's time (0 = still), the near flash 0..1, the far flicker 0..1, the bolt. */
@@ -1065,7 +1298,7 @@ export function drawRoom(p: Pix, s: SceneState): void {
     const x = Math.round(ck.x);
     const y = Math.round(ck.y);
     p.blit(x, y, spr);
-    if (ck.state === 'burning') drawFlame(p, x + spr.w / 2, spr.w / 2 - 1, 14, y + spr.h, 500, s.fire?.t ?? 0);
+    if (ck.state === 'burning') drawFlames(p, 'clock', [{ x: x + spr.w / 2, floor: y + spr.h, w: spr.w / 2 - 1, h: 14, seed: 500 }], s.fire?.t ?? s.storm.t);
   }
   if (s.fire) drawFire(p, s.fire, 'mid');
   p.rect(190, 132, 206, 135, 'X');
@@ -1078,12 +1311,9 @@ export function drawRoom(p: Pix, s: SceneState): void {
   else blitLeaning(p, figAt.x, figAt.y, figTree, FIG_AT.pivot, FIG_LEAN * s.fig.fall);
   if (s.broken.figPot) p.blit(FIG_AT.shards.x, FIG_AT.shards.y, SPR.FIG_SHARDS);
   else p.blit(FIG_AT.pot.x, FIG_AT.pot.y, SPR.FIG_POT);
-  if (s.fig.burning) {
-    const a = FIG_LEAN * s.fig.fall, dx = FIG_CROWN.x - FIG_AT.pivot.x, dy = FIG_CROWN.y - FIG_AT.pivot.y;
-    const cx = FIG_AT.pivot.x + dx * Math.cos(a) + dy * Math.sin(a), cy = FIG_AT.pivot.y - dx * Math.sin(a) + dy * Math.cos(a);
-    drawFlame(p, cx, 14, 20, cy + 10, 300, s.fire?.t ?? 0);
-    drawFlame(p, (cx + FIG_AT.pivot.x) / 2, 6, 12, (cy + FIG_AT.pivot.y) / 2 + 6, 310, s.fire?.t ?? 0);
-  }
+  // its flames stand on the leaning tree's cells, lit from the crown down (PRNTR-FIRE.md); it burns on after the
+  // fire is out, so its time is the storm's when there is no fire
+  if (s.fig.burning) drawFlames(p, 'fig', figEmitters(s.fig.burn, s.broken.fig), s.fire?.t ?? s.storm.t);
   // the monstera in its pot; its leaves shot off, the bare stalks; the pot shot, the plant lies on the carpet
   if (s.broken.vase) p.blit(MONSTERA_AT.down.x, MONSTERA_AT.down.y, SPR.MONSTERA_DOWN);
   else if (s.broken.plant) p.blit(MONSTERA_AT.bare.x, MONSTERA_AT.bare.y, SPR.MONSTERA_BARE);
