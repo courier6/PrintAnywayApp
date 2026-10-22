@@ -3,8 +3,9 @@ import type { Handoff, RunStats, Stage } from '../../types';
 import { H, Pix, W, frameScale, rotateSprite } from './pixels';
 import { DocContent, docFine } from './docpage';
 import { ashFlecks, burnFine, flakes, frontFire } from './burnpage';
-import { ART_BREAK_SHOTS, BADGE_AT, CLOCK_AT, FIRE_TICK_MS, GLASS, KIT_AT, KNOB, MACHINE_AT, MACHINE_PIECES, NOZZLES, SPR, drawFireFront, drawFlames, drawMarks, drawRoom, drawWindowWreck, figEmitters, figLeaf, fireEmitters, fireRect, inDoorway, knobX, lampX, markBox, monsteraEmitters, tubeX, type Broken, type Emitter, type ExitSign, type Hole, type Mark, type Rect, type SceneState, type Tube } from './scene';
+import { ART_BREAK_SHOTS, BADGE_AT, CLOCK_AT, FIRE_TICK_MS, GLASS, KIT_AT, KNOB, MACHINE_AT, MACHINE_PIECES, NOZZLES, SPR, drawFireFront, drawFlames, drawMarks, drawRoom, drawWindowWreck, figEmitters, figLeaf, fireEmitters, fireRect, inCavity, inDoorway, knobX, lampX, markBox, monsteraEmitters, tubeX, type Broken, type Emitter, type ExitSign, type Hole, type Mark, type Rect, type SceneState, type Tube } from './scene';
 import { ART_AT, ART_SUB, renderVictory } from './art';
+import { DRUM_BOX, SAFE, SAFE_CODE, keyAt, paintKeypad } from './safe';
 import { PAL, type PalKey } from './palette';
 import { createRoomSounds, type FireSound, type Hum } from './sounds';
 import { RIPPLE_MS, RIPPLE_SPEED, RippleView, rippleAt } from './ripple';
@@ -73,6 +74,17 @@ const BLOOM_BASE = 1;
 const BLOOM_PER_SHOT = 3;
 const BLOOM_MAX = 12;
 const BLOOM_COOL = 6;
+/** The safe in the wall (PRNTR-SAFE.md): a key stays pressed PRESS_MS after a shot; a wrong code shows ERR for ERR_MS and
+ * is cleared; the right one unlocks the door, which starts to swing OPEN_DELAY_MS later and is open DOOR_MS after that; the
+ * drum magazine taken flashes the inside white for TAKE_FLASH_MS. The upgrade: a round every MG_MS while the button is held,
+ * MG_SHOTS a magazine (six more pips of the same look), each round opening the cross by BLOOM_PER_SHOT_MG instead of
+ * BLOOM_PER_SHOT. */
+const PRESS_MS = 150;
+const ERR_MS = 600;
+const OPEN_DELAY_MS = 300;
+const DOOR_MS = 400;
+const TAKE_FLASH_MS = 150;
+const MG_SHOTS = 12;
 /** The flash dazes the player: for DAZE_MS the cross wanders about the mouse (or the tap) by up to DAZE_PX,
  * lurching on two beats that never line up, easing back as the eyes clear; the shot goes where the cross is.
  * Under reduced motion, and on touch (no cross to show the wander before a tap), the cross stays still and the
@@ -960,6 +972,19 @@ export const room: Stage = {
     /** Shots into the print so far, and when the fifth tore it open (PRNTR-FIRE.md §12). */
     let artShots = 0;
     let artBrokeAt: number | null = null;
+    // ---- the safe (PRNTR-SAFE.md) ----
+    /** The digits shot in so far (up to four), the key pressed and since when, the verdict on a full code and since when, when
+     * the code was right (the door swings from OPEN_DELAY_MS after), when the drum was taken; the keypad as last painted. */
+    let safeEntry = '';
+    let safePress: { key: string; at: number } | null = null;
+    let safeVerdict: { ok: boolean; at: number } | null = null;
+    let safeOpenAt: number | null = null;
+    let safeTakenAt: number | null = null;
+    let keypadDrawn = '';
+    /** The machine gun: on once the drum is taken; the held button's point (null: not held) and the next round's moment. */
+    let mg = false;
+    /** The magazine: the pistol's SHOTS, the drum's MG_SHOTS. */
+    const magSize = () => (mg ? MG_SHOTS : SHOTS);
     /** The flicker: when the next panel comes on, and when each lit one goes out (null: out). */
     let flickerNext = 0;
     const flickerOff: (number | null)[] = [null, null];
@@ -1569,6 +1594,57 @@ export const room: Stage = {
       drawShots();
       reloadSecondAt = now + RELOAD_STEP_MS;
     };
+    /** A shot at (x, y) into the safe (PRNTR-SAFE.md): true when the safe took it. A key: pressed, its digit entered, the
+     * fourth judged. The open safe's drum: taken, the gun upgraded. The steel anywhere else in the cavity: a clang, a miss.
+     * A shot into the cavity outside the safe is a wall hole as today (drawHoles draws it over the cavity). */
+    const safeHit = (x: number, y: number, now: number): boolean => {
+      const px = Math.floor(x), py = Math.floor(y);
+      if (safeOpenAt !== null) {
+        const open = now - safeOpenAt >= OPEN_DELAY_MS + DOOR_MS || reduced;
+        if (safeTakenAt === null && open && px >= DRUM_BOX.x0 && px < DRUM_BOX.x1 && py >= DRUM_BOX.y0 && py < DRUM_BOX.y1) {
+          safeTakenAt = now;
+          mg = true;
+          shots = MG_SHOTS;
+          autoReloadAt = null;
+          reloadSecondAt = null;
+          reloadOwed = 0;
+          while (shotsBtn.children.length < MG_SHOTS) shotsBtn.append(el('span', ''));
+          drawShots();
+          sounds.heal();
+          addScore(BREAK_POINTS, now);
+          ctx.announce('A drum magazine. The gun fires while the button is held: twelve rounds.');
+          return true;
+        }
+      } else {
+        const key = keyAt(px, py);
+        if (key !== null) {
+          if (safeVerdict !== null) return true; // ERR still showing: the press is swallowed
+          safePress = { key, at: now };
+          sounds.keyBeep();
+          if (key >= '0' && key <= '9') safeEntry += key;
+          if (safeEntry.length === 4) {
+            const ok = safeEntry === SAFE_CODE;
+            safeVerdict = { ok, at: now };
+            if (ok) {
+              safeOpenAt = now;
+              sounds.safeThunk();
+              addScore(BREAK_POINTS, now);
+              ctx.announce('The safe opens. A drum magazine inside.');
+            } else {
+              sounds.keyErr();
+              ctx.announce('Wrong code.');
+            }
+          }
+          return true;
+        }
+      }
+      if (px >= SAFE.x0 && px < SAFE.x1 && py >= SAFE.y0 && py < SAFE.y1 && inCavity(px, py)) {
+        sounds.clang();
+        misses++;
+        return true;
+      }
+      return false;
+    };
     const fire = (x: number, y: number, now: number) => {
       if (shots === 0) {
         sounds.dryClick();
@@ -1765,6 +1841,8 @@ export const room: Stage = {
         misses++;
         return;
       }
+      // The safe in the wall, once the print is torn (PRNTR-SAFE.md): a key, the drum, or the steel.
+      if (scene.broken.art && safeHit(x, y, now)) return;
       // The print: a shot into it is a dark cross on it and a miss (below), until the fifth tears it open: the wall
       // behind it shot through, the roof leak dripping in it (PRNTR-FIRE.md §12). Torn, its rect is wall.
       if (!scene.broken.art && x >= ART_AT.x && x < ART_AT.x + ART_AT.w && y >= ART_AT.y && y < ART_AT.y + ART_AT.h) {
@@ -1774,7 +1852,7 @@ export const room: Stage = {
           artBrokeAt = now;
           sounds.tear();
           addScore(BREAK_POINTS, now);
-          ctx.announce('The print tears open. The wall behind it is dripping.');
+          ctx.announce('The print tears open. The wall behind it is dripping, and a safe with a keypad is set in it.');
           return;
         }
       }
@@ -2522,6 +2600,10 @@ export const room: Stage = {
         fig: () => ({ ...scene.fig, leaves: scene.broken.fig, pot: scene.broken.figPot }),
         monstera: () => ({ ...scene.monstera, down: scene.broken.vase }),
         art: () => ({ shots: artShots, torn: scene.broken.art, since: scene.tornSince }),
+        /** The safe: the digits in, the key pressed, the verdict, the door, whether the drum is still inside; the upgrade and the magazine. */
+        safe: () => ({ entry: safeEntry, press: safePress?.key ?? null, verdict: safeVerdict === null ? 'none' : safeVerdict.ok ? 'ok' : 'err', open: scene.safe.open, drum: safeTakenAt === null, mg, shots, mag: magSize() }),
+        /** Shots that hit nothing (the steel counts as one). */
+        misses: () => misses,
         wreck: () => scene.printer === 'wreck',
         pieces: () => scene.pieces.map((q) => [Math.round(q.x), Math.round(q.y)]),
         windowOpen: () => scene.windowOpen,
@@ -3051,6 +3133,29 @@ export const room: Stage = {
       }
       // The leak's clock, from the break; one still frame under reduced motion (the stain full, a bead at the top).
       scene.tornSince = artBrokeAt === null ? 0 : reduced ? 20_000 : now - artBrokeAt;
+      // The safe's clocks (PRNTR-SAFE.md): the key pressed, the wrong code's ERR, the door, the take's flash, the drum's
+      // glint; the keypad repainted on the art canvas when what it shows changes.
+      if (safePress !== null && now - safePress.at >= PRESS_MS) safePress = null;
+      if (safeVerdict !== null && !safeVerdict.ok && now - safeVerdict.at >= ERR_MS) {
+        safeVerdict = null;
+        safeEntry = '';
+      }
+      const doorOpen = safeOpenAt === null ? 0 : reduced ? 1 : Math.min(1, Math.max(0, (now - safeOpenAt - OPEN_DELAY_MS) / DOOR_MS));
+      scene.safe = {
+        open: doorOpen,
+        drum: safeTakenAt === null,
+        flash: safeTakenAt !== null && now - safeTakenAt < TAKE_FLASH_MS,
+        glint: reduced || now % 900 < 200,
+      };
+      if (scene.broken.art && doorOpen === 0) {
+        const verdict = safeVerdict === null ? 'none' : safeVerdict.ok ? 'ok' : 'err';
+        const blink = now % 300 < 150;
+        const shown = `${safeEntry}|${safePress?.key ?? ''}|${verdict}|${verdict === 'err' ? blink : ''}`;
+        if (shown !== keypadDrawn) {
+          paintKeypad(ag, { entry: safeEntry, press: safePress?.key ?? null, verdict, blink });
+          keypadDrawn = shown;
+        }
+      }
       poseFigLight(now);
       // The clock's hands spin while the machine moves: forward in the pounce, shaking as it lands, trembling mad.
       const moving = landing !== null || (scene.machine.back > 0 && scene.machine.back < 1) || scene.shake.x !== 0 || scene.shake.y !== 0;
