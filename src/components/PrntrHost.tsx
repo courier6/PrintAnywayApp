@@ -20,6 +20,12 @@ export function prefetchPrntr(): void {
     .catch(() => undefined);
 }
 
+/**
+ * The vortex painter (PRNTR-VORTEX.md), from the Prntr chunk: by the time there is a certificate
+ * to hold on, the chunk is loaded, so this resolves at once.
+ */
+export const loadVortex = () => loadPrntr().then((m) => m.createVortex);
+
 export interface PrntrHostProps {
   source: HTMLCanvasElement;
   recolored: HTMLCanvasElement;

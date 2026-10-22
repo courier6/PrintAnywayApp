@@ -442,7 +442,6 @@ interface Hotspot {
 const HOTSPOTS: Hotspot[] = [
   { id: 'page', x0: 96, y0: 108, x1: 144, y1: 114, captions: ['A PAGE. BLANK.', 'A PAGE. BLANK.'] },
   { id: 'printer', x0: 84, y0: 86, x1: 156, y1: 138, captions: ["A PRINTER. IT'S ON.", "IT'S WARM."] },
-  // Too frightening to go through (the handoff had LOCKED. / STILL LOCKED.).
   { id: 'door', x0: 6, y0: 27, x1: 48, y1: 112, captions: ['THE EXIT IS LOCKED.', 'STILL LOCKED. IT SHAKES WITH THE WIND.'] },
   { id: 'poster', ...BOARD_HIT, captions: ['SIMPLE PRODUCTS. WE PRINT.', 'SIMPLE PRODUCTS. WE PRINT.'] },
   { id: 'clock', ...CLOCK_HIT, captions: ['1:37.', '1:37.'] },

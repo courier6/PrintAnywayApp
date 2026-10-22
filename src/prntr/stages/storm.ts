@@ -269,12 +269,12 @@ const THUNDER_MAX_S = 1;
 /** A cloud's shades: its lit top edge, its body, the shade in its saddles and above its
  * underside, its underside. */
 type Shades = readonly [string, string, string, string];
-const STORM: Shades = ['#575770', '#3C3C50', '#343446', '#2C2C3C'];
+export const STORM: Shades = ['#575770', '#3C3C50', '#343446', '#2C2C3C'];
 /** A storm cloud lit all over by a strike. */
-const CLOUD_LIT = '#8C8CB4';
+export const CLOUD_LIT = '#8C8CB4';
 const CALM: Shades = ['#F4F4F8', '#DCDCE4', '#C8C8D4', '#B4B4C0'];
 /** The door's light (`.prntr-room-light`): its gradient's stops, and its glow. */
-const RED: Shades = ['#8A1410', '#5A0A0A', '#420707', '#2A0404'];
+export const RED: Shades = ['#8A1410', '#5A0A0A', '#420707', '#2A0404'];
 const RED_GLOW = 'rgba(138, 20, 16, 0.6)';
 const WATER = '#7FC8FF';
 const WATER_LIGHT = '#BFE7FF';

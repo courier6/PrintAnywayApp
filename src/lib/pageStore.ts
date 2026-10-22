@@ -9,7 +9,7 @@ export class DocumentReplacedError extends Error {
   }
 }
 
-interface PageEntry {
+export interface PageEntry {
   source?: HTMLCanvasElement;
   lum?: Uint8Array;
   width: number;
@@ -18,6 +18,9 @@ interface PageEntry {
   recolored?: HTMLCanvasElement;
   recoloredInk?: string;
 }
+
+/** A document's rendered pages, taken out of the store to be put back later (the vortex, PRNTR-VORTEX.md). */
+export type PageSnapshot = readonly Readonly<PageEntry>[];
 
 /**
  * In-memory document store: source renders, cached luminance maps, and
@@ -44,6 +47,21 @@ export class PageStore {
       // Nobody waiting is the usual case; only a waiter should see the rejection.
       ready.catch(() => undefined);
       return ready;
+    });
+  }
+
+  /** The pages rendered so far (a prefix: pages render in order), copied out so restore() can put them back. */
+  snapshot(): PageSnapshot {
+    const n = this.pages.findIndex((p) => !p.source);
+    return this.pages.slice(0, n < 0 ? this.pages.length : n).map((p) => ({ ...p }));
+  }
+
+  /** The reverse of snapshot(): a reset to the snapshot's pages, each one ready at once. */
+  restore(snap: PageSnapshot): void {
+    this.reset(snap.length);
+    snap.forEach((p, i) => {
+      this.pages[i] = { ...p };
+      this.readyResolvers[i]?.();
     });
   }
 

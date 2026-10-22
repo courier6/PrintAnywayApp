@@ -12,7 +12,7 @@ import { t, useLocale } from './i18n';
 import { GOLD_INK, INKS } from './lib/inks';
 import { fileKind, loadDocument, prefetchPdfjs, type SourceDocument } from './lib/loadDocument';
 import { classifyError, logAppError, type ErrorCode } from './lib/errors';
-import { DocumentReplacedError, PageStore } from './lib/pageStore';
+import { DocumentReplacedError, PageStore, type PageSnapshot } from './lib/pageStore';
 import { exportFormat, exportRecolored, type ExportFormat, type ExportPage } from './lib/exportFile';
 
 type AppState = 'empty' | 'processing' | 'preview' | 'error' | 'prntr';
@@ -26,6 +26,15 @@ const KIND_BY_CODE: Record<ErrorCode, ErrorKind> = {
   'PA-105': 'image',
   'PA-106': 'memory',
 };
+
+/** The document the certificate replaced, as the vortex brings it back (PRNTR-VORTEX.md). */
+interface OriginalDocument {
+  pages: PageSnapshot;
+  file: File | null;
+  fileName: string;
+  format: ExportFormat;
+  page: number;
+}
 
 /** Print waits this long at most for the print pages to decode, then prints what has. */
 const PRINT_DECODE_MS = 5000;
@@ -71,6 +80,9 @@ export default function App() {
   // Set while the app's UI falls back into place over Prntr's last frame: the sky
   // drop after the room is cleared, the Tetris drop after a game over.
   const [prntrDrop, setPrntrDrop] = useState<'sky' | 'tetris' | null>(null);
+  // The document the certificate replaced, kept so the vortex can bring it back (PRNTR-VORTEX.md):
+  // its rendered pages, name, format and the page that was open. Dropped by the next document.
+  const [vortexOriginal, setVortexOriginal] = useState<OriginalDocument | null>(null);
 
   const storeRef = useRef(new PageStore());
   const store = storeRef.current;
@@ -225,6 +237,7 @@ export default function App() {
     setHolding(false);
     setBusy(null);
     setExportError(null);
+    setVortexOriginal(null);
     setFileName(name);
     if (exportAs) setFormat(exportAs);
     setCurrentPage(0);
@@ -367,8 +380,13 @@ export default function App() {
   }
 
   // The certificate becomes the loaded document: one page, a PDF to download, recoloured
-  // in the chosen ink like any other. A document still processing is dropped.
+  // in the chosen ink like any other. A document still processing is dropped (only its
+  // rendered pages are kept for the vortex); one entered from nothing (the dev entrance) has
+  // nothing to keep.
   function loadCertificate({ id, page }: Certificate) {
+    const original: OriginalDocument | null = store.hasSource(currentPage)
+      ? { pages: store.snapshot(), file: lastFile.current, fileName, format, page: currentPage }
+      : null;
     lastFile.current = null;
     startDocument(`prntr-certificate-${id.slice(-9).replace('-', '')}.pdf`, 'pdf');
     // the certificate comes up in gold, the secret ink, which stays on offer from here on
@@ -381,7 +399,27 @@ export default function App() {
     setPageCount(1);
     setProcessedCount(1);
     setPagesVersion((v) => v + 1);
+    setVortexOriginal(original);
     prntrReturn.current = 'preview';
+  }
+
+  // The vortex has swallowed the certificate: the original document comes back in its place, the
+  // hold still on (startDocument clears it), so it shows in its own colours until the button is let
+  // go; the chosen ink, gold, stays. Only the pages that had rendered are there to come back.
+  function restoreOriginal() {
+    const original = vortexOriginal;
+    if (!original) return;
+    lastFile.current = original.file;
+    startDocument(original.fileName, original.format);
+    setHolding(true);
+    store.restore(original.pages);
+    setPageCount(original.pages.length);
+    setProcessedCount(original.pages.length);
+    const page = Math.min(original.page, original.pages.length - 1);
+    setCurrentPage(page);
+    store.ensureRecolored(page, inkRef.current);
+    setPagesVersion((v) => v + 1);
+    queueBackgroundRecolor(inkRef.current);
   }
 
   // Safety net: Prntr never stays mounted if the drop's animationend does not arrive.
@@ -499,6 +537,8 @@ export default function App() {
             recoloredCanvas={recoloredCanvas}
             holding={holding}
             onHoldChange={setHolding}
+            originalPage={vortexOriginal ? (vortexOriginal.pages[vortexOriginal.page]?.source ?? null) : null}
+            onVortexDone={restoreOriginal}
             onPrint={() => void handlePrint()}
             onDownload={() => void handleDownload()}
             busy={busy}
