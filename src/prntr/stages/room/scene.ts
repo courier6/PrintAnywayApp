@@ -519,9 +519,11 @@ export function drawFlames(p: Pix, layer: string, emitters: Emitter[], t: number
  * (they come as the fire grows); `mid`, the main fire as three licks inside fireRect (the footprint the glow
  * and the snuffing jet use), in front of the cooler and behind the machine; `front`, a low lick at the
  * machine's foot; `machine`, the flames on the machine once the fire spreads (v > 0): up its left side,
- * along its foot and, past 45 %, over its top edge. `front` and `machine` go on the front canvas.
+ * along its foot and, past 45 %, over its top edge. Once the machine has burst (`pieces` given) the side
+ * and the top row go with it: the foot row burns on along the carpet and every piece carries a flame on
+ * its top edge, thrown with it and lying with it. `front` and `machine` go on the front canvas.
  */
-export function fireEmitters(f: Fire): { back: Emitter[]; mid: Emitter[]; front: Emitter[]; machine: Emitter[] } {
+export function fireEmitters(f: Fire, pieces: Piece[] | null = null): { back: Emitter[]; mid: Emitter[]; front: Emitter[]; machine: Emitter[] } {
   const r = fireRect(f.u), hh = r.y1 - r.y0, w = (r.x1 - r.x0) / 2, cx = (r.x0 + r.x1) / 2;
   const back = [
     { x: 50, floor: 142, w: 7 * later(f.u, 0.35), h: 0.9 * hh * later(f.u, 0.35), seed: 100 },
@@ -536,17 +538,25 @@ export function fireEmitters(f: Fire): { back: Emitter[]; mid: Emitter[]; front:
   const machine: Emitter[] = [];
   if (f.v > 0) {
     const v = Math.min(1, f.v);
-    machine.push({ x: 73, floor: 146, w: 4 + 3 * v, h: 20 + 46 * v, seed: 400 });
+    if (pieces === null) machine.push({ x: 73, floor: 146, w: 4 + 3 * v, h: 20 + 46 * v, seed: 400 });
     const reach = 72 + 96 * v;
     for (let x = 84; x < reach; x += 13) {
       const age = Math.min(1, (reach - x) / 40), rr = hash(x * 3);
       machine.push({ x: x + 4 * Math.sin(x), floor: 146, w: (6 + 4 * age) * (0.8 + 0.4 * rr), h: (12 + 40 * age) * (0.6 + 0.8 * hash(x * 5)), seed: 500 + x });
     }
-    if (v > 0.45) {
+    if (pieces === null && v > 0.45) {
       const top = (v - 0.45) / 0.55, reachTop = 72 + 96 * top;
       for (let x = 74; x < reachTop; x += 12) {
         machine.push({ x: x + 3 * hash(x), floor: 80, w: 4 + 2 * hash(x + 1), h: (7 + 11 * Math.min(1, (reachTop - x) / 30)) * (0.6 + 0.8 * hash(x * 7)), seed: 700 + x });
       }
+    }
+    // the burst machine: a flame on every piece, standing two rows into its top edge (so its foot sits on the
+    // piece, which the room canvas draws behind it), the wider pieces with the bigger flames, each its own size
+    if (pieces !== null) {
+      pieces.forEach((pc, i) => {
+        const w = Math.min(12, 3 + pc.spr.w * 0.12) * (0.8 + 0.4 * hash(800 + i));
+        machine.push({ x: Math.round(pc.x) + pc.spr.w / 2, floor: Math.round(pc.y) + 2, w, h: (12 + w * 1.6) * (0.7 + 0.6 * hash(801 + i)), seed: 800 + i });
+      });
     }
   }
   return { back, mid, front, machine };
@@ -630,10 +640,10 @@ function drawFire(p: Pix, f: Fire, layer: 'back' | 'mid'): void {
 /**
  * The fire's front layer: the low lick at the machine's foot and the flames on the machine once it
  * spreads. Drawn on the front canvas, so they are in front of the slot's red light like the pages, under
- * the things the machine throws.
+ * the things the machine throws; once it has burst, on its pieces (`pieces`).
  */
-export function drawFireFront(p: Pix, f: Fire): void {
-  const e = fireEmitters(f);
+export function drawFireFront(p: Pix, f: Fire, pieces: Piece[] | null): void {
+  const e = fireEmitters(f, pieces);
   drawFlames(p, 'front', e.front.concat(e.machine), f.t);
 }
 

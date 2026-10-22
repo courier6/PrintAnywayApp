@@ -2855,7 +2855,7 @@ export const room: Stage = {
       if (fireAt === null) return;
       scene.fire = { u: fireU(now), t: reduced ? 0 : now, v: spreadU(now) };
       poseLight(fireLight, fireRect(scene.fire.u), now);
-      poseLight(machineLight, emitterBox(fireEmitters(scene.fire).machine), now);
+      poseLight(machineLight, emitterBox(fireEmitters(scene.fire, scene.printer === 'wreck' ? scene.pieces : null).machine), now);
     };
     // The burning fig's light, over its flames (it burns on after the fire is out).
     const poseFigLight = (now: number) => poseLight(figLight, scene.fig.burning ? emitterBox(figEmitters(scene.fig.burn, scene.broken.fig)) : null, now);
@@ -2914,6 +2914,7 @@ export const room: Stage = {
       poseClock(now);
       poseDoor(now);
       poseStorm(now);
+      if (scene.printer === 'wreck') posePieces(now);
       poseFire(now);
       scene.flashWhite = flashFrames > 0;
       scene.damage = score / HI;
@@ -2924,7 +2925,6 @@ export const room: Stage = {
       scene.machine.t = reduced ? 0 : now;
       if (flashFrames > 0) flashFrames--;
       scene.buttonBright = phase === 'fight' && scene.printer === 'up' && (mad || buttonBright(now));
-      if (scene.printer === 'wreck') posePieces(now);
       // The tremble: a new offset of ±1 px every few frames while the mad machine fights; the
       // pounce's landing before that, and the slam's lift and landing over it.
       frameCount++;
@@ -3045,7 +3045,7 @@ export const room: Stage = {
       // front flames with it: the flames on the burning machine were behind that glow too.
       fpix.clear();
       if (scene.windowOpen) drawWindowWreck(fpix);
-      if (scene.fire) drawFireFront(fpix, scene.fire);
+      if (scene.fire) drawFireFront(fpix, scene.fire, scene.printer === 'wreck' ? scene.pieces : null);
       // The marks on the glass, under the things in flight, the landed pages and the ink.
       drawMarks(fpix, scene.marks);
       // Out of the slot: only the top rows of the sprite so far, then the whole thing.
