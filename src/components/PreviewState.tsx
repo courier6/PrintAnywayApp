@@ -26,6 +26,12 @@ interface Props {
   recoloredCanvas: HTMLCanvasElement | null;
   holding: boolean;
   onHoldChange: (holding: boolean) => void;
+  /**
+   * On the certificate with a document behind it: that document's current page in its own colours
+   * (PRNTR-VORTEX.md). The hold then runs the vortex, and `onVortexDone` brings the document back.
+   */
+  originalPage: HTMLCanvasElement | null;
+  onVortexDone: () => void;
   onPrint: () => void;
   onDownload: () => void;
   busy: 'print' | 'download' | null;
