@@ -348,7 +348,7 @@ export const BADGE_AT = { x: 8, y: 120 };
 export const KIT_AT = { x: 226, y: 79 };
 
 /** A cheap hash to 0..1, so a flame column flickers on its own without random state. */
-function hash(n: number): number {
+export function hash(n: number): number {
   let x = Math.imul(n ^ 0x9e3779b9, 0x85ebca6b);
   x ^= x >>> 13;
   x = Math.imul(x, 0xc2b2ae35);
@@ -393,7 +393,7 @@ const lat = new Float32Array(LAT * LAT);
     lat[i] = s / 4294967296;
   }
 }
-function vnoise(x: number, y: number): number {
+export function vnoise(x: number, y: number): number {
   const xi = Math.floor(x), yi = Math.floor(y), fx = x - xi, fy = y - yi;
   const sx = fx * fx * (3 - 2 * fx), sy = fy * fy * (3 - 2 * fy);
   const i0 = (((yi % LAT) + LAT) % LAT) * LAT, i1 = ((((yi + 1) % LAT) + LAT) % LAT) * LAT;
