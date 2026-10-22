@@ -415,8 +415,9 @@ const RED_LIGHTS_FROM = 0.4;
 /** The USB stick's hit area in screen px (the handoff's 44 px for the sticker), whatever the scale. */
 const USB_HIT_PX = 44;
 /** The badge's hotspot and hit box: its sprite (BADGE_AT in scene.ts) plus about 4 px. */
-const BADGE_HIT = { x0: 5, y0: 116, x1: 28, y1: 134 };
-const inBadge = (x: number, y: number) => x >= BADGE_HIT.x0 && x < BADGE_HIT.x1 && y >= BADGE_HIT.y0 && y < BADGE_HIT.y1;
+const BADGE_HIT = { x0: 5, y0: 116, x1: 32, y1: 134 };
+/** `pad`: virtual px more on every side (the touch form, so a finger need not be exact). */
+const inBadge = (x: number, y: number, pad = 0) => x >= BADGE_HIT.x0 - pad && x < BADGE_HIT.x1 + pad && y >= BADGE_HIT.y0 - pad && y < BADGE_HIT.y1 + pad;
 const cleanName = (s: string) => s.toUpperCase().replace(/[^A-Z0-9 ]/g, '').replace(/ +/g, ' ').trim().slice(0, NAME_MAX);
 /** The radius of the badge's pulse, virtual px. */
 const BADGE_GLOW_R = 16;
@@ -2183,7 +2184,9 @@ export const room: Stage = {
         setCaption(USB_CAPTION);
         return;
       }
-      if (scene.badge === 'floor' && inBadge(v.x, v.y)) {
+      // on touch the box grows until it is as tall as the USB's 44 screen px (its own height is 18 virtual px)
+      const badgePad = touch ? Math.max(0, Math.ceil(USB_HIT_PX / 2 / scale) - 9) : 0;
+      if (scene.badge === 'floor' && inBadge(v.x, v.y, badgePad)) {
         openBadge();
         return;
       }
