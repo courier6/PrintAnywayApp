@@ -885,6 +885,8 @@ export const room: Stage = {
     let lampStop = 0;
     let autoReloadAt: number | null = null;
     let reloadSecondAt: number | null = null;
+    /** The shots the reload's second step still adds: what the first step did not give, whatever is fired in between. */
+    let reloadOwed = 0;
     /** The one continue has been used: the next death is the end. */
     let continued = false;
     let outcome: 'cleared' | 'over' = 'cleared';
@@ -1185,6 +1187,7 @@ export const room: Stage = {
       shots = SHOTS;
       autoReloadAt = null;
       reloadSecondAt = null;
+      reloadOwed = 0;
       staples = [];
       pages = [];
       sprays = [];
@@ -1494,6 +1497,7 @@ export const room: Stage = {
       sounds.reload();
       heat = 0;
       autoReloadAt = null;
+      reloadOwed = SHOTS - Math.max(shots, SHOTS / 2);
       shots = Math.max(shots, SHOTS / 2);
       drawShots();
       reloadSecondAt = now + RELOAD_STEP_MS;
@@ -2635,7 +2639,8 @@ export const room: Stage = {
         if (shots === 0 && autoReloadAt !== null && now >= autoReloadAt) reload(now);
         if (reloadSecondAt !== null && now >= reloadSecondAt) {
           reloadSecondAt = null;
-          shots = SHOTS;
+          shots = Math.min(SHOTS, shots + reloadOwed);
+          reloadOwed = 0;
           drawShots();
         }
         if (now >= nextAttackAt) launchAttack(now);
