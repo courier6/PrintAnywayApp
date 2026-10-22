@@ -2182,6 +2182,7 @@ export const room: Stage = {
         playerName = name;
         scene.badge = 'taken';
         lifeName.textContent = playerName;
+        drawHealth(); // the bar's label names the player too
         setCaption('YOU CLIP IT ON.');
         sounds.uiClick();
         ctx.announce(`Name set: ${name}.`);
@@ -2287,6 +2288,11 @@ export const room: Stage = {
       'pointerdown',
       (e) => {
         if (e.target !== wrap) return;
+        // the card up: a press off the frame is a press off the card, which sets the name (the field would lose its focus anyway)
+        if (phase === 'badge') {
+          closeBadge(true);
+          return;
+        }
         if (phase === 'continue') answerContinue(performance.now());
         else reload(performance.now());
       },
@@ -2330,6 +2336,7 @@ export const room: Stage = {
         setName: (n: string) => {
           playerName = cleanName(n) || DEFAULT_NAME;
           lifeName.textContent = playerName;
+          drawHealth();
         },
         stats: () => ({ shotsFired, misses, pagesShot, staplesShot, deaths, fireEver, wonBy, fightAt }),
         setScore: (n: number) => {
