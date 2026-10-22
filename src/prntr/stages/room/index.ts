@@ -1171,6 +1171,8 @@ export const room: Stage = {
       lastNear += d;
       exitAt += d;
       clockAt += d;
+      if (figCatchAt !== null) figCatchAt += d;
+      if (figBurnAt !== null) figBurnAt += d;
     };
     const startContinue = (now: number) => {
       phase = 'continue';
