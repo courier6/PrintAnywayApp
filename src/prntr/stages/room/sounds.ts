@@ -73,6 +73,14 @@ export interface RoomSounds {
   shatter(): void;
   /** Paper tearing: the poster. */
   tear(): void;
+  /** The safe's keypad (PRNTR-SAFE.md): a key shot, a 40 ms blip. */
+  keyBeep(): void;
+  /** A wrong code: two low buzzes. */
+  keyErr(): void;
+  /** The right code: the bolt sliding back, a steel ring. */
+  safeThunk(): void;
+  /** A round off the safe's steel: a ricochet's ping. */
+  clang(): void;
   /** Leaves: the plant. */
   rustle(): void;
   /** The EXIT sign knocked loose: a clank, then its letters buzzing in each ms window they come back on. */
@@ -148,6 +156,10 @@ const SILENT: RoomSounds = {
   gameOver: noop,
   shatter: noop,
   tear: noop,
+  keyBeep: noop,
+  keyErr: noop,
+  safeThunk: noop,
+  clang: noop,
   rustle: noop,
   signHit: noop,
   signSnap: noop,
@@ -521,6 +533,28 @@ export function createRoomSounds(audio: PrntrAudio): RoomSounds {
       const t = now();
       noise(t, 0.18, { hp: 600, lp: 4000, gain: 0.55, decay: 0.05 });
       noise(t, 0.1, { hp: 1800, lp: 6000, gain: 0.3, decay: 0.03 });
+    },
+    // the keypad: a 40 ms square blip at 1.4 kHz
+    keyBeep() {
+      tone(now(), 0.04, { type: 'square', f0: 1400, gain: 0.12, attack: 0.002, release: 0.01 });
+    },
+    // a wrong code: two 120 ms buzzes at 220 Hz, 150 ms apart
+    keyErr() {
+      const t = now();
+      for (const d of [0, 0.15]) tone(t + d, 0.12, { type: 'square', f0: 220, gain: 0.14, attack: 0.004, release: 0.02 });
+    },
+    // the bolt sliding back: a dull thud, then a steel ring 60 ms on
+    safeThunk() {
+      const t = now();
+      noise(t, 0.06, { lp: 1200, gain: 0.5, decay: 0.012 });
+      tone(t, 0.12, { f0: 150, f1: 70, gain: 0.45, decay: 0.03 });
+      tone(t + 0.06, 0.25, { f0: 1300, f1: 1100, gain: 0.2, decay: 0.05 });
+    },
+    // a ricochet off the steel: a crack and a falling ping
+    clang() {
+      const t = now();
+      noise(t, 0.03, { hp: 2000, gain: 0.4, decay: 0.005 });
+      tone(t, 0.15, { f0: 2600, f1: 1900, gain: 0.2, decay: 0.03 });
     },
     // a soft 0.25 s rustle: low-passed noise, a slow decay
     rustle() {
