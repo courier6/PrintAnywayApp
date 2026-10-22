@@ -84,7 +84,9 @@ const ERR_MS = 600;
 const OPEN_DELAY_MS = 300;
 const DOOR_MS = 400;
 const TAKE_FLASH_MS = 150;
+const MG_MS = 110;
 const MG_SHOTS = 12;
+const BLOOM_PER_SHOT_MG = 1.5;
 /** The flash dazes the player: for DAZE_MS the cross wanders about the mouse (or the tap) by up to DAZE_PX,
  * lurching on two beats that never line up, easing back as the eyes clear; the shot goes where the cross is.
  * Under reduced motion, and on touch (no cross to show the wander before a tap), the cross stays still and the
@@ -983,6 +985,8 @@ export const room: Stage = {
     let keypadDrawn = '';
     /** The machine gun: on once the drum is taken; the held button's point (null: not held) and the next round's moment. */
     let mg = false;
+    let holdV: { x: number; y: number } | null = null;
+    let nextHoldAt = 0;
     /** The magazine: the pistol's SHOTS, the drum's MG_SHOTS. */
     const magSize = () => (mg ? MG_SHOTS : SHOTS);
     /** The flicker: when the next panel comes on, and when each lit one goes out (null: out). */
@@ -1175,7 +1179,7 @@ export const room: Stage = {
     };
     const drawShots = () => {
       Array.from(shotsBtn.children).forEach((p, i) => p.classList.toggle('is-off', i >= shots));
-      shotsBtn.setAttribute('aria-label', `Shots ${shots} of ${SHOTS}. Reload`);
+      shotsBtn.setAttribute('aria-label', `Shots ${shots} of ${magSize()}. Reload`);
     };
     const showFightUi = (on: boolean) => {
       for (const n of [healthEl, healthName, lifeEl, lifeName, pipsEl, shotsBtn]) {
@@ -1264,7 +1268,7 @@ export const room: Stage = {
       lives = LIVES_CONTINUE;
       health = PLAYER_HEALTH;
       drawHealth();
-      shots = SHOTS;
+      shots = magSize();
       autoReloadAt = null;
       reloadSecondAt = null;
       reloadOwed = 0;
@@ -1570,7 +1574,7 @@ export const room: Stage = {
     };
     /** The shot's recoil: the lines open and the cross kicks. */
     const recoil = (now: number) => {
-      heat = Math.min(BLOOM_MAX - BLOOM_BASE, spreadNow(now) - BLOOM_BASE + BLOOM_PER_SHOT);
+      heat = Math.min(BLOOM_MAX - BLOOM_BASE, spreadNow(now) - BLOOM_BASE + (mg ? BLOOM_PER_SHOT_MG : BLOOM_PER_SHOT));
       heatAt = now;
       kickAt = now;
       kickDx = (Math.floor(Math.random() * 3) - 1) * KICK_SIDE;
@@ -1585,12 +1589,12 @@ export const room: Stage = {
     };
     const reload = (now: number) => {
       if (phase !== 'fight' || frozenAt !== null) return;
-      if (shots === SHOTS || reloadSecondAt !== null) return;
+      if (shots === magSize() || reloadSecondAt !== null) return;
       sounds.reload();
       heat = 0;
       autoReloadAt = null;
-      reloadOwed = SHOTS - Math.max(shots, SHOTS / 2);
-      shots = Math.max(shots, SHOTS / 2);
+      reloadOwed = magSize() - Math.max(shots, magSize() / 2);
+      shots = Math.max(shots, magSize() / 2);
       drawShots();
       reloadSecondAt = now + RELOAD_STEP_MS;
     };
@@ -2396,10 +2400,12 @@ export const room: Stage = {
       (e) => {
         touched = e.pointerType === 'touch';
         if (e.pointerType !== 'touch' && phase !== 'badge') pointer = toVirtual(e);
+        if (holdV !== null) holdV = toVirtual(e);
       },
       { signal },
     );
-    frame.addEventListener('pointerleave', () => (pointer = null), { signal });
+    frame.addEventListener('pointerleave', () => { pointer = null; holdV = null; }, { signal });
+    for (const ev of ['pointerup', 'pointercancel'] as const) window.addEventListener(ev, () => (holdV = null), { signal });
     frame.addEventListener('contextmenu', (e) => e.preventDefault(), { signal });
     frame.addEventListener(
       'pointerdown',
@@ -2426,6 +2432,11 @@ export const room: Stage = {
           }
           const a = aim(v, now);
           fire(a.x, a.y, now);
+          // the machine gun: the button held keeps firing (the frame loop) until it is let go or the magazine is empty
+          if (mg) {
+            holdV = v;
+            nextHoldAt = now + MG_MS;
+          }
         }
         else if (phase === 'continue') answerContinue(now);
       },
@@ -2816,9 +2827,23 @@ export const room: Stage = {
           slamNow = true;
         }
         if (shots === 0 && autoReloadAt !== null && now >= autoReloadAt) reload(now);
+        // The machine gun (PRNTR-SAFE.md): a round every MG_MS while the button is held, until the magazine is empty (the
+        // hold ends there: no dry clicks; a new press fires again after the reload). On touch the cross stays at the finger.
+        if (mg && holdV !== null && phase === 'fight' && frozenAt === null) {
+          while (holdV !== null && now >= nextHoldAt) {
+            if (shots === 0) {
+              holdV = null;
+              break;
+            }
+            const a = aim(holdV, now);
+            fire(a.x, a.y, now);
+            if (touched) tap = { x: holdV.x, y: holdV.y, at: now };
+            nextHoldAt += MG_MS;
+          }
+        }
         if (reloadSecondAt !== null && now >= reloadSecondAt) {
           reloadSecondAt = null;
-          shots = Math.min(SHOTS, shots + reloadOwed);
+          shots = Math.min(magSize(), shots + reloadOwed);
           reloadOwed = 0;
           drawShots();
         }
