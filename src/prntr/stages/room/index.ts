@@ -2659,10 +2659,13 @@ export const room: Stage = {
             s.hit = true;
             if (s.kind === 'staple') sounds.stapleHit();
             else sounds.boltHit();
-            hurt(s.kind, now);
             // the mark it leaves: a staple or a bolt sticks in the glass; a nut bounces off and drops out of the frame
+            // (before the hurt: the hit that takes the last of the health clears what is in the air, the nut with it)
             if (s.kind === 'nut') drops.push({ kind: 'nut', x: s.x, y: s.y, at: now });
             else addMark(s.kind, s.x, s.y);
+            hurt(s.kind, now);
+            // a death ends this frame's hits: what else was about to land goes with the rest of what was in the air
+            if (phase !== 'fight' || frozenAt !== null) break;
           }
         }
         staples = staples.filter((s) => !s.hit && !s.shot);
