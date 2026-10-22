@@ -99,6 +99,7 @@ export default function App() {
   const prntrPage = useRef<{ source: HTMLCanvasElement; recolored: HTMLCanvasElement } | null>(null);
   const prntrAudio = useRef<AudioContext | null>(null);
   const prntrReturn = useRef<AppState>('preview');
+  const overHold = useRef<number | null>(null); // the reduced-motion GAME OVER hold before the cut
   // Set while the app's UI falls back into place over Prntr's last frame: the sky
   // drop after the room is cleared, the Tetris drop after a game over.
   const [prntrDrop, setPrntrDrop] = useState<'sky' | 'tetris' | null>(null);
@@ -266,6 +267,7 @@ export default function App() {
   // for the old one (the token tells it to stop), its parsed file, its print pages.
   function startDocument(name: string, exportAs: ExportFormat | null): number {
     const token = ++runToken.current;
+    clearOverHold();
     if (idleHandle.current !== null) {
       cancelIdle(idleHandle.current);
       idleHandle.current = null;
@@ -371,6 +373,7 @@ export default function App() {
       if (!recolored || !source) return;
       page = { source, recolored };
     }
+    clearOverHold();
     prntrReturn.current = appState;
     prntrAudio.current = prntrAudioContext();
     setHolding(false);
@@ -380,8 +383,15 @@ export default function App() {
   }
 
   function exitPrntr() {
+    clearOverHold();
     prntrPage.current = null; // the page it was handed goes with it
     setAppState(prntrReturn.current);
+  }
+
+  function clearOverHold() {
+    if (overHold.current === null) return;
+    window.clearTimeout(overHold.current);
+    overHold.current = null;
   }
 
   // The drop has landed (or its safety net fired): Prntr unmounts, and its page goes.
@@ -413,8 +423,9 @@ export default function App() {
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
       if (outcome === 'over') {
         // a plain cut, but not on the very frame the card went up: the GAME OVER card is held for a moment first (an Esc
-        // in that moment, or a new document, has already left, and is not overridden)
-        window.setTimeout(() => {
+        // in that moment, a new document or a new run clears the hold, so it never cuts away from what came after)
+        overHold.current = window.setTimeout(() => {
+          overHold.current = null;
           prntrPage.current = null;
           setAppState((s) => (s === 'prntr' ? prntrReturn.current : s));
         }, REDUCED_OVER_HOLD_MS);
