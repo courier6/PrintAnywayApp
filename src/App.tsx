@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ChangeEvent, type CSSProperties } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState, type ChangeEvent, type CSSProperties } from 'react';
 import { flushSync } from 'react-dom';
 import { Header } from './components/Header';
 import { EmptyState } from './components/EmptyState';
@@ -47,6 +47,10 @@ const cancelIdle: (handle: number) => void =
   typeof window.cancelIdleCallback === 'function'
     ? (handle) => window.cancelIdleCallback(handle)
     : (handle) => window.clearTimeout(handle);
+
+// Dev only: the side panel with jumps and fight controls. A constant-false branch in builds, so the
+// import() is dropped and no chunk is made.
+const DevPanel = import.meta.env.DEV ? lazy(() => import('./components/DevPanel')) : null;
 
 // Dev only (see the ?prntr entrance below): a letter-size page of "text" lines, black for the
 // source, the ink for the recolored copy.
@@ -614,6 +618,11 @@ export default function App() {
           onExit={exitPrntr}
           onDone={finishPrntr}
         />
+      )}
+      {import.meta.env.DEV && DevPanel && (
+        <Suspense fallback={null}>
+          <DevPanel />
+        </Suspense>
       )}
       <input
         ref={fileInput}
