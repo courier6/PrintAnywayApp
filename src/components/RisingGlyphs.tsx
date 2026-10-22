@@ -50,7 +50,11 @@ export default function RisingGlyphs({ active }: { active: boolean }) {
         }),
       ]);
     spawn(BURST);
-    const id = window.setInterval(() => spawn(1), SPAWN_MS);
+    // not in a hidden tab: its timers are throttled and its animations do not run, so the glyphs would pile up unseen and all
+    // play at once on return
+    const id = window.setInterval(() => {
+      if (!document.hidden) spawn(1);
+    }, SPAWN_MS);
     return () => window.clearInterval(id);
   }, [active]);
   const gone = (id: number) => setGlyphs((g) => g.filter((x) => x.id !== id));

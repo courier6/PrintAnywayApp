@@ -681,6 +681,9 @@ export const room: Stage = {
     const hintEl = el('div', 'prntr-room-hint');
     hintEl.setAttribute('aria-hidden', 'true');
     const touch = window.matchMedia('(hover: none)').matches;
+    /** Whether the last pointer was a finger. `touch` is the device (no hover); a touchscreen laptop has both a mouse and taps, and the
+     * cross shows by the pointer, so the daze and the bloom follow the pointer too: a tap must not land off where it was with no cross to show why. */
+    let touched = touch;
     hintEl.append(el('div', 'prntr-room-hint-title', 'PROTECT YOURSELF.'), el('div', 'prntr-room-hint-keys', touch ? 'TAP TO SHOOT' : 'CLICK TO SHOOT'));
     hintEl.hidden = true;
     hud.append(scoreEl, hiEl, creditEl, captionEl, healthEl, healthName, lifeEl, lifeName, pipsEl, shotsBtn, hintEl);
@@ -894,6 +897,8 @@ export const room: Stage = {
     let lampStop = 0;
     let autoReloadAt: number | null = null;
     let reloadSecondAt: number | null = null;
+    /** The shots the reload's second step still adds: what the first step did not give, whatever is fired in between. */
+    let reloadOwed = 0;
     /** The one continue has been used: the next death is the end. */
     let continued = false;
     let outcome: 'cleared' | 'over' = 'cleared';
@@ -1146,6 +1151,27 @@ export const room: Stage = {
       scheduleBlink(now, BLINK_FIRST_MS);
       ctx.announce(`The printer is open. Protect yourself. ${touch ? 'Tap' : 'Click'} to shoot.`);
     };
+    // The room unfreezes. The frame was drawn at the time it froze (render(frozenAt)), so everything the room's own clock
+    // runs, the short, the fire, its spread, the door, the storm and the sign and the clock, moves on by the time it was
+    // frozen: it goes on from the frame that was seen, and does not jump ahead by the 1.2 s beat or the CONTINUE? count.
+    const thaw = (now: number) => {
+      if (frozenAt === null) return;
+      const d = now - frozenAt;
+      frozenAt = null;
+      if (shortAt !== null) shortAt += d;
+      if (fireAt !== null) fireAt += d;
+      if (spreadAt !== null) spreadAt += d;
+      if (doorAt !== null) doorAt += d;
+      if (doorOpenAt !== null) doorOpenAt += d;
+      stokeAt += d;
+      nextStrike += d;
+      nextFar += d;
+      strikeAt += d;
+      farAt += d;
+      lastNear += d;
+      exitAt += d;
+      clockAt += d;
+    };
     const startContinue = (now: number) => {
       phase = 'continue';
       phaseAt = now;
@@ -1168,13 +1194,14 @@ export const room: Stage = {
       audio.play(audio.cues.creditA);
       continueEl.hidden = true;
       continued = true;
-      frozenAt = null;
+      thaw(now);
       lives = LIVES_CONTINUE;
       health = PLAYER_HEALTH;
       drawHealth();
       shots = SHOTS;
       autoReloadAt = null;
       reloadSecondAt = null;
+      reloadOwed = 0;
       staples = [];
       pages = [];
       sprays = [];
@@ -1444,7 +1471,7 @@ export const room: Stage = {
     /** The cross's wander from the flash's daze now (none when steady, none under reduced motion, none on
      * touch: a tap would land off where it was with no cross to show why, so touch takes the open bloom instead). */
     const dazeNow = (now: number) => {
-      if (dazeAt === null || steady || reduced || touch) return { x: 0, y: 0 };
+      if (dazeAt === null || steady || reduced || touched) return { x: 0, y: 0 };
       const u = (now - dazeAt) / DAZE_MS;
       if (u >= 1) return { x: 0, y: 0 };
       const a = DAZE_PX * Math.pow(1 - u, 1.2);
@@ -1484,6 +1511,7 @@ export const room: Stage = {
       sounds.reload();
       heat = 0;
       autoReloadAt = null;
+      reloadOwed = SHOTS - Math.max(shots, SHOTS / 2);
       shots = Math.max(shots, SHOTS / 2);
       drawShots();
       reloadSecondAt = now + RELOAD_STEP_MS;
@@ -1604,8 +1632,9 @@ export const room: Stage = {
           return;
         }
       }
-      // The button: more damage, and the machine answers faster. Bright or not.
-      if (x >= BUTTON.x - BUTTON_HIT_PAD && x < BUTTON.x + BUTTON.w + BUTTON_HIT_PAD && y >= BUTTON.y - BUTTON_HIT_PAD && y < BUTTON.y + BUTTON.h + BUTTON_HIT_PAD) {
+      // The button: more damage, and the machine answers faster. Bright or not. (Not once the machine has burst into its
+      // pieces: where it stood is the wall behind it then, and a shot there is a miss.)
+      if (scene.printer !== 'wreck' && x >= BUTTON.x - BUTTON_HIT_PAD && x < BUTTON.x + BUTTON.w + BUTTON_HIT_PAD && y >= BUTTON.y - BUTTON_HIT_PAD && y < BUTTON.y + BUTTON.h + BUTTON_HIT_PAD) {
         flashFrames = HIT_FLASH_FRAMES;
         stoke(x, y, now);
         rage = Math.min(RAGE_MAX, rage + 1);
@@ -1614,7 +1643,7 @@ export const room: Stage = {
         addScore(BUTTON_POINTS, now);
         return;
       }
-      if (x >= MACHINE.x0 && x < MACHINE.x1 && y >= MACHINE.y0 && y < MACHINE.y1) {
+      if (scene.printer !== 'wreck' && x >= MACHINE.x0 && x < MACHINE.x1 && y >= MACHINE.y0 && y < MACHINE.y1) {
         flashFrames = HIT_FLASH_FRAMES;
         stoke(x, y, now);
         addScore(HIT_POINTS, now);
@@ -1690,6 +1719,9 @@ export const room: Stage = {
         if (y < FLOOR_Y) addHole('wall', x, y);
       }
     };
+    // Whether a hole's storm light is out: the same test drawHoles uses to leave the hole undrawn (in the doorway the
+    // door has swung off it, a broken door and a shot-open blind took their holes with them).
+    const holeHidden = (h: Hole) => inDoorway(h, scene.doorGap) || (h.kind === 'door' && scene.doorBroken) || (h.kind === 'window' && scene.windowOpen);
     // A hole where the shot landed; through the door or the blind, the storm's light in it. Every hole in
     // the door counts toward its breaking.
     const addHole = (kind: Hole['kind'], x: number, y: number, now = 0) => {
@@ -1716,7 +1748,7 @@ export const room: Stage = {
       const box = el('div', 'prntr-room-hole-light');
       box.style.left = `calc(${hole.x - 1}px * var(--s))`;
       box.style.top = `calc(${hole.y - 1}px * var(--s))`;
-      box.hidden = inDoorway(hole, scene.doorGap);
+      box.hidden = holeHidden(hole);
       holeLightOf.set(hole, box);
       holeLights.append(box);
       if (kind === 'door') {
@@ -1737,7 +1769,7 @@ export const room: Stage = {
       scene.doorBroken = true;
       doorOpenAt = null;
       scene.doorGap = DOOR_OPEN;
-      for (const [hole, box] of holeLightOf) if (hole.kind === 'door') box.hidden = true;
+      for (const [hole, box] of holeLightOf) box.hidden = holeHidden(hole);
       frame.classList.add('is-open');
       sounds.doorBreak();
       addScore(BREAK_POINTS, now);
@@ -1760,7 +1792,7 @@ export const room: Stage = {
     const breakWindow = (now: number) => {
       scene.windowOpen = true;
       frame.classList.add('is-window-open');
-      for (const [hole, box] of holeLightOf) if (hole.kind === 'window') box.hidden = true;
+      for (const [hole, box] of holeLightOf) box.hidden = holeHidden(hole);
       sounds.shatter();
       // the slats clattering down after the crack
       window.setTimeout(() => {
@@ -1828,10 +1860,12 @@ export const room: Stage = {
       flashFrames = HIT_FLASH_FRAMES * 2;
       fireSound = sounds.fire();
     };
-    // A tube shot: every jet on that nozzle stops, the head and the hose fly
-    // apart in bits of plum, grey and its ink, and the stump stays; the nozzle is dead for good.
+    // A tube shot: the jet spraying from that nozzle stops, the jets still to come from it are gone, the head and the hose fly
+    // apart in bits of plum, grey and its ink, and the stump stays; the nozzle is dead for good. A jet of the nozzle that has
+    // already sprayed is left as it is: stopping it now would move its end, and its splat, to later.
     const explodeTube = (jet: Spray, now: number) => {
-      for (const s of sprays) if (s.nx === jet.nx && s.stoppedAt === null) s.stoppedAt = now;
+      for (const s of sprays) if (s.nx === jet.nx && spraying(s, now)) s.stoppedAt = now;
+      sprays = sprays.filter((s) => s.nx !== jet.nx || s.at <= now);
       if (!scene.stubs.includes(jet.nx)) scene.stubs.push(jet.nx);
       sounds.tubeBurst();
       flashFrames = 1;
@@ -1899,7 +1933,7 @@ export const room: Stage = {
           washAt = performance.now();
           // the player is dazed by it: the cross wanders (or, under reduced motion and on touch, its bloom opens all the way)
           dazeAt = washAt;
-          if ((reduced || touch) && !steady) {
+          if ((reduced || touched) && !steady) {
             heat = BLOOM_MAX - BLOOM_BASE;
             heatAt = washAt;
           }
@@ -2160,6 +2194,7 @@ export const room: Stage = {
         playerName = name;
         scene.badge = 'taken';
         lifeName.textContent = playerName;
+        drawHealth(); // the bar's label names the player too
         setCaption('YOU CLIP IT ON.');
         sounds.uiClick();
         ctx.announce(`Name set: ${name}.`);
@@ -2215,6 +2250,7 @@ export const room: Stage = {
     frame.addEventListener(
       'pointermove',
       (e) => {
+        touched = e.pointerType === 'touch';
         if (e.pointerType !== 'touch' && phase !== 'badge') pointer = toVirtual(e);
       },
       { signal },
@@ -2225,6 +2261,7 @@ export const room: Stage = {
       'pointerdown',
       (e) => {
         const now = performance.now();
+        touched = e.pointerType === 'touch';
         // the card up: a press on the dim sets the name (or puts the badge down); the card and the input do their own work
         if (phase === 'badge') {
           if (e.target === badgeEl) closeBadge(true);
@@ -2263,6 +2300,11 @@ export const room: Stage = {
       'pointerdown',
       (e) => {
         if (e.target !== wrap) return;
+        // the card up: a press off the frame is a press off the card, which sets the name (the field would lose its focus anyway)
+        if (phase === 'badge') {
+          closeBadge(true);
+          return;
+        }
         if (phase === 'continue') answerContinue(performance.now());
         else reload(performance.now());
       },
@@ -2273,7 +2315,9 @@ export const room: Stage = {
       'pointerdown',
       (e) => {
         e.stopPropagation();
-        reload(performance.now());
+        // under CONTINUE? the pips are part of the room: a press on them answers it like a press anywhere else
+        if (phase === 'continue') answerContinue(performance.now());
+        else reload(performance.now());
       },
       { signal },
     );
@@ -2283,7 +2327,8 @@ export const room: Stage = {
         if (phase === 'badge') return;
         if (phase === 'continue' && (e.key === ' ' || e.key === 'Enter')) {
           e.preventDefault();
-          answerContinue(performance.now());
+          // not a held key: the Space that was held down while the player died would answer it the moment it is armed
+          if (!e.repeat) answerContinue(performance.now());
         } else if (e.key === ' ' || e.key === 'r' || e.key === 'R') {
           e.preventDefault();
           reload(performance.now());
@@ -2303,6 +2348,7 @@ export const room: Stage = {
         setName: (n: string) => {
           playerName = cleanName(n) || DEFAULT_NAME;
           lifeName.textContent = playerName;
+          drawHealth();
         },
         stats: () => ({ shotsFired, misses, pagesShot, staplesShot, deaths, fireEver, wonBy, fightAt }),
         setScore: (n: number) => {
@@ -2359,6 +2405,12 @@ export const room: Stage = {
         storm: () => ({ ...scene.storm }),
         stormLevel: () => stormLevel,
         strike: () => strike(performance.now()),
+        /** The storm's and the fire's absolute times, and whether the room is frozen; `dueStrike` makes the next strike due. */
+        clocks: () => ({ nextStrike, nextFar, strikeAt, farAt, fireAt, spreadAt, frozen: frozenAt !== null }),
+        dueStrike: () => {
+          nextStrike = performance.now();
+        },
+        shots: () => shots,
         short: () => shortAt !== null,
         fire: () => fireAt !== null,
         fireU: () => fireU(performance.now()),
@@ -2383,6 +2435,8 @@ export const room: Stage = {
         tubes: () => scene.tubes.map((t) => ({ ...t })),
         /** Each jet's nozzle, start and where it is landing now (the hunt's lagged target). */
         jets: () => sprays.map((s) => ({ nx: s.nx, at: s.at, landing: landingOf(s, performance.now()) })),
+        /** Each jet's nozzle, start, stop time (null: it runs its length), end and whether its splat has landed. */
+        sprayState: () => sprays.map((s) => ({ nx: s.nx, at: s.at, stoppedAt: s.stoppedAt, end: jetEnd(s), done: s.done, dud: s.dud })),
         holes: () => scene.holes.map((h) => h.kind),
         marks: () => scene.marks.map((m) => ({ ...m })),
         drops: () => drops.length,
@@ -2514,7 +2568,7 @@ export const room: Stage = {
       if (hintHideAt && now >= hintHideAt) hideHint();
       poseName(now);
       // The short: a zap at each of its moments, then the fire.
-      if (shortAt !== null) {
+      if (shortAt !== null && frozenAt === null) {
         while (shortZaps < SHORT_ZAPS_MS.length && now - shortAt >= SHORT_ZAPS_MS[shortZaps]) {
           shortZaps++;
           zap(now);
@@ -2522,11 +2576,12 @@ export const room: Stage = {
         if (now - shortAt >= SHORT_MS) startFire(now);
       }
       if (fireAt !== null) fireSound?.setLevel(fireU(now) + 0.5 * spreadU(now) + (now - stokeAt < STOKE_FLARE_MS ? 0.3 : 0));
-      if (fireAt !== null && !mad && now - fireAt >= MAD_AFTER_MS) {
+      if (fireAt !== null && !mad && frozenAt === null && now - fireAt >= MAD_AFTER_MS) {
         mad = true;
         frame.classList.add('is-mad');
       }
-      // The falling sign lands (not while the room is frozen).
+      // The falling sign lands, the door swings, the storm strikes (none of it while the room is frozen: the frame drawn
+      // is the frozen one, and a thing stamped with the live time would be drawn with a negative age).
       if (scene.exit.state === 'falling' && frozenAt === null && now - exitAt >= (reduced ? 0 : EXIT_FALL_MS)) {
         scene.exit.state = 'down';
         scene.exit.x = EXIT_FLOOR.x;
@@ -2534,13 +2589,13 @@ export const room: Stage = {
         sounds.signCrash();
         doorAt = now + DOOR_DELAY_MS;
       }
-      if (doorAt !== null && now >= doorAt) {
+      if (doorAt !== null && frozenAt === null && now >= doorAt) {
         doorAt = null;
         swingDoor(now);
       }
       // The storm: a near strike now and then, far lightning between.
-      if (now >= nextStrike) strike(now);
-      if (now >= nextFar) farStrike(now);
+      if (frozenAt === null && now >= nextStrike) strike(now);
+      if (frozenAt === null && now >= nextFar) farStrike(now);
       // The clock: lands, comes to rest, catches fire by the burning cooler, rolls out (not while frozen).
       if (frozenAt === null) {
         const ck = scene.clock;
@@ -2582,7 +2637,7 @@ export const room: Stage = {
         if (deathUntil) {
           if (now < deathUntil) return;
           deathUntil = 0;
-          frozenAt = null;
+          thaw(now);
           deathEl.hidden = true;
           health = PLAYER_HEALTH;
           drawHealth();
@@ -2612,7 +2667,8 @@ export const room: Stage = {
         if (shots === 0 && autoReloadAt !== null && now >= autoReloadAt) reload(now);
         if (reloadSecondAt !== null && now >= reloadSecondAt) {
           reloadSecondAt = null;
-          shots = SHOTS;
+          shots = Math.min(SHOTS, shots + reloadOwed);
+          reloadOwed = 0;
           drawShots();
         }
         if (now >= nextAttackAt) launchAttack(now);
@@ -2631,10 +2687,13 @@ export const room: Stage = {
             s.hit = true;
             if (s.kind === 'staple') sounds.stapleHit();
             else sounds.boltHit();
-            hurt(s.kind, now);
             // the mark it leaves: a staple or a bolt sticks in the glass; a nut bounces off and drops out of the frame
+            // (before the hurt: the hit that takes the last of the health clears what is in the air, the nut with it)
             if (s.kind === 'nut') drops.push({ kind: 'nut', x: s.x, y: s.y, at: now });
             else addMark(s.kind, s.x, s.y);
+            hurt(s.kind, now);
+            // a death ends this frame's hits: what else was about to land goes with the rest of what was in the air
+            if (phase !== 'fight' || frozenAt !== null) break;
           }
         }
         staples = staples.filter((s) => !s.hit && !s.shot);
@@ -2763,7 +2822,7 @@ export const room: Stage = {
       if (scene.doorGap !== lightGap) {
         lightGap = scene.doorGap;
         light.style.width = `calc(${lightGap}px * var(--s))`;
-        for (const [hole, box] of holeLightOf) box.hidden = inDoorway(hole, scene.doorGap);
+        for (const [hole, box] of holeLightOf) box.hidden = holeHidden(hole);
       }
     };
     /** The spread onto the machine, 0..1; once the machine has burst it rages on, up to 1 + RAGE_MORE
@@ -2959,6 +3018,7 @@ export const room: Stage = {
       // (the most risen of its jets), turned after the cross as the machine's health goes.
       const tubes = new Map<number, number>();
       for (const s of sprays) {
+        if (scene.stubs.includes(s.nx)) continue; // a shot nozzle is a stump: no head rises or sinks over it
         const from = s.at - TUBE_RISE_MS;
         const to = jetEnd(s) + TUBE_RISE_MS;
         if (now < from || now >= to) continue;
@@ -3110,7 +3170,7 @@ export const room: Stage = {
     };
 
     // ---- loop and exit ----------------------------------------------------
-    return new Promise<Handoff>((resolve) => {
+    return new Promise<Handoff>((resolve, reject) => {
       let raf = 0;
       let done = false;
       const stop = () => {
@@ -3155,8 +3215,16 @@ export const room: Stage = {
       };
       const loop = (now: number) => {
         if (done) return;
-        update(now);
-        render(frozenAt ?? now);
+        // a throw in a frame must end the run (the host leaves as for a stage that throws), not the loop alone: with the
+        // loop dead the promise never settled, and the hum, the fire and the storm played on under a frozen frame
+        try {
+          update(now);
+          render(frozenAt ?? now);
+        } catch (err) {
+          stop();
+          reject(err);
+          return;
+        }
         raf = requestAnimationFrame(loop);
       };
       render(performance.now());
