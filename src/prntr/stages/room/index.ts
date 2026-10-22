@@ -3,9 +3,9 @@ import type { Handoff, RunStats, Stage } from '../../types';
 import { H, Pix, W, frameScale, rotateSprite } from './pixels';
 import { DocContent, docFine } from './docpage';
 import { ashFlecks, burnFine, flakes, frontFire } from './burnpage';
-import { ART_BREAK_SHOTS, BADGE_AT, CLOCK_AT, FIRE_TICK_MS, GLASS, KIT_AT, KNOB, MACHINE_AT, MACHINE_PIECES, NOZZLES, SPR, drawFireFront, drawFlames, drawMarks, drawRoom, drawWindowWreck, figEmitters, figLeaf, fireEmitters, fireRect, inCavity, inDoorway, knobX, lampX, markBox, monsteraEmitters, tubeX, type Broken, type Emitter, type ExitSign, type Hole, type Mark, type Rect, type SceneState, type Tube } from './scene';
+import { ART_BREAK_SHOTS, BADGE_AT, CAPS_TOP, CLOCK_AT, FIRE_TICK_MS, GLASS, KIT_AT, KNOB, MACHINE_AT, MACHINE_PIECES, NOZZLES, SPR, drawFireFront, drawFlames, drawMarks, drawRoom, drawTubes, drawWindowWreck, figEmitters, figLeaf, fireEmitters, fireRect, inCavity, inDoorway, knobX, lampX, markBox, monsteraEmitters, tubeX, type Broken, type Emitter, type ExitSign, type Hole, type Mark, type Rect, type SceneState, type Tube } from './scene';
 import { ART_AT, ART_SUB, renderVictory } from './art';
-import { DRUM_BOX, SAFE, SAFE_CODE, keyAt, paintKeypad } from './safe';
+import { MAG_BOB, MAG_BOB_MS, MAG_BOX, MAG_SPIN_MS, MAG_STEPS, SAFE, SAFE_CODE, keyAt, paintKeypad } from './safe';
 import { PAL, type PalKey } from './palette';
 import { createRoomSounds, type FireSound, type Hum } from './sounds';
 import { RIPPLE_MS, RIPPLE_SPEED, RippleView, rippleAt } from './ripple';
@@ -76,7 +76,7 @@ const BLOOM_MAX = 12;
 const BLOOM_COOL = 6;
 /** The safe in the wall (PRNTR-SAFE.md): a key stays pressed PRESS_MS after a shot; a wrong code shows ERR for ERR_MS and
  * is cleared; the right one unlocks the door, which starts to swing OPEN_DELAY_MS later and is open DOOR_MS after that; the
- * drum magazine taken flashes the inside white for TAKE_FLASH_MS. The upgrade: a round every MG_MS while the button is held,
+ * rifle magazine taken flashes the inside white for TAKE_FLASH_MS. The upgrade: a round every MG_MS while the button is held,
  * MG_SHOTS a magazine (six more pips of the same look), each round opening the cross by BLOOM_PER_SHOT_MG instead of
  * BLOOM_PER_SHOT. */
 const PRESS_MS = 150;
@@ -462,6 +462,9 @@ const BADGE_GLOW_R = 16;
 const BAR = '11010010111011010011010110';
 /** How far a thrown thing's glow and the fire's light reach past the sprite, virtual px: the gradient's fade. */
 const GLOW_PAD = 7;
+/** A glow's box, virtual px. */
+type GlowBox = { x: number; y: number; w: number; h: number };
+const SVG_NS = 'http://www.w3.org/2000/svg';
 const FIRE_GLOW_PAD = 12;
 
 interface Hotspot {
@@ -633,6 +636,16 @@ export const room: Stage = {
     front.setAttribute('aria-hidden', 'true');
     const fg = front.getContext('2d', { willReadFrequently: true });
     if (!fg) throw new Error('prntr: no 2d context');
+    // The lit layer (PRNTR-GLOWS.md): the room's own pixels where a glowing subject shows (a tube, the bright
+    // button), copied each frame onto a transparent canvas just over the room canvas and the glows under them,
+    // so a glow lies under its subject and never over it.
+    const lit = document.createElement('canvas');
+    lit.className = 'prntr-room-lit';
+    lit.width = W;
+    lit.height = H;
+    lit.setAttribute('aria-hidden', 'true');
+    const lg = lit.getContext('2d', { willReadFrequently: true });
+    if (!lg) throw new Error('prntr: no 2d context');
     // The player's page's content on a canvas at the screen's resolution over the front layer, filling the hole
     // the front leaves inside the thrown page's frame (PRNTR-FIRE.md §18); sized in fit().
     const doc = document.createElement('canvas');
@@ -654,6 +667,9 @@ export const room: Stage = {
     // The room's pixels and the front layer's, presented to their canvases each frame.
     const pix = new Pix();
     const fpix = new Pix();
+    // The lit layer's pixels, and its mask: where the glowing subjects are drawn this frame.
+    const lpix = new Pix();
+    const mpix = new Pix();
     // The slam's ripple: the room (the print under its hole) and the front layer redrawn bent by WebGL, each
     // over the 2D canvas it comes from, while the ripple runs. None under reduced motion, none without WebGL.
     // (The print's canvas is uploaded as it is: it changes only where a shot holes it. The doc canvas fills the
@@ -682,15 +698,20 @@ export const room: Stage = {
     // A near strike reaching into the room: a pale wash over everything, its opacity the storm's.
     const stormWash = el('div', 'prntr-room-storm-wash');
     const wash = el('div', 'prntr-room-wash');
-    // The red glow on everything that can be shot: DOM boxes over the pixel layer,
-    // unpixelated like the door's light. One per projectile, pooled.
-    const glows = el('div', 'prntr-room-glows');
+    // The red glows of the tubes and the button (PRNTR-GLOWS.md): filled shapes on the room canvas, under the lit
+    // layer that redraws their subjects crisp. A spraying tube's follows its hose (pooled); the bright button's is a
+    // gradient box like a thrown thing's.
+    const litGlows = el('div', 'prntr-room-lit-glows');
+    const tubeGlows = el('div', 'prntr-room-tube-glows');
+    const buttonGlow = el('div', 'prntr-room-glow-fill');
+    buttonGlow.hidden = true;
+    litGlows.append(tubeGlows, buttonGlow);
     // The inside of the glows of what the machine throws, under the front layer, so its sprites stay crisp
     // over it and the glow has no hollow where a sprite is open (a staple's loop, a burning page's edges).
     const glowFills = el('div', 'prntr-room-glow-fills');
     // The red lights' wash over the room (under the front layer), faded in by .is-red-lit on the frame.
     const redLight = el('div', 'prntr-room-red-light');
-    for (const n of [light, spill, fireLight, figLight, machineLight, slotLight, holeLights, windowLight, stormWash, wash, glows, glowFills]) n.setAttribute('aria-hidden', 'true');
+    for (const n of [light, spill, fireLight, figLight, machineLight, slotLight, holeLights, windowLight, stormWash, wash, litGlows, glowFills]) n.setAttribute('aria-hidden', 'true');
     const hud = el('div', 'prntr-room-hud');
     const scoreEl = el('div', 'prntr-room-score', 'SCORE 0000');
     const hiEl = el('div', 'prntr-room-hi', 'HI 1337');
@@ -806,7 +827,7 @@ export const room: Stage = {
     const deathEl = el('div', 'prntr-room-death');
     deathEl.setAttribute('aria-hidden', 'true');
     deathEl.hidden = true;
-    frame.append(art, canvas, ...(rippleBack ? [rippleBack.canvas] : []), light, spill, fireLight, figLight, machineLight, slotLight, holeLights, windowLight, glowFills, redLight, front, doc, ...(rippleFront ? [rippleFront.canvas] : []), stormWash, wash, glows, badgeGlow, hud, cursor, hurtEl, deathEl, continueEl, badgeEl, overEl);
+    frame.append(art, canvas, ...(rippleBack ? [rippleBack.canvas] : []), litGlows, lit, light, spill, fireLight, figLight, machineLight, slotLight, holeLights, windowLight, glowFills, redLight, front, doc, ...(rippleFront ? [rippleFront.canvas] : []), stormWash, wash, badgeGlow, hud, cursor, hurtEl, deathEl, continueEl, badgeEl, overEl);
     wrap.append(frame);
     root.append(wrap);
 
@@ -852,7 +873,7 @@ export const room: Stage = {
       buttonBright: false,
       broken: { clock: false, poster: false, tank: false, plant: false, vase: false, kit: false, fig: false, figPot: false, art: false },
       tornSince: 0,
-      safe: { open: 0, drum: true, flash: false, glint: false },
+      safe: { open: 0, magIn: true, flash: false, spin: 0, bob: 0 },
       fig: { fall: 0, burning: false, burn: 0 },
       monstera: { burning: false, burn: 0 },
       clock: { state: 'up', x: CLOCK_AT.x, y: CLOCK_AT.y, rot: 0 },
@@ -987,18 +1008,18 @@ export const room: Stage = {
     let artBrokeAt: number | null = null;
     // ---- the safe (PRNTR-SAFE.md) ----
     /** The digits shot in so far (up to four), the key pressed and since when, the verdict on a full code and since when, when
-     * the code was right (the door swings from OPEN_DELAY_MS after), when the drum was taken; the keypad as last painted. */
+     * the code was right (the door swings from OPEN_DELAY_MS after), when the magazine was taken; the keypad as last painted. */
     let safeEntry = '';
     let safePress: { key: string; at: number } | null = null;
     let safeVerdict: { ok: boolean; at: number } | null = null;
     let safeOpenAt: number | null = null;
     let safeTakenAt: number | null = null;
     let keypadDrawn = '';
-    /** The machine gun: on once the drum is taken; the held button's point (null: not held) and the next round's moment. */
+    /** The machine gun: on once the rifle magazine is taken; the held button's point (null: not held) and the next round's moment. */
     let mg = false;
     let holdV: { x: number; y: number } | null = null;
     let nextHoldAt = 0;
-    /** The magazine: the pistol's SHOTS, the drum's MG_SHOTS. */
+    /** The magazine: the pistol's SHOTS, the rifle magazine's MG_SHOTS. */
     const magSize = () => (mg ? MG_SHOTS : SHOTS);
     /** The flicker: when the next panel comes on, and when each lit one goes out (null: out). */
     let flickerNext = 0;
@@ -1080,7 +1101,7 @@ export const room: Stage = {
       healthFill.style.width = `${(1 - score / HI) * 100}%`;
     };
     const drawHealth = () => {
-      lifeFill.style.width = `${health}%`;
+      lifeFill.style.transform = `scaleX(${health / PLAYER_HEALTH})`;
       lifeEl.setAttribute('aria-label', `${playerName}, health ${health} of ${PLAYER_HEALTH}`);
       // the name wears with the bar: worn at half, rough near the end
       lifeName.classList.toggle('is-worn', health <= WORN_HEALTH && health > ROUGH_HEALTH);
@@ -1612,13 +1633,13 @@ export const room: Stage = {
       reloadSecondAt = now + RELOAD_STEP_MS;
     };
     /** A shot at (x, y) into the safe (PRNTR-SAFE.md): true when the safe took it. A key: pressed, its digit entered, the
-     * fourth judged. The open safe's drum: taken, the gun upgraded. The steel anywhere else in the cavity: a clang, a miss.
+     * fourth judged. The open safe's rifle magazine: taken, the gun upgraded. The steel anywhere else in the cavity: a clang, a miss.
      * A shot into the cavity outside the safe is a wall hole as today (drawHoles draws it over the cavity). */
     const safeHit = (x: number, y: number, now: number): boolean => {
       const px = Math.floor(x), py = Math.floor(y);
       if (safeOpenAt !== null) {
         const open = now - safeOpenAt >= OPEN_DELAY_MS + DOOR_MS || reduced;
-        if (safeTakenAt === null && open && px >= DRUM_BOX.x0 && px < DRUM_BOX.x1 && py >= DRUM_BOX.y0 && py < DRUM_BOX.y1) {
+        if (safeTakenAt === null && open && px >= MAG_BOX.x0 && px < MAG_BOX.x1 && py >= MAG_BOX.y0 && py < MAG_BOX.y1) {
           safeTakenAt = now;
           mg = true;
           shots = MG_SHOTS;
@@ -1627,9 +1648,9 @@ export const room: Stage = {
           reloadOwed = 0;
           while (shotsBtn.children.length < MG_SHOTS) shotsBtn.append(el('span', ''));
           drawShots();
-          sounds.heal();
+          sounds.magIn();
           addScore(BREAK_POINTS, now);
-          ctx.announce('A drum magazine. The gun fires while the button is held: twelve rounds.');
+          ctx.announce('A rifle magazine. The gun fires while the button is held: twelve rounds.');
           return true;
         }
       } else {
@@ -1646,7 +1667,7 @@ export const room: Stage = {
               safeOpenAt = now;
               sounds.safeThunk();
               addScore(BREAK_POINTS, now);
-              ctx.announce('The safe opens. A drum magazine inside.');
+              ctx.announce('The safe opens. A rifle magazine inside.');
             } else {
               sounds.keyErr();
               ctx.announce('Wrong code.');
@@ -1858,7 +1879,7 @@ export const room: Stage = {
         misses++;
         return;
       }
-      // The safe in the wall, once the print is torn (PRNTR-SAFE.md): a key, the drum, or the steel.
+      // The safe in the wall, once the print is torn (PRNTR-SAFE.md): a key, the magazine, or the steel.
       if (scene.broken.art && safeHit(x, y, now)) return;
       // The print: a shot into it is a dark cross on it and a miss (below), until the fifth tears it open: the wall
       // behind it shot through, the roof leak dripping in it (PRNTR-FIRE.md §12). Torn, its rect is wall.
@@ -2205,7 +2226,7 @@ export const room: Stage = {
       t.on = true;
       t.el.classList.add(!reduced && Math.random() < TEAR_DROP ? 'is-dropped' : 'is-torn');
       if (t.el === healthEl) healthFill.style.width = `${Math.random() * 100}%`;
-      else if (t.el === lifeEl) lifeFill.style.width = `${Math.random() * 100}%`;
+      else if (t.el === lifeEl) lifeFill.style.transform = `scaleX(${Math.random()})`;
       else {
         const n = t.el === captionEl ? captionText : t.el;
         if (n.childElementCount === 0 && n.textContent) {
@@ -2639,8 +2660,8 @@ export const room: Stage = {
         fig: () => ({ ...scene.fig, leaves: scene.broken.fig, pot: scene.broken.figPot }),
         monstera: () => ({ ...scene.monstera, down: scene.broken.vase }),
         art: () => ({ shots: artShots, torn: scene.broken.art, since: scene.tornSince }),
-        /** The safe: the digits in, the key pressed, the verdict, the door, whether the drum is still inside; the upgrade and the magazine. */
-        safe: () => ({ entry: safeEntry, press: safePress?.key ?? null, verdict: safeVerdict === null ? 'none' : safeVerdict.ok ? 'ok' : 'err', open: scene.safe.open, drum: safeTakenAt === null, mg, shots, mag: magSize() }),
+        /** The safe: the digits in, the key pressed, the verdict, the door, whether the magazine is still inside (and its hover); the upgrade and the magazine. */
+        safe: () => ({ entry: safeEntry, press: safePress?.key ?? null, verdict: safeVerdict === null ? 'none' : safeVerdict.ok ? 'ok' : 'err', open: scene.safe.open, magIn: safeTakenAt === null, bob: scene.safe.bob, spin: scene.safe.spin, mg, shots, mag: magSize() }),
         /** Shots that hit nothing (the steel counts as one). */
         misses: () => misses,
         wreck: () => scene.printer === 'wreck',
@@ -2942,24 +2963,17 @@ export const room: Stage = {
     };
 
     // ---- render -----------------------------------------------------------
-    // A glow box per projectile in flight (never a landed page: it cannot be shot),
-    // in screen px over the frame; spare boxes are hidden.
+    // The glows (PRNTR-GLOWS.md), in screen px over the frame; spare boxes are hidden. Each is a filled shape under
+    // its subject: a thrown thing in flight (never a landed page: it cannot be shot) on the glow-fill layer under the
+    // front canvas; the bright button and a spraying tube on the lit-glows layer under the lit canvas.
     const drawGlows = (now: number) => {
-      const rects: { x: number; y: number; w: number; h: number }[] = [];
-      for (const s of staples) if (now >= s.at && !s.hit && !s.shot) rects.push(staplePose(s, now));
-      for (const p of pages) if (now >= p.at && !p.shot && p.landedAt === null) rects.push(pagePose(p, now));
-      for (const s of sprays) {
-        if (!spraying(s, now)) continue;
-        const tb = poseTube(s.nx, 1, now);
-        const hx = tubeX(tb, tb.top);
-        rects.push({ x: Math.min(s.nx, hx) - 3 + scene.shake.x, y: tb.top + scene.shake.y, w: Math.abs(hx - s.nx) + 6, h: TUBE_BASE - tb.top });
-      }
-      // the thrown things (the staples, nuts and bolts, then the pages) glow under the front layer, as one
-      // gradient on a box GLOW_PAD wider a side; the tubes and the button keep the outer glow over everything
-      const thrown = rects.splice(0, staples.filter((s) => now >= s.at && !s.hit && !s.shot).length + pages.filter((p) => now >= p.at && !p.shot && p.landedAt === null).length);
-      if (scene.buttonBright) rects.push({ ...BUTTON, x: BUTTON.x + scene.shake.x, y: BUTTON.y + scene.shake.y });
-      placeGlows(glows, 'prntr-room-glow', rects);
-      placeGlows(glowFills, 'prntr-room-glow-fill', thrown.map((r) => ({ x: r.x - GLOW_PAD, y: r.y - GLOW_PAD, w: r.w + 2 * GLOW_PAD, h: r.h + 2 * GLOW_PAD })));
+      const thrown: GlowBox[] = [];
+      for (const s of staples) if (now >= s.at && !s.hit && !s.shot) thrown.push(staplePose(s, now));
+      for (const p of pages) if (now >= p.at && !p.shot && p.landedAt === null) thrown.push(pagePose(p, now));
+      placeGlows(glowFills, 'prntr-room-glow-fill', thrown.map(padGlow));
+      buttonGlow.hidden = !scene.buttonBright;
+      if (scene.buttonBright) placeBox(buttonGlow, padGlow({ ...BUTTON, x: BUTTON.x + scene.shake.x, y: BUTTON.y + scene.shake.y }));
+      placeTubeGlows(sprays.filter((s) => spraying(s, now)).map((s) => poseTube(s.nx, 1, now)));
       // the badge's pulse: only while it can still be picked up, out for good once the USB is clicked
       badgeGlow.hidden = !(scene.badge === 'floor' && (phase === 'look' || phase === 'badge') && plugAt === null);
       if (!badgeGlow.hidden) {
@@ -2969,17 +2983,55 @@ export const room: Stage = {
         badgeGlow.style.width = badgeGlow.style.height = `${2 * BADGE_GLOW_R * scale}px`;
       }
     };
-    const placeGlows = (layer: HTMLElement, cls: string, rects: { x: number; y: number; w: number; h: number }[]) => {
+    /** A sprite's box grown GLOW_PAD a side: the glow's gradient fades out over the pad. */
+    const padGlow = (r: GlowBox): GlowBox => ({ x: r.x - GLOW_PAD, y: r.y - GLOW_PAD, w: r.w + 2 * GLOW_PAD, h: r.h + 2 * GLOW_PAD });
+    const placeBox = (box: HTMLElement, r: GlowBox) => {
+      box.style.left = `${r.x * scale}px`;
+      box.style.top = `${r.y * scale}px`;
+      box.style.width = `${r.w * scale}px`;
+      box.style.height = `${r.h * scale}px`;
+    };
+    const placeGlows = (layer: HTMLElement, cls: string, rects: GlowBox[]) => {
       while (layer.children.length < rects.length) layer.append(el('div', cls));
       Array.from(layer.children).forEach((n, i) => {
         const r = rects[i];
         const box = n as HTMLElement;
         box.hidden = !r;
-        if (!r) return;
-        box.style.left = `${r.x * scale}px`;
-        box.style.top = `${r.y * scale}px`;
-        box.style.width = `${r.w * scale}px`;
-        box.style.height = `${r.h * scale}px`;
+        if (r) placeBox(box, r);
+      });
+    };
+    // A spraying tube's glow: its hose's path from the head down to the machine's edge, stroked wide and blurred
+    // (.prntr-room-tube-glow), in a box GLOW_PAD larger a side than the hose's. A box glow round a snaking hose
+    // would be lit at its rim and hollow inside.
+    const placeTubeGlows = (tubes: Tube[]) => {
+      while (tubeGlows.children.length < tubes.length) {
+        const box = el('div', 'prntr-room-tube-glow');
+        const svg = document.createElementNS(SVG_NS, 'svg');
+        for (const cls of ['is-outer', 'is-inner']) {
+          const path = document.createElementNS(SVG_NS, 'path');
+          path.setAttribute('class', cls);
+          svg.append(path);
+        }
+        box.append(svg);
+        tubeGlows.append(box);
+      }
+      Array.from(tubeGlows.children).forEach((n, i) => {
+        const tb = tubes[i];
+        const box = n as HTMLElement;
+        box.hidden = !tb;
+        if (!tb) return;
+        const hx = tubeX(tb, tb.top);
+        const x0 = Math.min(tb.x, hx) - 3 - GLOW_PAD;
+        const y0 = tb.top - GLOW_PAD;
+        const w = Math.abs(hx - tb.x) + 6 + 2 * GLOW_PAD;
+        const h = TUBE_BASE - tb.top + 2 * GLOW_PAD;
+        placeBox(box, { x: x0 + scene.shake.x, y: y0 + scene.shake.y, w, h });
+        let d = `M${hx - x0} ${tb.top + 2 - y0}`;
+        for (let y = tb.top + 4; y < TUBE_BASE; y += 2) d += `L${tubeX(tb, y) - x0} ${y + 0.5 - y0}`;
+        d += `L${tubeX(tb, TUBE_BASE) - x0} ${TUBE_BASE - y0}`;
+        const svg = box.firstElementChild!;
+        svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
+        for (const path of Array.from(svg.children)) path.setAttribute('d', d);
       });
     };
     // The sign: loose, it hangs from its left corner and swings a little while its letters
@@ -3188,8 +3240,8 @@ export const room: Stage = {
       }
       // The leak's clock, from the break; one still frame under reduced motion (the stain full, a bead at the top).
       scene.tornSince = artBrokeAt === null ? 0 : reduced ? 20_000 : now - artBrokeAt;
-      // The safe's clocks (PRNTR-SAFE.md): the key pressed, the wrong code's ERR, the door, the take's flash, the drum's
-      // glint; the keypad repainted on the art canvas when what it shows changes.
+      // The safe's clocks (PRNTR-SAFE.md): the key pressed, the wrong code's ERR, the door, the take's flash, the magazine's
+      // turn and its hover; the keypad repainted on the art canvas when what it shows changes.
       if (safePress !== null && now - safePress.at >= PRESS_MS) safePress = null;
       if (safeVerdict !== null && !safeVerdict.ok && now - safeVerdict.at >= ERR_MS) {
         safeVerdict = null;
@@ -3198,9 +3250,10 @@ export const room: Stage = {
       const doorOpen = safeOpenAt === null ? 0 : reduced ? 1 : Math.min(1, Math.max(0, (now - safeOpenAt - OPEN_DELAY_MS) / DOOR_MS));
       scene.safe = {
         open: doorOpen,
-        drum: safeTakenAt === null,
+        magIn: safeTakenAt === null,
         flash: safeTakenAt !== null && now - safeTakenAt < TAKE_FLASH_MS,
-        glint: reduced || now % 900 < 200,
+        spin: reduced ? 0 : Math.floor(((now % MAG_SPIN_MS) / MAG_SPIN_MS) * MAG_STEPS),
+        bob: reduced ? 0 : Math.round(((1 - Math.cos((now / MAG_BOB_MS) * 2 * Math.PI)) / 2) * MAG_BOB),
       };
       if (scene.broken.art && doorOpen === 0) {
         const verdict = safeVerdict === null ? 'none' : safeVerdict.ok ? 'ok' : 'err';
@@ -3284,6 +3337,11 @@ export const room: Stage = {
         }
       }
       drawRoom(pix, scene);
+      // The lit layer (PRNTR-GLOWS.md): the room's pixels where the tubes and the bright button show, over their glows.
+      mpix.clear();
+      drawTubes(mpix, scene, CAPS_TOP);
+      if (scene.buttonBright) mpix.rect(BUTTON.x + scene.shake.x, BUTTON.y + scene.shake.y, BUTTON.x + BUTTON.w + scene.shake.x, BUTTON.y + BUTTON.h + scene.shake.y, 'W');
+      lpix.copyMasked(pix, mpix);
       // What the machine throws goes on the front layer, over the slot's light, and the fire's
       // front flames with it: the flames on the burning machine were behind that glow too.
       fpix.clear();
@@ -3415,6 +3473,7 @@ export const room: Stage = {
         drawCross(Math.floor(at.x + k.x), Math.floor(at.y + k.y), Math.round(spreadNow(now)));
       } else if (pointer && phase !== 'badge') cpix.blit(Math.floor(pointer.x) - 2, Math.floor(pointer.y), SPR.POINTER);
       pix.present(g);
+      lpix.present(lg);
       fpix.present(fg);
       cpix.present(cg);
       // The slam's ripple: the pixel world bent, drawn over the 2D layers it comes from (hidden meanwhile).
@@ -3434,6 +3493,7 @@ export const room: Stage = {
       }
       canvas.classList.toggle('is-inverted', invertFrame);
       art.classList.toggle('is-inverted', invertFrame);
+      lit.classList.toggle('is-inverted', invertFrame);
       front.classList.toggle('is-inverted', invertFrame);
       doc.classList.toggle('is-inverted', invertFrame);
       rippleBack?.canvas.classList.toggle('is-inverted', invertFrame);

@@ -1,5 +1,5 @@
 import { ART_AT } from './art';
-import { DISPLAY, DRUM, HANDLE, PAD, REVEAL, SAFE } from './safe';
+import { DISPLAY, HANDLE, MAG_BOX, MAG_FRAMES, MAG_FRAME_AT, PAD, REVEAL, SAFE } from './safe';
 import { SPRITES, type PalKey } from './palette';
 import { H, Pix, W, parseSprite, rotateSprite, sliceRect, type Sprite } from './pixels';
 
@@ -173,6 +173,8 @@ export const NOZZLES: { x: number; color: 'c' | 'm' | 'y' | 'z' }[] = [
   { x: 132, color: 'y' },
   { x: 144, color: 'z' },
 ];
+/** The machine's ink caps' top row: from here down a tube's hose is behind its cap and the machine. */
+export const CAPS_TOP = 77;
 
 /** An ink particle on the far half of its flight, drawn behind the machine. */
 export interface InkDot {
@@ -235,13 +237,16 @@ export const tubeX = (tb: Tube, y: number): number => {
   return Math.round(tb.x + tb.reach * u * u);
 };
 
-/** The safe as the room draws it: the door 0 shut … 1 open, the drum still inside, the take's white flash, the drum's glint.
- * The keypad and the display are the art canvas (safe.ts). */
+/** The safe as the room draws it: the door 0 shut … 1 open, the magazine still inside, the take's white flash, the
+ * magazine turning and how far it has sunk in its hover. The keypad and the display are the art canvas (safe.ts). */
 export interface SafeView {
   open: number;
-  drum: boolean;
+  magIn: boolean;
   flash: boolean;
-  glint: boolean;
+  /** The frame of the magazine's turn, 0 (face on) … MAG_STEPS − 1. */
+  spin: number;
+  /** How far down the hover it is, 0 … MAG_BOB px. */
+  bob: number;
 }
 export interface SceneState {
   /** Left, right fluorescent panel. */
@@ -1043,7 +1048,7 @@ export function drawMachine(p: Painter, s: MachineScene): void {
   rect(73, 90, 74, 143, 'd');
   rect(166, 90, 167, 143, 'g');
   // the ink caps on the back ledge; the shut lid covers their lower rows
-  for (const n of NOZZLES) panel(n.x - 3, 77, n.x + 3, 81, n.color);
+  for (const n of NOZZLES) panel(n.x - 3, CAPS_TOP, n.x + 3, 81, n.color);
   if (m.lid < 0.05) {
     // shut: a lighter slab on the top with a rim and the handle on its front edge
     panel(76, 80, 164, 90, 'T');
@@ -1292,9 +1297,9 @@ export function drawWallHole(p: Pix, since: number, near: number, lit: boolean, 
       else p.set(x, y, 'i');
     }
   }
-  // the safe (PRNTR-SAFE.md): the inside once the door is off its face (black, a steel lining, a shelf; the drum magazine on
-  // it, glinting; white for a beat when it is taken), then the door, hinged on its left: shut, the whole face; opening, the
-  // face narrows to a 2 px slab at the hinge, its thickness seen edge on
+  // the safe (PRNTR-SAFE.md): the inside once the door is off its face (black, a steel lining, a shelf; the rifle magazine
+  // turning and hovering over it; the inside white for a beat when it is taken), then the door, hinged
+  // on its left: shut, the whole face; opening, the face narrows to a 2 px slab at the hinge, its thickness seen edge on
   const inSafe = (x: number, y: number) => x >= SAFE.x0 && x < SAFE.x1 && y >= SAFE.y0 && y < SAFE.y1;
   if (safe.open > 0) {
     for (let y = SAFE.y0; y < SAFE.y1; y++) {
@@ -1304,17 +1309,15 @@ export function drawWallHole(p: Pix, since: number, near: number, lit: boolean, 
         p.set(x, y, safe.flash ? 'W' : edge ? 'X' : y === SAFE.y1 - 2 ? 'G' : 'z');
       }
     }
-    if (safe.drum && !safe.flash) {
-      for (let dy = -4; dy <= 4; dy++) {
-        for (let dx = -4; dx <= 4; dx++) {
-          const d = Math.hypot(dx, dy);
-          if (d > DRUM.r) continue;
-          const x = DRUM.cx + dx, y = DRUM.cy + dy;
-          if (!inside(x, y)) continue;
-          p.set(x, y, dx === 0 && dy === 0 ? 'K' : safe.glint && dx === -1 && dy === -1 ? 'W' : d > 2.8 ? 'K' : dx + dy > 1.5 ? 'o' : 'y');
+    if (safe.magIn && !safe.flash) {
+      const f = MAG_FRAMES[safe.spin], fy = MAG_FRAME_AT.y + safe.bob;
+      f.rows.forEach((row, dy) => {
+        for (let dx = 0; dx < f.w; dx++) {
+          const ch = row[dx], x = MAG_FRAME_AT.x + dx, y = fy + dy;
+          if (ch === '.' || !inside(x, y) || x < MAG_BOX.x0 || x >= MAG_BOX.x1 || y < MAG_BOX.y0 || y >= MAG_BOX.y1) continue;
+          p.set(x, y, ch as PalKey);
         }
-      }
-      for (let y = DRUM.cy + 4; y < DRUM.cy + 6; y++) for (let x = DRUM.cx - 1; x <= DRUM.cx + 1; x++) if (inside(x, y)) p.set(x, y, y === DRUM.cy + 4 ? 'K' : 'G');
+      });
     }
   }
   const dw = safe.open === 0 ? SAFE.x1 - SAFE.x0 : Math.max(2, Math.round((SAFE.x1 - SAFE.x0) * (1 - safe.open)));
@@ -1414,6 +1417,21 @@ export function drawWallHole(p: Pix, since: number, near: number, lit: boolean, 
       const y = Math.floor(cy + ry * 0.6 + (since / 500) * (6 + hash(i) * 10) * (0.5 + hash(i * 3)));
       if (y <= floorY) p.set(x, y, hash(i * 7) > 0.5 ? 'T' : 'w');
     }
+  }
+}
+
+/** The ink tubes up from behind the machine, their rows above `below`: a ribbed hose (row by row, so it can snake),
+ * its head, the ink in its mouth. They are attached to the machine, so they shake with it (PRNTR-PLANNING.md P3).
+ * The room draws them to 90, under the machine; the lit layer's mask to CAPS_TOP (PRNTR-GLOWS.md). */
+export function drawTubes(p: Pix, s: Pick<SceneState, 'tubes' | 'shake'>, below: number): void {
+  const { x: sx, y: sy } = s.shake;
+  for (const tb of s.tubes) {
+    for (let y = tb.top + 4; y < below; y++) {
+      const cx = tubeX(tb, y) + sx;
+      p.rect(cx - 2, y + sy, cx + 2, y + sy + 1, 'K');
+      p.rect(cx - 1, y + sy, cx + 1, y + sy + 1, (y - tb.top) % 2 === 0 ? 'G' : 'i');
+    }
+    p.blit(tubeX(tb, tb.top) - 3 + sx, tb.top + sy, SPR.TUBE_HEAD, 1, { remap: { c: tb.color } });
   }
 }
 
@@ -1579,18 +1597,9 @@ export function drawRoom(p: Pix, s: SceneState): void {
   }
   else if (s.broken.plant) p.blit(MONSTERA_AT.bare.x, MONSTERA_AT.bare.y, SPR.MONSTERA_BARE);
   else p.blit(MONSTERA_AT.whole.x, MONSTERA_AT.whole.y, SPR.MONSTERA);
-  // the ink tubes up from behind the machine: a ribbed hose (row by row, so it can snake), its
-  // head, the ink in its mouth; the machine covers the hose's foot, the ink in the air is drawn over
-  // them. They are attached to the machine, so they shake with it (PRNTR-PLANNING.md P3).
+  // the ink tubes up from behind the machine; the machine covers the hose's foot, the ink in the air is drawn over them
+  drawTubes(p, s, 90);
   const { x: sx, y: sy } = s.shake;
-  for (const tb of s.tubes) {
-    for (let y = tb.top + 4; y < 90; y++) {
-      const cx = tubeX(tb, y) + sx;
-      p.rect(cx - 2, y + sy, cx + 2, y + sy + 1, 'K');
-      p.rect(cx - 1, y + sy, cx + 1, y + sy + 1, (y - tb.top) % 2 === 0 ? 'G' : 'i');
-    }
-    p.blit(tubeX(tb, tb.top) - 3 + sx, tb.top + sy, SPR.TUBE_HEAD, 1, { remap: { c: tb.color } });
-  }
   // the stumps of the tubes shot to pieces: a ragged end of hose just over the edge
   for (const x0 of s.stubs) {
     const x = x0 + sx;

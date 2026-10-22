@@ -119,6 +119,8 @@ export interface RoomSounds {
   burst(): void;
   /** The first aid kit shot: a clasp's snap and a rising three-note chime. */
   heal(): void;
+  /** The safe's rifle magazine shot: it slides into the gun and seats, the catch clicks, the bolt is racked; about 0.5 s. */
+  magIn(): void;
   /** A tube shot to pieces: a pop, the hose's hiss, its bits clattering down. */
   tubeBurst(): void;
   /** Ink landing in the fire: a hiss of steam. */
@@ -181,6 +183,7 @@ const SILENT: RoomSounds = {
   sizzle: noop,
   tubeBurst: noop,
   heal: noop,
+  magIn: noop,
   fanfare: noop,
 };
 
@@ -803,6 +806,22 @@ export function createRoomSounds(audio: PrntrAudio): RoomSounds {
         tone(t + 0.06 + i * 0.09, 0.3, { f0, gain: 0.22, attack: 0.005, decay: 0.08 });
         tone(t + 0.06 + i * 0.09, 0.12, { type: 'square', f0: f0 / 2, gain: 0.06, attack: 0.005, release: 0.03 });
       });
+    },
+    // the rifle magazine into the gun, a longer, heavier reload: steel sliding along the well for 90 ms, the seat (a
+    // clunk lower than the reload's) with the catch's click on it, then the bolt pulled back (a scrape at 0.3 s) and let
+    // go (a slam, a snap and a ring at 0.42 s)
+    magIn() {
+      const t = now();
+      noise(t, 0.09, { hp: 1500, lp: 5000, gain: 0.18 });
+      noise(t + 0.09, 0.06, { lp: 1400, gain: 0.6, decay: 0.012 });
+      tone(t + 0.09, 0.08, { f0: 220, f1: 90, gain: 0.45, decay: 0.02 });
+      noise(t + 0.1, 0.015, { hp: 3000, gain: 0.5, decay: 0.002 });
+      tone(t + 0.1, 0.03, { f0: 3000, f1: 2400, gain: 0.15, decay: 0.005 });
+      noise(t + 0.3, 0.07, { hp: 1800, lp: 7000, gain: 0.35, decay: 0.02 });
+      noise(t + 0.42, 0.06, { lp: 1500, gain: 0.55, decay: 0.012 });
+      tone(t + 0.42, 0.08, { f0: 200, f1: 80, gain: 0.4, decay: 0.02 });
+      noise(t + 0.42, 0.015, { hp: 2500, gain: 0.45, decay: 0.002 });
+      tone(t + 0.42, 0.04, { f0: 3400, f1: 2200, gain: 0.18, decay: 0.006 });
     },
     // a tube blown up: a crack and a 120 ms burst, a short hiss of the hose venting, and two
     // small clatters of its bits coming down at 0.25 and 0.4 s
