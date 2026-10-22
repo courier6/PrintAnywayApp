@@ -1679,6 +1679,9 @@ export const room: Stage = {
         if (y < FLOOR_Y) addHole('wall', x, y);
       }
     };
+    // Whether a hole's storm light is out: the same test drawHoles uses to leave the hole undrawn (in the doorway the
+    // door has swung off it, a broken door and a shot-open blind took their holes with them).
+    const holeHidden = (h: Hole) => inDoorway(h, scene.doorGap) || (h.kind === 'door' && scene.doorBroken) || (h.kind === 'window' && scene.windowOpen);
     // A hole where the shot landed; through the door or the blind, the storm's light in it. Every hole in
     // the door counts toward its breaking.
     const addHole = (kind: Hole['kind'], x: number, y: number, now = 0) => {
@@ -1705,7 +1708,7 @@ export const room: Stage = {
       const box = el('div', 'prntr-room-hole-light');
       box.style.left = `calc(${hole.x - 1}px * var(--s))`;
       box.style.top = `calc(${hole.y - 1}px * var(--s))`;
-      box.hidden = inDoorway(hole, scene.doorGap);
+      box.hidden = holeHidden(hole);
       holeLightOf.set(hole, box);
       holeLights.append(box);
       if (kind === 'door') {
@@ -1726,7 +1729,7 @@ export const room: Stage = {
       scene.doorBroken = true;
       doorOpenAt = null;
       scene.doorGap = DOOR_OPEN;
-      for (const [hole, box] of holeLightOf) if (hole.kind === 'door') box.hidden = true;
+      for (const [hole, box] of holeLightOf) box.hidden = holeHidden(hole);
       frame.classList.add('is-open');
       sounds.doorBreak();
       addScore(BREAK_POINTS, now);
@@ -1749,7 +1752,7 @@ export const room: Stage = {
     const breakWindow = (now: number) => {
       scene.windowOpen = true;
       frame.classList.add('is-window-open');
-      for (const [hole, box] of holeLightOf) if (hole.kind === 'window') box.hidden = true;
+      for (const [hole, box] of holeLightOf) box.hidden = holeHidden(hole);
       sounds.shatter();
       // the slats clattering down after the crack
       window.setTimeout(() => {
@@ -2755,7 +2758,7 @@ export const room: Stage = {
       if (scene.doorGap !== lightGap) {
         lightGap = scene.doorGap;
         light.style.width = `calc(${lightGap}px * var(--s))`;
-        for (const [hole, box] of holeLightOf) box.hidden = inDoorway(hole, scene.doorGap);
+        for (const [hole, box] of holeLightOf) box.hidden = holeHidden(hole);
       }
     };
     /** The spread onto the machine, 0..1; once the machine has burst it rages on, up to 1 + RAGE_MORE
