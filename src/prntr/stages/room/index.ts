@@ -1,6 +1,6 @@
 import { reducedMotion, wait } from '../../anim';
 import type { Handoff, RunStats, Stage } from '../../types';
-import { H, Pix, W, rotateSprite } from './pixels';
+import { H, Pix, W, frameScale, rotateSprite } from './pixels';
 import { BADGE_AT, CLOCK_AT, GLASS, KIT_AT, KNOB, MACHINE_AT, MACHINE_PIECES, NOZZLES, SPR, drawFireFront, drawFlame, drawMarks, drawRoom, drawWindowWreck, figLeaf, fireRect, inDoorway, knobX, lampX, markBox, tubeX, type Broken, type ExitSign, type Hole, type Mark, type SceneState, type Tube } from './scene';
 import { ART_AT, ART_SUB, renderVictory } from './art';
 import { PAL, type PalKey } from './palette';
@@ -750,15 +750,15 @@ export const room: Stage = {
     wrap.append(frame);
     root.append(wrap);
 
-    // ---- fit: the largest whole-number scale, letterboxed in black --------
+    // ---- fit: the largest scale that is a whole number of device px per virtual px, letterboxed in black --------
     let scale = 1;
     const fit = () => {
-      scale = Math.max(1, Math.floor(Math.min(root.clientWidth / W, root.clientHeight / H)));
+      scale = frameScale(root.clientWidth, root.clientHeight);
       frame.style.width = `${W * scale}px`;
       frame.style.height = `${H * scale}px`;
       frame.style.setProperty('--s', String(scale));
       frame.classList.toggle('is-small', scale <= 3);
-      const px = scale * (window.devicePixelRatio || 1);
+      const px = Math.round(scale * (window.devicePixelRatio || 1));
       rippleBack?.resize(px);
       rippleFront?.resize(px);
     };
