@@ -1135,6 +1135,27 @@ export const room: Stage = {
       scheduleBlink(now, BLINK_FIRST_MS);
       ctx.announce(`The printer is open. Protect yourself. ${touch ? 'Tap' : 'Click'} to shoot.`);
     };
+    // The room unfreezes. The frame was drawn at the time it froze (render(frozenAt)), so everything the room's own clock
+    // runs, the short, the fire, its spread, the door, the storm and the sign and the clock, moves on by the time it was
+    // frozen: it goes on from the frame that was seen, and does not jump ahead by the 1.2 s beat or the CONTINUE? count.
+    const thaw = (now: number) => {
+      if (frozenAt === null) return;
+      const d = now - frozenAt;
+      frozenAt = null;
+      if (shortAt !== null) shortAt += d;
+      if (fireAt !== null) fireAt += d;
+      if (spreadAt !== null) spreadAt += d;
+      if (doorAt !== null) doorAt += d;
+      if (doorOpenAt !== null) doorOpenAt += d;
+      stokeAt += d;
+      nextStrike += d;
+      nextFar += d;
+      strikeAt += d;
+      farAt += d;
+      lastNear += d;
+      exitAt += d;
+      clockAt += d;
+    };
     const startContinue = (now: number) => {
       phase = 'continue';
       phaseAt = now;
@@ -1157,7 +1178,7 @@ export const room: Stage = {
       audio.play(audio.cues.creditA);
       continueEl.hidden = true;
       continued = true;
-      frozenAt = null;
+      thaw(now);
       lives = LIVES_CONTINUE;
       health = PLAYER_HEALTH;
       drawHealth();
@@ -2352,6 +2373,12 @@ export const room: Stage = {
         storm: () => ({ ...scene.storm }),
         stormLevel: () => stormLevel,
         strike: () => strike(performance.now()),
+        /** The storm's and the fire's absolute times, and whether the room is frozen; `dueStrike` makes the next strike due. */
+        clocks: () => ({ nextStrike, nextFar, strikeAt, farAt, fireAt, spreadAt, frozen: frozenAt !== null }),
+        dueStrike: () => {
+          nextStrike = performance.now();
+        },
+        shots: () => shots,
         short: () => shortAt !== null,
         fire: () => fireAt !== null,
         fireU: () => fireU(performance.now()),
@@ -2509,7 +2536,7 @@ export const room: Stage = {
       if (hintHideAt && now >= hintHideAt) hideHint();
       poseName(now);
       // The short: a zap at each of its moments, then the fire.
-      if (shortAt !== null) {
+      if (shortAt !== null && frozenAt === null) {
         while (shortZaps < SHORT_ZAPS_MS.length && now - shortAt >= SHORT_ZAPS_MS[shortZaps]) {
           shortZaps++;
           zap(now);
@@ -2517,11 +2544,12 @@ export const room: Stage = {
         if (now - shortAt >= SHORT_MS) startFire(now);
       }
       if (fireAt !== null) fireSound?.setLevel(fireU(now) + 0.5 * spreadU(now) + (now - stokeAt < STOKE_FLARE_MS ? 0.3 : 0));
-      if (fireAt !== null && !mad && now - fireAt >= MAD_AFTER_MS) {
+      if (fireAt !== null && !mad && frozenAt === null && now - fireAt >= MAD_AFTER_MS) {
         mad = true;
         frame.classList.add('is-mad');
       }
-      // The falling sign lands (not while the room is frozen).
+      // The falling sign lands, the door swings, the storm strikes (none of it while the room is frozen: the frame drawn
+      // is the frozen one, and a thing stamped with the live time would be drawn with a negative age).
       if (scene.exit.state === 'falling' && frozenAt === null && now - exitAt >= (reduced ? 0 : EXIT_FALL_MS)) {
         scene.exit.state = 'down';
         scene.exit.x = EXIT_FLOOR.x;
@@ -2529,13 +2557,13 @@ export const room: Stage = {
         sounds.signCrash();
         doorAt = now + DOOR_DELAY_MS;
       }
-      if (doorAt !== null && now >= doorAt) {
+      if (doorAt !== null && frozenAt === null && now >= doorAt) {
         doorAt = null;
         swingDoor(now);
       }
       // The storm: a near strike now and then, far lightning between.
-      if (now >= nextStrike) strike(now);
-      if (now >= nextFar) farStrike(now);
+      if (frozenAt === null && now >= nextStrike) strike(now);
+      if (frozenAt === null && now >= nextFar) farStrike(now);
       // The clock: lands, comes to rest, catches fire by the burning cooler, rolls out (not while frozen).
       if (frozenAt === null) {
         const ck = scene.clock;
@@ -2577,7 +2605,7 @@ export const room: Stage = {
         if (deathUntil) {
           if (now < deathUntil) return;
           deathUntil = 0;
-          frozenAt = null;
+          thaw(now);
           deathEl.hidden = true;
           health = PLAYER_HEALTH;
           drawHealth();
