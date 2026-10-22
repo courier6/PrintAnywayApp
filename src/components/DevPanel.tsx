@@ -125,6 +125,7 @@ function NumberSet({ label, max, min, onSet, disabled }: { label: string; max: n
 }
 
 const SHOTS = '/__dev/screenshots';
+const WRITE = { 'X-Dev-Screenshots': '1' }; // the endpoint refuses writes without it (vite.config.ts)
 
 /** The drop zone: an image dragged here (the macOS screenshot thumbnail) is saved by the dev server into screenshots/. */
 function ScreenshotDrop() {
@@ -151,7 +152,7 @@ function ScreenshotDrop() {
         continue;
       }
       try {
-        const res = await fetch(`${SHOTS}?name=${encodeURIComponent(file.name)}`, { method: 'POST', body: file });
+        const res = await fetch(`${SHOTS}?name=${encodeURIComponent(file.name)}`, { method: 'POST', headers: WRITE, body: file });
         const body = (await res.json()) as { path?: string; count?: number; error?: string };
         if (!res.ok || !body.path) throw new Error(body.error ?? `HTTP ${res.status}`);
         setLast(body.path);
@@ -206,7 +207,7 @@ function ScreenshotDrop() {
           disabled={!count}
           onClick={() => {
             if (!confirm(`Delete ${count} screenshots?`)) return;
-            void fetch(SHOTS, { method: 'DELETE' }).then(() => {
+            void fetch(SHOTS, { method: 'DELETE', headers: WRITE }).then(() => {
               setLast(null);
               setNote('cleared');
               void refresh();

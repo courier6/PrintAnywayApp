@@ -313,6 +313,9 @@ function devScreenshots(): Plugin {
       server.middlewares.use('/__dev/screenshots', (req, res) => {
         try {
           if (req.method === 'GET') return send(res, 200, { count: images().length, dir });
+          // a custom header makes a browser preflight any cross-site request, and the preflight is refused, so
+          // only the dev panel's own page can write or delete (a plain POST from another site would not be asked)
+          if (req.headers['x-dev-screenshots'] !== '1') return send(res, 403, { error: 'missing X-Dev-Screenshots' });
           if (req.method === 'DELETE') {
             for (const f of images()) unlinkSync(resolve(dir, f));
             return send(res, 200, { count: 0 });
