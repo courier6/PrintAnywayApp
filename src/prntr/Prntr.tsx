@@ -96,12 +96,15 @@ export default function Prntr({ source, recolored, inkHex, stage, audioContext, 
     const controller = new AbortController();
     keepPrntrAudio();
     let finished = false;
-    // Without a gesture before Prntr opened (the dev entrance), the browser keeps
-    // the context suspended: unlock it on the first press so later cues play.
-    if (audioContext?.state === 'suspended') {
-      const unlock = () => void audioContext.resume().catch(() => undefined);
-      window.addEventListener('pointerdown', unlock, { once: true, signal: controller.signal });
-      window.addEventListener('keydown', unlock, { once: true, signal: controller.signal });
+    // The context is brought back on every press and key, not only the first: without a gesture before Prntr opened (the dev
+    // entrance) the browser keeps it suspended until one, and iOS interrupts it for a call or an app switch ('interrupted',
+    // or suspended again), which would leave the rest of the run silent.
+    if (audioContext) {
+      const unlock = () => {
+        if (audioContext.state !== 'running' && audioContext.state !== 'closed') void audioContext.resume().catch(() => undefined);
+      };
+      window.addEventListener('pointerdown', unlock, { signal: controller.signal });
+      window.addEventListener('keydown', unlock, { signal: controller.signal });
     }
     // Start the webfonts now; stage 0 holds its card until they are in.
     const fontsReady = Promise.all([

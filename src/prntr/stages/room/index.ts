@@ -672,6 +672,9 @@ export const room: Stage = {
     const hintEl = el('div', 'prntr-room-hint');
     hintEl.setAttribute('aria-hidden', 'true');
     const touch = window.matchMedia('(hover: none)').matches;
+    /** Whether the last pointer was a finger. `touch` is the device (no hover); a touchscreen laptop has both a mouse and taps, and the
+     * cross shows by the pointer, so the daze and the bloom follow the pointer too: a tap must not land off where it was with no cross to show why. */
+    let touched = touch;
     hintEl.append(el('div', 'prntr-room-hint-title', 'PROTECT YOURSELF.'), el('div', 'prntr-room-hint-keys', touch ? 'TAP TO SHOOT' : 'CLICK TO SHOOT'));
     hintEl.hidden = true;
     hud.append(scoreEl, hiEl, creditEl, captionEl, healthEl, healthName, lifeEl, lifeName, pipsEl, shotsBtn, hintEl);
@@ -1457,7 +1460,7 @@ export const room: Stage = {
     /** The cross's wander from the flash's daze now (none when steady, none under reduced motion, none on
      * touch: a tap would land off where it was with no cross to show why, so touch takes the open bloom instead). */
     const dazeNow = (now: number) => {
-      if (dazeAt === null || steady || reduced || touch) return { x: 0, y: 0 };
+      if (dazeAt === null || steady || reduced || touched) return { x: 0, y: 0 };
       const u = (now - dazeAt) / DAZE_MS;
       if (u >= 1) return { x: 0, y: 0 };
       const a = DAZE_PX * Math.pow(1 - u, 1.2);
@@ -1918,7 +1921,7 @@ export const room: Stage = {
           washAt = performance.now();
           // the player is dazed by it: the cross wanders (or, under reduced motion and on touch, its bloom opens all the way)
           dazeAt = washAt;
-          if ((reduced || touch) && !steady) {
+          if ((reduced || touched) && !steady) {
             heat = BLOOM_MAX - BLOOM_BASE;
             heatAt = washAt;
           }
@@ -2234,6 +2237,7 @@ export const room: Stage = {
     frame.addEventListener(
       'pointermove',
       (e) => {
+        touched = e.pointerType === 'touch';
         if (e.pointerType !== 'touch' && phase !== 'badge') pointer = toVirtual(e);
       },
       { signal },
@@ -2244,6 +2248,7 @@ export const room: Stage = {
       'pointerdown',
       (e) => {
         const now = performance.now();
+        touched = e.pointerType === 'touch';
         // the card up: a press on the dim sets the name (or puts the badge down); the card and the input do their own work
         if (phase === 'badge') {
           if (e.target === badgeEl) closeBadge(true);
