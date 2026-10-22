@@ -1618,8 +1618,9 @@ export const room: Stage = {
           return;
         }
       }
-      // The button: more damage, and the machine answers faster. Bright or not.
-      if (x >= BUTTON.x - BUTTON_HIT_PAD && x < BUTTON.x + BUTTON.w + BUTTON_HIT_PAD && y >= BUTTON.y - BUTTON_HIT_PAD && y < BUTTON.y + BUTTON.h + BUTTON_HIT_PAD) {
+      // The button: more damage, and the machine answers faster. Bright or not. (Not once the machine has burst into its
+      // pieces: where it stood is the wall behind it then, and a shot there is a miss.)
+      if (scene.printer !== 'wreck' && x >= BUTTON.x - BUTTON_HIT_PAD && x < BUTTON.x + BUTTON.w + BUTTON_HIT_PAD && y >= BUTTON.y - BUTTON_HIT_PAD && y < BUTTON.y + BUTTON.h + BUTTON_HIT_PAD) {
         flashFrames = HIT_FLASH_FRAMES;
         stoke(x, y, now);
         rage = Math.min(RAGE_MAX, rage + 1);
@@ -1628,7 +1629,7 @@ export const room: Stage = {
         addScore(BUTTON_POINTS, now);
         return;
       }
-      if (x >= MACHINE.x0 && x < MACHINE.x1 && y >= MACHINE.y0 && y < MACHINE.y1) {
+      if (scene.printer !== 'wreck' && x >= MACHINE.x0 && x < MACHINE.x1 && y >= MACHINE.y0 && y < MACHINE.y1) {
         flashFrames = HIT_FLASH_FRAMES;
         stoke(x, y, now);
         addScore(HIT_POINTS, now);
