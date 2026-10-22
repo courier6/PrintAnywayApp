@@ -364,28 +364,6 @@ export function fireRect(u: number): { x0: number; x1: number; y0: number; y1: n
   return { x0: Math.round(cx - w), x1: Math.round(cx + w), y0: 146 - Math.round(h), y1: 146 };
 }
 
-/**
- * One flame: a dome of columns of height h over half-width w, standing on `floor`, each
- * column flickering by its own hash (seeded) every 50 ms; yellow at the floor, orange, red
- * at the tips, a spark now and then above them.
- */
-export function drawFlame(p: Pix, cx: number, w: number, h: number, floor: number, seed: number, t: number): void {
-  if (h < 1 || w < 1) return;
-  const tick = Math.floor(t / 50);
-  for (let x = Math.round(cx - w); x <= Math.round(cx + w); x++) {
-    const k = (x - cx) / w;
-    const n = 0.5 * (hash(x * 31 + tick * 7 + seed) + hash((x + 1) * 31 + tick * 7 + seed));
-    const col = h * Math.sqrt(Math.max(0, 1 - k * k)) * (0.65 + 0.35 * n);
-    if (col < 1) continue;
-    const top = floor - col;
-    for (let y = Math.ceil(top); y < floor; y++) {
-      const q = (floor - y) / col;
-      p.set(x, y, q < 0.35 ? 'y' : q < 0.7 ? 'o' : 'R');
-    }
-    if (n > 0.93) p.set(x, Math.ceil(top) - 2 - (Math.floor(n * 100) % 4), 'o');
-  }
-}
-
 /** A later flame's own growth: 0 until the fire reaches `from`, 1 when it is full. */
 const later = (u: number, from: number) => Math.max(0, Math.min(1, (u - from) / (1 - from)));
 

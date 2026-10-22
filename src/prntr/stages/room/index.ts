@@ -1,7 +1,7 @@
 import { reducedMotion, wait } from '../../anim';
 import type { Handoff, RunStats, Stage } from '../../types';
 import { H, Pix, W, frameScale, rotateSprite } from './pixels';
-import { ART_BREAK_SHOTS, BADGE_AT, CLOCK_AT, FIRE_TICK_MS, GLASS, KIT_AT, KNOB, MACHINE_AT, MACHINE_PIECES, NOZZLES, SPR, drawFireFront, drawFlame, drawMarks, drawRoom, drawWindowWreck, figEmitters, figLeaf, fireEmitters, fireRect, inDoorway, knobX, lampX, markBox, monsteraEmitters, tubeX, type Broken, type Emitter, type ExitSign, type Hole, type Mark, type Rect, type SceneState, type Tube } from './scene';
+import { ART_BREAK_SHOTS, BADGE_AT, CLOCK_AT, FIRE_TICK_MS, GLASS, KIT_AT, KNOB, MACHINE_AT, MACHINE_PIECES, NOZZLES, SPR, drawFireFront, drawFlames, drawMarks, drawRoom, drawWindowWreck, figEmitters, figLeaf, fireEmitters, fireRect, inDoorway, knobX, lampX, markBox, monsteraEmitters, tubeX, type Broken, type Emitter, type ExitSign, type Hole, type Mark, type Rect, type SceneState, type Tube } from './scene';
 import { ART_AT, ART_SUB, renderVictory } from './art';
 import { PAL, type PalKey } from './palette';
 import { createRoomSounds, type FireSound, type Hum } from './sounds';
@@ -3111,20 +3111,27 @@ export const room: Stage = {
         const spr = rotateSprite(d.kind === 'nut' ? SPR.NUT : d.kind === 'staple' ? SPR.STAPLE : SPR.BOLT, Math.floor(a / DROP_SPIN_MS) % 4);
         fpix.blit(Math.floor(d.x - (spr.w * sc) / 2 + 8 * k), Math.floor(d.y + DROP_GRAVITY * k * k + 10 * k - (spr.h * sc) / 2), spr, sc);
       }
-      // A burning page (thrown while the machine burns) carries flames up its face, from its
-      // bottom edge, scaled with it; its paper is scorched at the edges.
-      const pageFire = (x: number, y: number, w: number, h: number, seed: number) => {
-        drawFlame(fpix, x + w / 2, w / 2 - 1, h * 0.8, y + h, seed, reduced ? 0 : now);
-      };
+      // A burning page (thrown while the machine burns) carries the fire's flames up its face, from its
+      // bottom edge, scaled with it: a tongue up the middle and a lower lick at each quarter, like the main
+      // fire's three. Its paper is scorched at the edges. The flames go in one layer per pass, drawn over
+      // the pages of that pass; they follow a page in flight every frame and step at the fire's 10 fps.
+      const pageFire = (x: number, y: number, w: number, h: number, seed: number): Emitter[] => [
+        { x: x + w / 2, floor: y + h, w: w / 2 - 1, h: h * 0.8, seed },
+        { x: x + w * 0.25, floor: y + h, w: w * 0.22, h: h * 0.5, seed: seed + 1 },
+        { x: x + w * 0.75, floor: y + h, w: w * 0.22, h: h * 0.55, seed: seed + 2 },
+      ];
+      const flying: Emitter[] = [];
       for (const p of pages) {
         if (p.shot || now < p.at || p.landedAt !== null) continue;
         const r = pagePose(p, now);
         const spr = SPR.PAGE_PRINTED;
         if (r.h < spr.h) fpix.blit(r.x, r.y, { w: spr.w, h: r.h, rows: spr.rows.slice(0, r.h) });
         else fpix.blit(r.x, r.y, spr, r.w / spr.w, p.burning ? { remap: { K: 'G', w: 'r' } } : {});
-        if (p.burning && r.h >= spr.h) pageFire(r.x, r.y, r.w, r.h, 600 + p.x1);
+        if (p.burning && r.h >= spr.h) flying.push(...pageFire(r.x, r.y, r.w, r.h, 600 + p.x1));
       }
+      if (flying.length) drawFlames(fpix, 'pages', flying, reduced ? 0 : now);
       // A page on the glass: big, at a slight angle, then it slides off.
+      const landed: Emitter[] = [];
       for (const p of pages) {
         if (p.landedAt === null) continue;
         const lt = now - p.landedAt;
@@ -3132,8 +3139,9 @@ export const room: Stage = {
         const lx = Math.floor(p.x1 - 20);
         const ly = Math.floor(p.y1 - 26 + slide);
         fpix.blit(lx, ly, SPR.PAGE_PRINTED, 4, { skew: 10, ...(p.burning ? { remap: { K: 'G', w: 'r' } } : {}) });
-        if (p.burning) pageFire(lx + 3, ly, 40, 52, 700 + p.x1);
+        if (p.burning) landed.push(...pageFire(lx + 3, ly, 40, 52, 700 + p.x1));
       }
+      if (landed.length) drawFlames(fpix, 'pagesLanded', landed, reduced ? 0 : now);
       // Ink: the particles on the near half of their flight (the far half is behind the machine),
       // and the splat building up on the glass, then running down.
       for (const s of sprays) {
