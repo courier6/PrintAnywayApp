@@ -30,6 +30,7 @@ const KIND_BY_CODE: Record<ErrorCode, ErrorKind> = {
 /** The document the certificate replaced, as the vortex brings it back (PRNTR-VORTEX.md). */
 interface OriginalDocument {
   pages: PageSnapshot;
+  pageCount: number; // the whole document's: more than pages.length when it was won while still rendering
   file: File | null;
   fileName: string;
   format: ExportFormat;
@@ -301,18 +302,7 @@ export default function App() {
       docRef.current = doc;
       store.reset(doc.pageCount);
       setPageCount(doc.pageCount);
-      for (let i = 0; i < doc.pageCount; i++) {
-        const { canvas, sizePt } = await doc.renderPage(i);
-        if (token !== runToken.current) return;
-        store.setSource(i, canvas, sizePt);
-        store.ensureRecolored(i, inkRef.current);
-        setProcessedCount(i + 1);
-        setPagesVersion((v) => v + 1);
-        if (i === 0) setAppState('preview');
-        // Yield to the UI between pages so progress and preview stay live.
-        await new Promise((r) => setTimeout(r, 0));
-        if (token !== runToken.current) return;
-      }
+      await renderPages(doc, 0, token);
     } catch (err) {
       if (token !== runToken.current) return;
       // A print or download waiting on the pages that will never come gives up.
@@ -321,6 +311,43 @@ export default function App() {
       logAppError(code, err, lastFile.current);
       setErrorInfo({ code, kind: KIND_BY_CODE[code] });
       setAppState('error');
+    }
+  }
+
+  // Pages `from` to the end, in order, into the store; the first one shows the preview. Stops when a newer document starts.
+  async function renderPages(doc: SourceDocument, from: number, token: number) {
+    for (let i = from; i < doc.pageCount; i++) {
+      const { canvas, sizePt } = await doc.renderPage(i);
+      if (token !== runToken.current) return;
+      store.setSource(i, canvas, sizePt);
+      store.ensureRecolored(i, inkRef.current);
+      setProcessedCount(i + 1);
+      setPagesVersion((v) => v + 1);
+      if (i === 0) setAppState('preview');
+      // Yield to the UI between pages so progress and preview stay live.
+      await new Promise((r) => setTimeout(r, 0));
+      if (token !== runToken.current) return;
+    }
+  }
+
+  // The vortex brought back a document that was won while still rendering: its file is parsed again and the pages after
+  // the snapshot render behind the preview as on an upload. If that fails, the document is the pages that came back.
+  async function resumeDocument(original: OriginalDocument, token: number) {
+    if (!original.file) return;
+    try {
+      const doc = await loadDocument(original.file);
+      if (token !== runToken.current) {
+        doc.destroy();
+        return;
+      }
+      docRef.current = doc;
+      await renderPages(doc, original.pages.length, token);
+    } catch (err) {
+      if (token !== runToken.current) return;
+      logAppError(classifyError(err), err, original.file);
+      store.restore(original.pages);
+      setPageCount(original.pages.length);
+      setPagesVersion((v) => v + 1);
     }
   }
 
@@ -447,7 +474,7 @@ export default function App() {
     const original: OriginalDocument | null =
       vortexOriginal ??
       (store.hasSource(currentPage)
-        ? { pages: store.snapshot(), file: lastFile.current, fileName, format, page: currentPage }
+        ? { pages: store.snapshot(), pageCount, file: lastFile.current, fileName, format, page: currentPage }
         : null);
     lastFile.current = null;
     startDocument(`prntr-certificate-${id.slice(-9).replace('-', '')}.pdf`, 'pdf');
@@ -467,21 +494,24 @@ export default function App() {
 
   // The vortex has swallowed the certificate: the original document comes back in its place, the
   // hold still on (startDocument clears it), so it shows in its own colours until the button is let
-  // go; the chosen ink, gold, stays. Only the pages that had rendered are there to come back.
+  // go; the chosen ink, gold, stays. The pages that had rendered come back at once; a document won while still rendering
+  // renders the rest from its file (one entered without a file, the dev stand-in, is only those pages).
   function restoreOriginal() {
     const original = vortexOriginal;
     if (!original) return;
     lastFile.current = original.file;
-    startDocument(original.fileName, original.format);
+    const token = startDocument(original.fileName, original.format);
     setHolding(true);
-    store.restore(original.pages);
-    setPageCount(original.pages.length);
+    const whole = original.file ? original.pageCount : original.pages.length;
+    store.restore(original.pages, whole);
+    setPageCount(whole);
     setProcessedCount(original.pages.length);
     const page = Math.min(original.page, original.pages.length - 1);
     setCurrentPage(page);
     store.ensureRecolored(page, inkRef.current);
     setPagesVersion((v) => v + 1);
     queueBackgroundRecolor(inkRef.current);
+    if (whole > original.pages.length) void resumeDocument(original, token);
   }
 
   // Safety net: Prntr never stays mounted if the drop's animationend does not arrive.
