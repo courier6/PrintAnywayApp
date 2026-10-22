@@ -44,3 +44,27 @@ export function ashFlecks(set: (x: number, y: number, k: PalKey) => void, landed
     }
   }
 }
+
+/**
+ * The burnt-up page's three flakes, each on the page's own clock slowed by 0.9 + 0.03 j so they trail it and
+ * land one after another just after it would have: a 1×1 (2×2 past 60 % of the way) ember flickering y/o with a
+ * red pixel at its lower left, wobbling ±1.5 px and lifted up to 6 px mid-way; landed (its vv ≥ 1), three sparks
+ * spreading and dying over 0.12 of the flight. `v` is the page's flight fraction (may run past 1), `(x0, y0)` the
+ * slot point, `(x1, y1)` the target, `now` and `tick` the clocks (tick 0 under reduced motion: no flicker).
+ */
+export function flakes(set: (x: number, y: number, k: PalKey) => void, v: number, x0: number, y0: number, x1: number, y1: number, now: number, tick: number): void {
+  for (let j = 0; j < 3; j++) {
+    const vv = v * (0.9 + 0.03 * j);
+    const u = Math.min(1, vv);
+    const x = x0 + (x1 - x0) * u + (j - 1) * 5 * u + Math.sin(now / 90 + j) * 1.5 * u;
+    const y = y0 + (y1 - y0) * u - 6 * Math.sin(u * Math.PI) + (hash(j + tick) - 0.5) * 2;
+    if (vv >= 1) {
+      const k = (vv - 1) / 0.12;
+      if (k < 1) for (let m = 0; m < 3; m++) set(Math.round(x + (m - 1) * (2 + 4 * k)), Math.round(y - 3 * k + m), k < 0.5 ? 'o' : 'R');
+      continue;
+    }
+    const sc = u > 0.6 ? 2 : 1, key: PalKey = (tick + j) & 1 ? 'y' : 'o';
+    for (let a = 0; a < sc; a++) for (let c = 0; c < sc; c++) set(Math.round(x) + a, Math.round(y) + c, key);
+    set(Math.round(x) - 1, Math.round(y) + sc, 'R');
+  }
+}

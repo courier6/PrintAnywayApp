@@ -2,7 +2,7 @@ import { reducedMotion, wait } from '../../anim';
 import type { Handoff, RunStats, Stage } from '../../types';
 import { H, Pix, W, frameScale, rotateSprite, setInk } from './pixels';
 import { docSprites } from './docpage';
-import { ashFlecks, burnFine, frontFire } from './burnpage';
+import { ashFlecks, burnFine, flakes, frontFire } from './burnpage';
 import { ART_BREAK_SHOTS, BADGE_AT, CLOCK_AT, FIRE_TICK_MS, GLASS, KIT_AT, KNOB, MACHINE_AT, MACHINE_PIECES, NOZZLES, SPR, drawFireFront, drawFlames, drawMarks, drawRoom, drawWindowWreck, figEmitters, figLeaf, fireEmitters, fireRect, inDoorway, knobX, lampX, markBox, monsteraEmitters, tubeX, type Broken, type Emitter, type ExitSign, type Hole, type Mark, type Rect, type SceneState, type Tube } from './scene';
 import { ART_AT, ART_SUB, renderVictory } from './art';
 import { PAL, type PalKey } from './palette';
@@ -152,8 +152,9 @@ const PAGE_MS = 2250;
 /** While the machine burns, the pages it throws are on fire: a quarter more
  * damage (HIT_DAMAGE.firePage, 34 × 1.25) and twice the points when shot. */
 const FIRE_PAGE_POINTS = PAGE_POINTS * 2;
-/** A burning page is eaten from the bottom: this much of it by the landing (§15), the rest on the glass. */
+/** A burning page is eaten from the bottom: this much of it by the landing (§15), the rest on the glass. The player's page burns up in flight, at this much of it (§16). */
 const BURN_ARRIVE = 0.45;
+const BURN_GONE_AT = 0.85;
 const PAGE_STAGGER_MS = 450;
 const PAGE_LANDED_MS = 1500;
 const PAGE_SLIDE_MS = 400;
@@ -1398,14 +1399,18 @@ export const room: Stage = {
       const y = y0 + (p.y1 - y0) * v;
       return { x: Math.floor(x - 5 * sc), y: Math.floor(y - 6.5 * sc), w: 10 * sc, h: 13 * sc, sc };
     };
-    /** How much of a burning page the fire has eaten, 0 whole … 1 gone: in flight to BURN_ARRIVE by the landing, on the glass the rest over its time there. */
+    /** How much of a burning page the fire has eaten, 0 whole … 1 gone: in flight to BURN_ARRIVE by the landing (the player's page: to 1 at BURN_GONE_AT of the flight, and 1 from then on, §16), on the glass the rest over its time there. */
     const burnOf = (p: Page, now: number): number => {
       if (!p.burning) return 0;
       const u = (now - p.at) / PAGE_MS;
       if (u < PAGE_EJECT) return 0;
-      if (u < 1) return BURN_ARRIVE * ((u - PAGE_EJECT) / (1 - PAGE_EJECT));
+      const v = (u - PAGE_EJECT) / (1 - PAGE_EJECT);
+      if (p.doc) return Math.min(1, v / BURN_GONE_AT);
+      if (u < 1) return BURN_ARRIVE * v;
       return Math.min(1, BURN_ARRIVE + (1 - BURN_ARRIVE) * ((now - p.at - PAGE_MS) / (PAGE_LANDED_MS + PAGE_SLIDE_MS)));
     };
+    /** The player's page burnt up in flight: no page left to draw, its flakes carry the hit (§16). */
+    const gone = (p: Page, now: number) => p.burning && p.doc && burnOf(p, now) >= 1;
     /** A thrown thing's sprite: a staple tumbles a quarter turn every STAPLE_SPIN_MS, a nut or a bolt every BOLT_SPIN_MS. */
     const thrownSprite = (s: Staple, now: number) => {
       const spr = SPR[THROWN_SPR[s.kind]];
@@ -2478,7 +2483,7 @@ export const room: Stage = {
         },
         bolts: () => staples.filter((s) => s.kind !== 'staple').length,
         burningPages: () => pages.filter((p) => p.burning && !p.shot).length,
-        docPage: () => { const p = pages.find((q) => q.doc); return p ? { burning: p.burning, shot: p.shot, landed: p.landedAt !== null, burn: burnOf(p, performance.now()), gone: false } : null; },
+        docPage: () => { const p = pages.find((q) => q.doc); return p ? { burning: p.burning, shot: p.shot, landed: p.landedAt !== null, burn: burnOf(p, performance.now()), gone: gone(p, performance.now()) } : null; },
         deadTubes: () => [...scene.stubs],
         sprays: () => sprays.length,
         tubes: () => scene.tubes.map((t) => ({ ...t })),
@@ -2756,7 +2761,8 @@ export const room: Stage = {
           }
           if (!p.shot && p.landedAt === null && now - p.at >= PAGE_MS) {
             p.landedAt = now;
-            sounds.paperSlap();
+            // a burnt-up page lands as its flakes: no paper to slap, the fire is crackling already
+            if (!gone(p, now)) sounds.paperSlap();
             hurt(p.burning ? 'firePage' : 'page', now);
           }
         }
@@ -3142,6 +3148,7 @@ export const room: Stage = {
         const r = pagePose(p, now);
         const spr = SPR.PAGE_PRINTED;
         if (r.h < spr.h) { fpix.blit(r.x, r.y, { w: spr.w, h: r.h, rows: spr.rows.slice(0, r.h) }); continue; }
+        if (gone(p, now)) continue;
         const big = p.doc && r.sc === 2, b = burnOf(p, now);
         fpix.blit(r.x, r.y, big ? DOC.flying : spr, big ? 1 : r.sc, p.burning ? { remap: { K: 'G', w: 'r' }, fine: burnFine(13, r.sc, b, p.seed, tick) } : {});
         if (p.burning) flying.push(...frontFire(r.x, r.y, r.w, r.h, r.sc, b, p.seed, tick));
@@ -3150,7 +3157,7 @@ export const room: Stage = {
       // A page on the glass: big, at a slight angle, then it slides off; a burning one keeps charring and sheds ash.
       const landed: Emitter[] = [];
       for (const p of pages) {
-        if (p.landedAt === null) continue;
+        if (p.landedAt === null || gone(p, now)) continue;
         const lt = now - p.landedAt;
         const slide = lt > PAGE_LANDED_MS ? ((lt - PAGE_LANDED_MS) / PAGE_SLIDE_MS) * 80 : 0;
         const lx = Math.floor(p.x1 - 20);
@@ -3163,6 +3170,12 @@ export const room: Stage = {
         }
       }
       if (landed.length) drawFlames(fpix, 'pagesLanded', landed, reduced ? 0 : now);
+      // The player's page burning up: from three quarters burnt, three hot flakes trail it and, once it is gone,
+      // fly on to where it would have landed and splash there (the hit).
+      for (const p of pages) {
+        if (!p.doc || !p.burning || p.shot || now < p.at || burnOf(p, now) < 0.75) continue;
+        flakes((x, y, k) => fpix.set(x, y, k), ((now - p.at) / PAGE_MS - PAGE_EJECT) / (1 - PAGE_EJECT), p.x0, SLOT.y - 6.5, p.x1, p.y1, now, tick);
+      }
       // Ink: the particles on the near half of their flight (the far half is behind the machine),
       // and the splat building up on the glass, then running down.
       for (const s of sprays) {
