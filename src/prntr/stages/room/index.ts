@@ -1817,10 +1817,12 @@ export const room: Stage = {
       flashFrames = HIT_FLASH_FRAMES * 2;
       fireSound = sounds.fire();
     };
-    // A tube shot: every jet on that nozzle stops, the head and the hose fly
-    // apart in bits of plum, grey and its ink, and the stump stays; the nozzle is dead for good.
+    // A tube shot: the jet spraying from that nozzle stops, the jets still to come from it are gone, the head and the hose fly
+    // apart in bits of plum, grey and its ink, and the stump stays; the nozzle is dead for good. A jet of the nozzle that has
+    // already sprayed is left as it is: stopping it now would move its end, and its splat, to later.
     const explodeTube = (jet: Spray, now: number) => {
-      for (const s of sprays) if (s.nx === jet.nx && s.stoppedAt === null) s.stoppedAt = now;
+      for (const s of sprays) if (s.nx === jet.nx && spraying(s, now)) s.stoppedAt = now;
+      sprays = sprays.filter((s) => s.nx !== jet.nx || s.at <= now);
       if (!scene.stubs.includes(jet.nx)) scene.stubs.push(jet.nx);
       sounds.tubeBurst();
       flashFrames = 1;
@@ -2371,6 +2373,8 @@ export const room: Stage = {
         tubes: () => scene.tubes.map((t) => ({ ...t })),
         /** Each jet's nozzle, start and where it is landing now (the hunt's lagged target). */
         jets: () => sprays.map((s) => ({ nx: s.nx, at: s.at, landing: landingOf(s, performance.now()) })),
+        /** Each jet's nozzle, start, stop time (null: it runs its length), end and whether its splat has landed. */
+        sprayState: () => sprays.map((s) => ({ nx: s.nx, at: s.at, stoppedAt: s.stoppedAt, end: jetEnd(s), done: s.done, dud: s.dud })),
         holes: () => scene.holes.map((h) => h.kind),
         marks: () => scene.marks.map((m) => ({ ...m })),
         drops: () => drops.length,
@@ -2927,6 +2931,7 @@ export const room: Stage = {
       // (the most risen of its jets), turned after the cross as the machine's health goes.
       const tubes = new Map<number, number>();
       for (const s of sprays) {
+        if (scene.stubs.includes(s.nx)) continue; // a shot nozzle is a stump: no head rises or sinks over it
         const from = s.at - TUBE_RISE_MS;
         const to = jetEnd(s) + TUBE_RISE_MS;
         if (now < from || now >= to) continue;
