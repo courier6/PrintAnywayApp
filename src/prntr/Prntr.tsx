@@ -8,6 +8,8 @@ import { runChain } from './runner';
 import { STAGES } from './stages';
 import type { Certificate, StageContext } from './types';
 
+export { createVortex } from './vortex';
+
 /** After a finished run, how long its last sounds (the fanfare, the game-over sting) may play on. */
 const FINISHED_TAIL_MS = 4000;
 /** Esc or ✕: the fade that silences what the run still had playing or scheduled. */

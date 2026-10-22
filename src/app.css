@@ -691,6 +691,28 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
   }
 }
 
+/* The vortex (PRNTR-VORTEX.md): the hold on the certificate of completion. Over the page while
+   the galaxy swallows the certificate or thins back out; the page's own certificate layer hides
+   meanwhile and the original shows underneath, fitted whatever its shape. Drawn at the design
+   sheet's 380 px and scaled with the stack. */
+.vortex {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+  pointer-events: none;
+}
+
+.page-layer.is-swallowed {
+  visibility: hidden;
+}
+
+.page-original.is-under canvas {
+  height: 100%;
+  object-fit: contain;
+}
+
 .page-placeholder {
   width: 380px;
   max-width: 100%;
@@ -1005,7 +1027,7 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
 
   /* Printed from the browser's menu before the Print button: the page on screen,
      not the app around it. */
-  .app:not(.has-print-pages) .no-print :is(.header, .toolbar, .pager, .preview-progress, .pill-btn, .sidebar, .compare-caption, .print-reminder, .page-original, .page-flash, .drag-overlay) {
+  .app:not(.has-print-pages) .no-print :is(.header, .toolbar, .pager, .preview-progress, .pill-btn, .sidebar, .compare-caption, .print-reminder, .page-original, .page-flash, .vortex, .drag-overlay) {
     display: none !important;
   }
 
@@ -1040,6 +1062,10 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
 
   .page-flash {
     animation: none;
+  }
+
+  .vortex {
+    display: none;
   }
 
   .btn-shimmer::after {

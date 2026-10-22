@@ -8,6 +8,7 @@ import RisingGlyphs from './RisingGlyphs';
 import { PageCanvas } from './PageCanvas';
 import type { ErrorKind } from './ErrorState';
 import { PrintReminder } from './PrintReminder';
+import { PUFF_MS, THIN_MS, VORTEX_MS, VortexCanvas } from './VortexCanvas';
 
 interface Props {
   fileName: string;
@@ -59,6 +60,8 @@ export function PreviewState({
   recoloredCanvas,
   holding,
   onHoldChange,
+  originalPage,
+  onVortexDone,
   onPrint,
   onDownload,
   busy,
@@ -87,6 +90,63 @@ export function PreviewState({
   const [downloadHint, setDownloadHint] = useState(false);
   const hintTimers = useRef<number[]>([]);
 
+  // The vortex (PRNTR-VORTEX.md): a hold on the certificate starts the swirl; VORTEX_MS later the
+  // original is back (onVortexDone). Let go before that, the swirl thins out (THIN_MS) while the
+  // puff plays (PUFF_MS). The ref mirrors the state for the effect and the timers.
+  interface Vortex {
+    key: number;
+    startedAt: number;
+    releasedAt: number | null;
+    thinned: boolean;
+  }
+  const [vortex, setVortexState] = useState<Vortex | null>(null);
+  const vortexRef = useRef<Vortex | null>(null);
+  const vortexTimers = useRef<number[]>([]);
+  const onVortexDoneRef = useRef(onVortexDone);
+  onVortexDoneRef.current = onVortexDone;
+  const setVortex = (v: Vortex | null) => {
+    vortexRef.current = v;
+    setVortexState(v);
+  };
+  const clearVortexTimers = () => {
+    vortexTimers.current.forEach((t) => window.clearTimeout(t));
+    vortexTimers.current = [];
+  };
+
+  useEffect(() => {
+    if (!originalPage) {
+      // the original is back (or there never was one): nothing to swirl
+      if (vortexRef.current) {
+        clearVortexTimers();
+        setVortex(null);
+      }
+      return;
+    }
+    if (holding) {
+      if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        onVortexDoneRef.current();
+        return;
+      }
+      clearVortexTimers();
+      setVortex({ key: (vortexRef.current?.key ?? 0) + 1, startedAt: performance.now(), releasedAt: null, thinned: false });
+      vortexTimers.current = [
+        window.setTimeout(() => {
+          setVortex(null);
+          onVortexDoneRef.current();
+        }, VORTEX_MS),
+      ];
+    } else if (vortexRef.current && vortexRef.current.releasedAt === null) {
+      clearVortexTimers();
+      setVortex({ ...vortexRef.current, releasedAt: performance.now() });
+      vortexTimers.current = [
+        window.setTimeout(() => {
+          if (vortexRef.current) setVortex({ ...vortexRef.current, thinned: true });
+        }, THIN_MS),
+        window.setTimeout(() => setVortex(null), PUFF_MS),
+      ];
+    }
+  }, [holding, originalPage]);
+
   useEffect(() => {
     if (prevInk.current === inkIndex) return;
     prevInk.current = inkIndex;
@@ -106,6 +166,7 @@ export function PreviewState({
     return () => {
       if (inkTimer.current !== null) window.clearTimeout(inkTimer.current);
       hintTimers.current.forEach((t) => window.clearTimeout(t));
+      vortexTimers.current.forEach((t) => window.clearTimeout(t));
     };
   }, []);
 
@@ -119,6 +180,8 @@ export function PreviewState({
   function holdKeyUp(e: KeyboardEvent<HTMLButtonElement>) {
     if (e.key === ' ' || e.key === 'Enter') onHoldChange(false);
   }
+
+  const swirling = vortex !== null && vortex.releasedAt === null;
 
   return (
     <>
@@ -169,7 +232,7 @@ export function PreviewState({
             aria-live="polite"
             style={justInked && !holding ? { color: inkHex } : undefined}
           >
-            {holding
+            {holding && !swirling
               ? t('preview.captionOriginal')
               : justInked
                 ? t('preview.captionInked', { ink: t(inks[inkIndex].nameKey) })
@@ -208,13 +271,24 @@ export function PreviewState({
           )}
           {pageReady ? (
             <div className="page-stack">
-              <PageCanvas canvas={recoloredCanvas} className="page-layer" />
+              <PageCanvas canvas={recoloredCanvas} className={'page-layer' + (vortex && !vortex.thinned ? ' is-swallowed' : '')} />
+              {/* While the vortex swirls this layer is the original underneath, in its own colours, fitted
+                  to the certificate's frame; restored, the same canvas is the document's own original. */}
               <PageCanvas
-                canvas={sourceCanvas}
-                className={'page-layer page-original' + (holding ? ' visible' : '')}
+                canvas={swirling ? originalPage : sourceCanvas}
+                className={'page-layer page-original' + (holding ? ' visible' : '') + (swirling ? ' is-under' : '')}
               />
               {flashKey > 0 && (
                 <div key={flashKey} className="page-flash" style={{ color: inkHex }} />
+              )}
+              {vortex && recoloredCanvas && (
+                <VortexCanvas
+                  key={vortex.key}
+                  certificate={recoloredCanvas}
+                  startedAt={vortex.startedAt}
+                  releasedAt={vortex.releasedAt}
+                  thinned={vortex.thinned}
+                />
               )}
             </div>
           ) : (
