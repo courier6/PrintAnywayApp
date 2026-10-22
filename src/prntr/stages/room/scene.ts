@@ -56,6 +56,8 @@ export interface Broken {
   fig: boolean;
   /** The fig's planter, shot: the tree collapses toward the machine. */
   figPot: boolean;
+  /** The print, torn open by the fifth shot into it: the wall behind it shot through, dripping (PRNTR-FIRE.md §12). */
+  art: boolean;
 }
 
 /** The fig after its planter is shot: how far it has fallen (0 standing … 1 leaning on the machine), whether
@@ -256,6 +258,8 @@ export interface SceneState {
   /** The red button on the panel, lit bright for a blink. */
   buttonBright: boolean;
   broken: Broken;
+  /** Ms since the print was torn open (0 until it is); the leak's clock (PRNTR-FIRE.md §12). */
+  tornSince: number;
   clock: Clock;
   /** The clock's hands spinning out of control while the machine shakes: ms into the spin, or null (still, 1:37). */
   clockSpin: number | null;
@@ -1212,8 +1216,9 @@ export const MACHINE_PIECES: { spr: Sprite; hx: number; hy: number }[] = (
 function drawHoles(p: Pix, s: SceneState): void {
   for (const h of s.holes) {
     if (h.kind === 'wall') {
-      // through the print: the hole is in the print's own cells (the stage draws it there); the room draws no mark
-      if (h.x >= ART_AT.x && h.x < ART_AT.x + ART_AT.w && h.y >= ART_AT.y && h.y < ART_AT.y + ART_AT.h) continue;
+      // through the print: the hole is in the print's own cells (the stage draws it there); the room draws no mark;
+      // torn open, the room draws them like any wall hole, over the cavity
+      if (!s.broken.art && h.x >= ART_AT.x && h.x < ART_AT.x + ART_AT.w && h.y >= ART_AT.y && h.y < ART_AT.y + ART_AT.h) continue;
       p.set(h.x - 1, h.y, 'X');
       p.set(h.x + 1, h.y, 'X');
       p.set(h.x, h.y - 1, 'X');
@@ -1221,6 +1226,124 @@ function drawHoles(p: Pix, s: SceneState): void {
       p.set(h.x, h.y, 'K');
     } else if (!inDoorway(h, s.doorGap) && !(h.kind === 'door' && s.doorBroken) && !(h.kind === 'window' && s.windowOpen)) {
       drawStorm(p, { x0: h.x - 1, y0: h.y - 1, x1: h.x + 1, y1: h.y + 1 }, s.storm);
+    }
+  }
+}
+
+// ---- The print shot out (PRNTR-FIRE.md §12): the tear, the drywall's rim, the cavity with its studs, the roof leak ----
+/** Shots into the print before the fifth tears it open. */
+export const ART_BREAK_SHOTS = 5;
+/** The tear through the print and the wall: a ragged ellipse, its centre and half-sizes; the studs' left edges (STUD_W wide, 16 on centre). */
+const TEAR = { cx: 110, cy: 52, rx: 16, ry: 11, seed: 31 };
+const STUDS = [99, 115] as const;
+const STUD_W = 4;
+/** The leak: the water runs down the left stud's right face (LEAK_X) from LEAK_TOP to LEAK_BOTTOM, a drop every DROP_MS, the
+ * first DRIP_AFTER_MS after the break; the wall under the frame darkens up to DROPS_MAX drops. */
+const LEAK_X = 102;
+const LEAK_TOP = 44;
+const LEAK_BOTTOM = 60;
+const DROP_MS = 1800;
+const DRIP_AFTER_MS = 1500;
+const DROPS_MAX = 12;
+/** The tear's edge: 16 spokes, each up to 14 % off round. */
+const TEAR_R = Array.from({ length: 16 }, (_, i) => 1 + 0.28 * (hash(TEAR.seed + i * 7) - 0.5));
+/** How far a pixel is from the tear's centre: 0 there, 1 on the torn edge, more outside. */
+function tearDist(x: number, y: number): number {
+  const dx = (x + 0.5 - TEAR.cx) / TEAR.rx, dy = (y + 0.5 - TEAR.cy) / TEAR.ry;
+  const a = (Math.atan2(dy, dx) / (2 * Math.PI) + 1) * 16, i = Math.floor(a) % 16, f = a - Math.floor(a);
+  return Math.hypot(dx, dy) / (TEAR_R[i] + (TEAR_R[(i + 1) % 16] - TEAR_R[i]) * f);
+}
+/** The leak's beat `t` ms into the dripping, stepped at 100 ms like the fire: the drops so far, the phase of the one forming, how far into it. */
+function dripAt(t: number): { n: number; phase: 'form' | 'run' | 'fall' | 'splash'; u: number } {
+  t = Math.floor(t / 100) * 100;
+  const n = Math.floor(t / DROP_MS), q = (t % DROP_MS) / DROP_MS;
+  if (q < 0.3) return { n, phase: 'form', u: q / 0.3 };
+  if (q < 0.72) return { n, phase: 'run', u: (q - 0.3) / 0.42 };
+  if (q < 0.84) return { n, phase: 'fall', u: (q - 0.72) / 0.12 };
+  return { n, phase: 'splash', u: (q - 0.84) / 0.16 };
+}
+/**
+ * The print torn open and the wall behind it shot through, `since` ms after the break (the wall sheet's #2, 2026-10-22):
+ * the paper's torn edge (white, curling), the gypsum's rim, the cavity dark behind it with two studs lit from the left, a
+ * noggin between them and a cable looped across; from DRIP_AFTER_MS on, the roof leak: a bead forms at the top of the
+ * hole, runs down the left stud's face, drops out of the bottom of the tear (behind the frame's rail) onto the wall under
+ * the frame and stains it, wider with every drop; the water glints in a near strike (`near`). Plaster dust falls for the
+ * first half second. Drawn over the print's rect, so it covers the print wherever the paper is gone; `lit` is the left
+ * light, which the wall under the frame is drawn by.
+ */
+export function drawWallHole(p: Pix, since: number, near: number, lit: boolean): void {
+  const { cx, cy, rx, ry } = TEAR;
+  const x0 = Math.floor(cx - rx * 1.3), x1 = Math.ceil(cx + rx * 1.3), y0 = Math.floor(cy - ry * 1.3), y1 = Math.ceil(cy + ry * 1.3);
+  const inside = (x: number, y: number) => tearDist(x, y) <= 0.8;
+  for (let y = y0; y <= y1; y++) {
+    for (let x = x0; x <= x1; x++) {
+      const d = tearDist(x, y);
+      if (d > 1) continue;
+      if (d > 0.9) p.set(x, y, hash(x * 3 + y * 7) > 0.8 ? 'P' : 'w');
+      else if (d > 0.8) p.set(x, y, hash(x * 5 + y * 3) > 0.7 ? 'W' : 'T');
+      else p.set(x, y, 'i');
+    }
+  }
+  // the studs, lit from the left, a grain mark now and then; the noggin between them low down
+  for (const sx of STUDS) {
+    for (let y = y0; y <= y1; y++) {
+      for (let x = sx; x < sx + STUD_W; x++) {
+        if (!inside(x, y)) continue;
+        p.set(x, y, x === sx ? 'E' : x === sx + STUD_W - 1 ? 'D' : y % 5 === 0 && hash(x + y * 13) > 0.5 ? 'D' : 'p');
+      }
+    }
+  }
+  for (let x = STUDS[0] + STUD_W; x < STUDS[1]; x++) for (let y = cy + 6; y < cy + 9; y++) if (inside(x, y)) p.set(x, y, y === cy + 6 ? 'D' : 'E');
+  // a cable stapled to the left stud, looping across to the right one
+  for (let i = 0; i <= 16; i++) {
+    const x = STUDS[0] + STUD_W + i, y = Math.round(cy - 4 + 3 * Math.sin((i / 16) * Math.PI));
+    if (inside(x, y) && !(x >= STUDS[1] && x < STUDS[1] + STUD_W)) p.set(x, y, 'G');
+  }
+  // the leak: the streak it has left, the bead forming, running, falling, splashing; the stain under the frame
+  const wk: PalKey = near > 0.3 ? 'H' : 'h', bk: PalKey = near > 0.3 ? 'W' : 'H';
+  const railY = ART_AT.y + ART_AT.h, floorY = MACHINE_AT.y0 - 1;
+  if (since >= DRIP_AFTER_MS) {
+    const drip = dripAt(since - DRIP_AFTER_MS);
+    for (let y = LEAK_TOP; y <= LEAK_BOTTOM; y++) if (hash(y * 3 + 5) > 0.45 && inside(LEAK_X, y)) p.set(LEAK_X, y, wk);
+    if (drip.phase === 'form') {
+      p.set(LEAK_X, LEAK_TOP, bk);
+      if (drip.u >= 0.5) {
+        p.set(LEAK_X + 1, LEAK_TOP, bk);
+        p.set(LEAK_X, LEAK_TOP + 1, bk);
+      }
+    } else if (drip.phase === 'run') {
+      const y = Math.round(LEAK_TOP + (LEAK_BOTTOM - LEAK_TOP) * drip.u);
+      p.set(LEAK_X, y, bk);
+      p.set(LEAK_X, y + 1, bk);
+      p.set(LEAK_X + 1, y + 1, wk);
+    } else if (drip.phase === 'fall') {
+      // behind the frame's rail (the two K/D rows under the print) it is not seen
+      const y = Math.round(LEAK_BOTTOM + (floorY - LEAK_BOTTOM) * drip.u);
+      if (y < railY || y >= railY + 2) {
+        p.set(LEAK_X, y, bk);
+        p.set(LEAK_X, y - 1, wk);
+      }
+    } else {
+      const sp = drip.u < 0.5 ? 1 : 2;
+      p.set(LEAK_X - sp, floorY - 1, wk);
+      p.set(LEAK_X + sp, floorY - 1, wk);
+      if (drip.u < 0.5) p.set(LEAK_X, floorY, bk);
+    }
+    const n = Math.min(DROPS_MAX, drip.n), hw = Math.min(6, 1 + n * 0.5);
+    const stain: PalKey = lit ? 'a' : 'e', core: PalKey = lit ? 'e' : 'B';
+    for (let y = railY + 2; y <= floorY; y++) {
+      for (let x = Math.round(LEAK_X - hw); x <= Math.round(LEAK_X + hw); x++) {
+        if (x === LEAK_X) p.set(x, y, core);
+        else if (hash(x * 7 + y * 3 + n) < 0.95 - (Math.abs(x - LEAK_X) / (hw + 1)) * 0.7) p.set(x, y, stain);
+      }
+    }
+  }
+  // plaster dust at the break: pale grains falling out of the hole for half a second
+  if (since < 500) {
+    for (let i = 0; i < 9; i++) {
+      const x = cx - rx + Math.floor(hash(i * 5) * 2 * rx);
+      const y = Math.floor(cy + ry * 0.6 + (since / 500) * (6 + hash(i) * 10) * (0.5 + hash(i * 3)));
+      if (y <= floorY) p.set(x, y, hash(i * 7) > 0.5 ? 'T' : 'w');
     }
   }
 }
@@ -1300,6 +1423,8 @@ export function drawRoom(p: Pix, s: SceneState): void {
   p.rect(ART_AT.x - 2, ART_AT.y - 2, ART_AT.x + ART_AT.w + 2, ART_AT.y + ART_AT.h + 2, 'K');
   p.rect(ART_AT.x - 1, ART_AT.y - 1, ART_AT.x + ART_AT.w + 1, ART_AT.y + ART_AT.h + 1, 'D');
   p.clearRect(ART_AT.x, ART_AT.y, ART_AT.x + ART_AT.w, ART_AT.y + ART_AT.h);
+  // torn open by the fifth shot into it: the wall behind it, shot through and dripping, over the print (PRNTR-FIRE.md §12)
+  if (s.broken.art) drawWallHole(p, s.tornSince, s.storm.near, s.lights[0]);
   // the clock where the board was, the post-it board lower and by the window
   if (s.clock.state === 'up') {
     if (s.clockSpin === null) p.blit(CLOCK_AT.x, CLOCK_AT.y, SPR.CLOCK);

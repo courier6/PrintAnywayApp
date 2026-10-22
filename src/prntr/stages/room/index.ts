@@ -1,7 +1,7 @@
 import { reducedMotion, wait } from '../../anim';
 import type { Handoff, RunStats, Stage } from '../../types';
 import { H, Pix, W, frameScale, rotateSprite } from './pixels';
-import { BADGE_AT, CLOCK_AT, FIRE_TICK_MS, GLASS, KIT_AT, KNOB, MACHINE_AT, MACHINE_PIECES, NOZZLES, SPR, drawFireFront, drawFlame, drawMarks, drawRoom, drawWindowWreck, figEmitters, figLeaf, fireEmitters, fireRect, inDoorway, knobX, lampX, markBox, monsteraEmitters, tubeX, type Broken, type Emitter, type ExitSign, type Hole, type Mark, type Rect, type SceneState, type Tube } from './scene';
+import { ART_BREAK_SHOTS, BADGE_AT, CLOCK_AT, FIRE_TICK_MS, GLASS, KIT_AT, KNOB, MACHINE_AT, MACHINE_PIECES, NOZZLES, SPR, drawFireFront, drawFlame, drawMarks, drawRoom, drawWindowWreck, figEmitters, figLeaf, fireEmitters, fireRect, inDoorway, knobX, lampX, markBox, monsteraEmitters, tubeX, type Broken, type Emitter, type ExitSign, type Hole, type Mark, type Rect, type SceneState, type Tube } from './scene';
 import { ART_AT, ART_SUB, renderVictory } from './art';
 import { PAL, type PalKey } from './palette';
 import { createRoomSounds, type FireSound, type Hum } from './sounds';
@@ -802,7 +802,8 @@ export const room: Stage = {
       machine: { lid: 0, lamp: null, lampOut: false, flash: false, power: true, angry: false, back: 1, t: 0, error: null, lift: 0 },
       flashWhite: false,
       buttonBright: false,
-      broken: { clock: false, poster: false, tank: false, plant: false, vase: false, kit: false, fig: false, figPot: false },
+      broken: { clock: false, poster: false, tank: false, plant: false, vase: false, kit: false, fig: false, figPot: false, art: false },
+      tornSince: 0,
       fig: { fall: 0, burning: false, burn: 0 },
       monstera: { burning: false, burn: 0 },
       clock: { state: 'up', x: CLOCK_AT.x, y: CLOCK_AT.y, rot: 0 },
@@ -932,6 +933,9 @@ export const room: Stage = {
     /** When the fallen monstera will catch from the fig, and when it did (PRNTR-FIRE.md §11.3). */
     let monsteraCatchAt: number | null = null;
     let monsteraBurnAt: number | null = null;
+    /** Shots into the print so far, and when the fifth tore it open (PRNTR-FIRE.md §12). */
+    let artShots = 0;
+    let artBrokeAt: number | null = null;
     /** The flicker: when the next panel comes on, and when each lit one goes out (null: out). */
     let flickerNext = 0;
     const flickerOff: (number | null)[] = [null, null];
@@ -1183,6 +1187,7 @@ export const room: Stage = {
       if (figBurnAt !== null) figBurnAt += d;
       if (monsteraCatchAt !== null) monsteraCatchAt += d;
       if (monsteraBurnAt !== null) monsteraBurnAt += d;
+      if (artBrokeAt !== null) artBrokeAt += d;
     };
     const startContinue = (now: number) => {
       phase = 'continue';
@@ -1723,6 +1728,19 @@ export const room: Stage = {
       if (x >= 13 && x < 41 && y >= 43 && y < DOOR.y1 && (scene.doorBroken || x < 13 + scene.doorGap)) {
         misses++;
         return;
+      }
+      // The print: a shot into it is a dark cross on it and a miss (below), until the fifth tears it open: the wall
+      // behind it shot through, the roof leak dripping in it (PRNTR-FIRE.md §12). Torn, its rect is wall.
+      if (!scene.broken.art && x >= ART_AT.x && x < ART_AT.x + ART_AT.w && y >= ART_AT.y && y < ART_AT.y + ART_AT.h) {
+        artShots++;
+        if (artShots >= ART_BREAK_SHOTS) {
+          scene.broken.art = true;
+          artBrokeAt = now;
+          sounds.tear();
+          addScore(BREAK_POINTS, now);
+          ctx.announce('The print tears open. The wall behind it is dripping.');
+          return;
+        }
       }
       if (x >= DOOR.x0 && x < DOOR.x1 && y >= DOOR.y0 && y < DOOR.y1) addHole('door', x, y, now);
       else if (x >= WINDOW.x0 && x < WINDOW.x1 && y >= WINDOW.y0 && y < WINDOW.y1) windowShot(x, y, now);
@@ -2466,6 +2484,7 @@ export const room: Stage = {
         daze: () => dazeNow(performance.now()),
         fig: () => ({ ...scene.fig, leaves: scene.broken.fig, pot: scene.broken.figPot }),
         monstera: () => ({ ...scene.monstera, down: scene.broken.vase }),
+        art: () => ({ shots: artShots, torn: scene.broken.art, since: scene.tornSince }),
         wreck: () => scene.printer === 'wreck',
         pieces: () => scene.pieces.map((q) => [Math.round(q.x), Math.round(q.y)]),
         windowOpen: () => scene.windowOpen,
@@ -2992,6 +3011,8 @@ export const room: Stage = {
         const b = (now - monsteraBurnAt) / MONSTERA_LIGHT_MS;
         scene.monstera.burn = reduced ? Math.max(1, b) : b;
       }
+      // The leak's clock, from the break; one still frame under reduced motion (the stain full, a bead at the top).
+      scene.tornSince = artBrokeAt === null ? 0 : reduced ? 20_000 : now - artBrokeAt;
       poseFigLight(now);
       // The clock's hands spin while the machine moves: forward in the pounce, shaking as it lands, trembling mad.
       const moving = landing !== null || (scene.machine.back > 0 && scene.machine.back < 1) || scene.shake.x !== 0 || scene.shake.y !== 0;
