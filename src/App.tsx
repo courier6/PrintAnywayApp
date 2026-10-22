@@ -38,6 +38,8 @@ interface OriginalDocument {
 
 /** Print waits this long at most for the print pages to decode, then prints what has. */
 const PRINT_DECODE_MS = 5000;
+/** Under reduced motion, how long the GAME OVER card stays up before the plain cut back to the app. */
+const REDUCED_OVER_HOLD_MS = 2000;
 
 const scheduleIdle: (cb: () => void) => number =
   typeof window.requestIdleCallback === 'function'
@@ -409,6 +411,15 @@ export default function App() {
       }
     }
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      if (outcome === 'over') {
+        // a plain cut, but not on the very frame the card went up: the GAME OVER card is held for a moment first (an Esc
+        // in that moment, or a new document, has already left, and is not overridden)
+        window.setTimeout(() => {
+          prntrPage.current = null;
+          setAppState((s) => (s === 'prntr' ? prntrReturn.current : s));
+        }, REDUCED_OVER_HOLD_MS);
+        return;
+      }
       exitPrntr();
       return;
     }
