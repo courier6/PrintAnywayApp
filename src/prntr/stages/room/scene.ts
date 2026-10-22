@@ -66,6 +66,12 @@ export interface Fig {
   burning: boolean;
   burn: number;
 }
+/** The monstera once it lies at the burning fig's foot and has caught: whether it burns, and how far along
+ * (0 just caught, 1 lit from the fig's end to the pot's MONSTERA_LIGHT_MS later, on past 1 as it burns down). */
+export interface Burning {
+  burning: boolean;
+  burn: number;
+}
 
 /**
  * The fire once the water jug has broken: it starts in the gap between
@@ -233,6 +239,8 @@ export interface SceneState {
   lightsRed: boolean;
   /** The weeping fig by the window. */
   fig: Fig;
+  /** The fallen monstera's burning (PRNTR-FIRE.md §11.3); drawn only while `broken.vase`. */
+  monstera: Burning;
   printer: PrinterPose;
   /** The machine's power light red (the beat after the USB goes in; the handoff reddened its sticker). */
   ledRed: boolean;
@@ -613,6 +621,34 @@ function figCells(s: Sprite): FigCell[] {
   return out;
 }
 const FIG_CELLS = { tree: figCells(SPR.FIG), bare: figCells(SPR.FIG_BARE) };
+/**
+ * A sprite lying as it is drawn (no turn) bucketed into 7×7 cells, like figCells: a cell with six or more
+ * opaque pixels is a flame standing on its lowest pixel at its mean x; `d` is its distance from `from`
+ * over the farthest cell's, 0 at the near end, 1 at the far end; leafy where most of it is leaf (V, v, n).
+ */
+function lyingCells(s: Sprite, at: { x: number; y: number }, from: { x: number; y: number }, seed0: number): FigCell[] {
+  const cells = new Map<string, { n: number; sx: number; floor: number; leaf: number }>();
+  s.rows.forEach((row, sy) => {
+    for (let sx = 0; sx < s.w; sx++) {
+      const k = row[sx];
+      if (k === '.') continue;
+      const x = at.x + sx, y = at.y + sy, key = `${Math.floor(x / 7)},${Math.floor(y / 7)}`;
+      const cell = cells.get(key) ?? { n: 0, sx: 0, floor: -1, leaf: 0 };
+      cell.n++;
+      cell.sx += x + 0.5;
+      cell.floor = Math.max(cell.floor, y + 1);
+      if (k === 'V' || k === 'v' || k === 'n') cell.leaf++;
+      cells.set(key, cell);
+    }
+  });
+  const out: FigCell[] = [];
+  for (const cell of cells.values()) if (cell.n >= 6) out.push({ x: cell.sx / cell.n, y: cell.floor, d: 0, leafy: cell.leaf > cell.n / 2, seed: seed0 + out.length * 37 });
+  const reach = Math.max(...out.map((c) => Math.hypot(c.x - from.x, c.y - from.y)));
+  for (const c of out) c.d = Math.hypot(c.x - from.x, c.y - from.y) / reach;
+  return out;
+}
+/** The fallen monstera's cells, lit from the fig's foot (its pivot) outward: 12 cells, 3 leafy. */
+const MONSTERA_CELLS = lyingCells(SPR.MONSTERA_DOWN, MONSTERA_AT.down, FIG_AT.pivot, 1200);
 
 /**
  * The burning fig's flames at `burn` (Fig.burn): every other cell of the leaning tree (by its seed) gets one,
@@ -628,6 +664,23 @@ export function figEmitters(burn: number, bare: boolean): Emitter[] {
     if (g <= 0) continue;
     const rw = (0.75 + 0.5 * hash(c.seed)) * 1.5, rh = (0.7 + 0.7 * hash(c.seed + 1)) * 1.35;
     out.push({ x: c.x, floor: c.y, w: (c.leafy ? 3.6 : 2.8) * rw * g * dieback, h: (c.leafy ? 13 : 9) * rh * g * dieback, seed: c.seed });
+  }
+  return out;
+}
+
+/**
+ * The burning monstera's flames at `burn` (Burning.burn): one on every cell of the fallen plant, lit from the
+ * fig's end outward as burn goes 0 → 1 (smaller than the fig's: it is a low plant on the carpet), dying back by
+ * up to 45 % as burn goes 1 → 2.
+ */
+export function monsteraEmitters(burn: number): Emitter[] {
+  const out: Emitter[] = [];
+  const dieback = 1 - 0.45 * clamp01(burn - 1);
+  for (const c of MONSTERA_CELLS) {
+    const g = clamp01((burn - c.d * 0.75) / 0.25);
+    if (g <= 0) continue;
+    const rw = (0.75 + 0.5 * hash(c.seed)) * 1.5, rh = (0.7 + 0.7 * hash(c.seed + 1)) * 1.35;
+    out.push({ x: c.x, floor: c.y, w: (c.leafy ? 3 : 2.6) * rw * g * dieback, h: (c.leafy ? 9 : 7) * rh * g * dieback, seed: c.seed });
   }
   return out;
 }
@@ -1325,7 +1378,11 @@ export function drawRoom(p: Pix, s: SceneState): void {
   // fire is out, so its time is the storm's when there is no fire
   if (s.fig.burning) drawFlames(p, 'fig', figEmitters(s.fig.burn, s.broken.fig), s.fire?.t ?? s.storm.t);
   // the monstera in its pot; its leaves shot off, the bare stalks; the pot shot, the plant lies on the carpet
-  if (s.broken.vase) p.blit(MONSTERA_AT.down.x, MONSTERA_AT.down.y, SPR.MONSTERA_DOWN);
+  if (s.broken.vase) {
+    p.blit(MONSTERA_AT.down.x, MONSTERA_AT.down.y, SPR.MONSTERA_DOWN);
+    // caught from the burning fig at its foot: its flames on its own cells, lit from the fig's end outward (PRNTR-FIRE.md §11.3)
+    if (s.monstera.burning) drawFlames(p, 'monstera', monsteraEmitters(s.monstera.burn), s.fire?.t ?? s.storm.t);
+  }
   else if (s.broken.plant) p.blit(MONSTERA_AT.bare.x, MONSTERA_AT.bare.y, SPR.MONSTERA_BARE);
   else p.blit(MONSTERA_AT.whole.x, MONSTERA_AT.whole.y, SPR.MONSTERA);
   // the ink tubes up from behind the machine: a ribbed hose (row by row, so it can snake), its

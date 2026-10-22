@@ -1,7 +1,7 @@
 import { reducedMotion, wait } from '../../anim';
 import type { Handoff, RunStats, Stage } from '../../types';
 import { H, Pix, W, frameScale, rotateSprite } from './pixels';
-import { BADGE_AT, CLOCK_AT, FIRE_TICK_MS, GLASS, KIT_AT, KNOB, MACHINE_AT, MACHINE_PIECES, NOZZLES, SPR, drawFireFront, drawFlame, drawMarks, drawRoom, drawWindowWreck, figEmitters, figLeaf, fireEmitters, fireRect, inDoorway, knobX, lampX, markBox, tubeX, type Broken, type Emitter, type ExitSign, type Hole, type Mark, type Rect, type SceneState, type Tube } from './scene';
+import { BADGE_AT, CLOCK_AT, FIRE_TICK_MS, GLASS, KIT_AT, KNOB, MACHINE_AT, MACHINE_PIECES, NOZZLES, SPR, drawFireFront, drawFlame, drawMarks, drawRoom, drawWindowWreck, figEmitters, figLeaf, fireEmitters, fireRect, inDoorway, knobX, lampX, markBox, monsteraEmitters, tubeX, type Broken, type Emitter, type ExitSign, type Hole, type Mark, type Rect, type SceneState, type Tube } from './scene';
 import { ART_AT, ART_SUB, renderVictory } from './art';
 import { PAL, type PalKey } from './palette';
 import { createRoomSounds, type FireSound, type Hum } from './sounds';
@@ -400,6 +400,10 @@ const FIG_CATCH_MS = 1200;
 /** Caught, the fig lights from its crown down to the foot of its trunk over this long (Fig.burn 0 → 1), then burns
  * down (its flames smaller) over as long again. */
 const FIG_LIGHT_MS = 1500;
+/** The fallen monstera at the burning fig's foot catches this long after the fig is lit down to it (fig.burn ≥ 1). */
+const MONSTERA_CATCH_MS = 900;
+/** Lit from the fig's end to the pot over this long; then it burns down. */
+const MONSTERA_LIGHT_MS = 1200;
 /** The lights, out since the pounce, flicker back on at random once the machine has FLICKER_FROM of its
  * damage (20% of its health or less): one panel at a time (now and then both), on for FLICKER_ON_MIN–
  * FLICKER_ON_MAX ms with a buzz, then out with a click, the next coming FLICKER_GAP_MIN–FLICKER_GAP_MAX ms
@@ -800,6 +804,7 @@ export const room: Stage = {
       buttonBright: false,
       broken: { clock: false, poster: false, tank: false, plant: false, vase: false, kit: false, fig: false, figPot: false },
       fig: { fall: 0, burning: false, burn: 0 },
+      monstera: { burning: false, burn: 0 },
       clock: { state: 'up', x: CLOCK_AT.x, y: CLOCK_AT.y, rot: 0 },
       clockSpin: null,
       exit: { state: 'up', x: EXIT_WALL.x, y: EXIT_WALL.y, tilt: 0, lit: true },
@@ -924,6 +929,9 @@ export const room: Stage = {
     let figCatchAt: number | null = null;
     /** When the fig caught (Fig.burn counts from here). */
     let figBurnAt: number | null = null;
+    /** When the fallen monstera will catch from the fig, and when it did (PRNTR-FIRE.md §11.3). */
+    let monsteraCatchAt: number | null = null;
+    let monsteraBurnAt: number | null = null;
     /** The flicker: when the next panel comes on, and when each lit one goes out (null: out). */
     let flickerNext = 0;
     const flickerOff: (number | null)[] = [null, null];
@@ -1173,6 +1181,8 @@ export const room: Stage = {
       clockAt += d;
       if (figCatchAt !== null) figCatchAt += d;
       if (figBurnAt !== null) figBurnAt += d;
+      if (monsteraCatchAt !== null) monsteraCatchAt += d;
+      if (monsteraBurnAt !== null) monsteraBurnAt += d;
     };
     const startContinue = (now: number) => {
       phase = 'continue';
@@ -2455,6 +2465,7 @@ export const room: Stage = {
         lightsRed: () => scene.lightsRed,
         daze: () => dazeNow(performance.now()),
         fig: () => ({ ...scene.fig, leaves: scene.broken.fig, pot: scene.broken.figPot }),
+        monstera: () => ({ ...scene.monstera, down: scene.broken.vase }),
         wreck: () => scene.printer === 'wreck',
         pieces: () => scene.pieces.map((q) => [Math.round(q.x), Math.round(q.y)]),
         windowOpen: () => scene.windowOpen,
@@ -2857,8 +2868,8 @@ export const room: Stage = {
       poseLight(fireLight, fireRect(scene.fire.u), now);
       poseLight(machineLight, emitterBox(fireEmitters(scene.fire, scene.printer === 'wreck' ? scene.pieces : null).machine), now);
     };
-    // The burning fig's light, over its flames (it burns on after the fire is out).
-    const poseFigLight = (now: number) => poseLight(figLight, scene.fig.burning ? emitterBox(figEmitters(scene.fig.burn, scene.broken.fig)) : null, now);
+    // The burning fig's light, over its flames and the fallen monstera's with them (it burns on after the fire is out).
+    const poseFigLight = (now: number) => poseLight(figLight, scene.fig.burning ? emitterBox(figEmitters(scene.fig.burn, scene.broken.fig).concat(scene.monstera.burning ? monsteraEmitters(scene.monstera.burn) : [])) : null, now);
     // The storm outside: a near strike (its bolt in the door's or the window's view), far lightning
     // between, and what the room sees of it this frame.
     const strike = (now: number) => {
@@ -2967,6 +2978,19 @@ export const room: Stage = {
       if (figBurnAt !== null) {
         const b = (now - figBurnAt) / FIG_LIGHT_MS;
         scene.fig.burn = reduced ? Math.max(1, b) : b;
+      }
+      // The fallen monstera lies at the fig's foot: once the fig is lit down to it, it catches too, whichever fell first.
+      if (scene.broken.vase && scene.fig.burning && scene.fig.burn >= 1 && !scene.monstera.burning && frozenAt === null) {
+        monsteraCatchAt ??= now + MONSTERA_CATCH_MS;
+        if (now >= monsteraCatchAt) {
+          scene.monstera.burning = true;
+          monsteraBurnAt = now;
+          sounds.whoosh();
+        }
+      }
+      if (monsteraBurnAt !== null) {
+        const b = (now - monsteraBurnAt) / MONSTERA_LIGHT_MS;
+        scene.monstera.burn = reduced ? Math.max(1, b) : b;
       }
       poseFigLight(now);
       // The clock's hands spin while the machine moves: forward in the pounce, shaking as it lands, trembling mad.
