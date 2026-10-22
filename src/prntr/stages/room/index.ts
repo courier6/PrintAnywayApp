@@ -758,6 +758,9 @@ export const room: Stage = {
       frame.style.height = `${H * scale}px`;
       frame.style.setProperty('--s', String(scale));
       frame.classList.toggle('is-small', scale <= 3);
+      // the badge card (120 virtual px wide, every rule of it in var(--s)) is read and typed on, so on touch it is up to twice
+      // the room's scale, and never wider than the frame
+      badgeEl.style.setProperty('--s', String(touch ? Math.min(2 * scale, (W * scale * 0.94) / 120) : scale));
       const px = Math.round(scale * (window.devicePixelRatio || 1));
       rippleBack?.resize(px);
       rippleFront?.resize(px);
