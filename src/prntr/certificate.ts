@@ -112,6 +112,19 @@ function bitsOf(seed: string): () => number {
 }
 
 /** Greedy word wrap: no line longer than `max` characters. */
+/**
+ * A rounded rectangle as a sub-path. CanvasRenderingContext2D.roundRect is missing before Safari 16 and Firefox 112, and a
+ * certificate that threw there would drop the win back to the preview with nothing; arcTo has been everywhere for good.
+ */
+function roundedRect(g: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number): void {
+  g.moveTo(x + r, y);
+  g.arcTo(x + w, y, x + w, y + h, r);
+  g.arcTo(x + w, y + h, x, y + h, r);
+  g.arcTo(x, y + h, x, y, r);
+  g.arcTo(x, y, x + w, y, r);
+  g.closePath();
+}
+
 function wrap(text: string, max: number): string[] {
   const out: string[] = [];
   let cur = '';
@@ -175,7 +188,7 @@ export function makeCertificate(player: string, score: number, hi: number, stats
       [94, 28, 11, 34, 2],
       [110, 38, 30, 22, 5],
     ])
-      g.roundRect(x, y, rw, rh, r);
+      roundedRect(g, x, y, rw, rh, r);
     g.fill();
     g.fillRect(139, 46, 8, 5);
     g.beginPath();
