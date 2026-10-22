@@ -101,6 +101,10 @@ const ATTACK_GAP_MS = 2250;
 const ATTACK_GAP_LATE_MS = 1500;
 /** From this score on, the attacks come faster. */
 const LATE_SCORE = 900;
+/** The fight's phases (PRNTR-V2.md §2.1), by the machine's life left of its HI: phase 2 from PHASE_2_LIFE left,
+ * phase 3 from PHASE_3_LIFE. The slam joins the rotation with phase 2 (SLAM_LIFE). */
+const PHASE_2_LIFE = 900;
+const PHASE_3_LIFE = 450;
 /** The scan: the lid rises over LID_MS, the lamp sweeps the glass for SWEEP_MS (the window:
  * PRNTR-FIGHT-DESIGN.md §5), the flash washes the screen for WASH_MS, the lid falls over LID_MS.
  * A shot on the lamp during the sweep pops the bulb (LAMP_POINTS): the sweep stops where it is,
@@ -119,7 +123,7 @@ const LAMP_HIT_PAD = 1;
  * phase 2): the machine strains up SLAM_LIFT px over SLAM_LIFT_MS, drops in SLAM_DROP_MS and
  * lands shaking for SLAM_SHAKE_MS; the lid bangs open at the landing and stands while the world ripples
  * out from SLAM_AT (SLAM_OPEN_MS, the ripple's length), the glass worth SLAM_GLASS_POINTS, then falls over LID_MS. */
-const SLAM_LIFE = 900;
+const SLAM_LIFE = PHASE_2_LIFE;
 const SLAM_LIFT = 6;
 const SLAM_LIFT_MS = 500;
 const SLAM_DROP_MS = 90;
@@ -137,6 +141,10 @@ const SLAM_GLASS_POINTS = 25;
 const GLASS_HIT_PAD = 1;
 const STAPLE_MS = 1500;
 const STAPLE_STAGGER_MS = 500;
+/** The volleys grow with the phase (PRNTR-PRESSURE.md §4.1): staples a volley by phase (index 1–3), and from
+ * phase 2 the staples and the pages come STAGGER_PRESSED_MS apart instead of their own stagger. */
+const STAPLES_BY_PHASE = [0, 3, 4, 5];
+const STAGGER_PRESSED_MS = 350;
 /** The staple's hit box: its sprite at the current scale, plus this many virtual px around. */
 const STAPLE_HIT_PAD = 3;
 /** A staple tumbles a quarter turn every STAPLE_SPIN_MS in flight (a nut or a bolt every BOLT_SPIN_MS). */
@@ -359,6 +367,9 @@ const STAPLE_EJECT = 0.15;
 const PAGE_TARGETS_X = [30, 75, 120, 165, 210];
 /** Where each of the five pages comes out, left to right along the slot. */
 const PAGE_ORIGINS_X = [94, 107, 120, 133, 146];
+/** From phase 2 a sixth page, thrown last out of the middle of the slot to one of the lanes between two of the
+ * five, so it lands over their edges. */
+const PAGE_SIXTH_X = [52, 97, 142, 187];
 /** The beat after the USB goes in: the machine pounces from the back of the room at POUNCE_AT, growing
  * to its place over POUNCE_MS (a cut under reduced motion), lands two px low for LAND_MS and shakes for
  * POUNCE_SHAKE_MS; then it wakes (a scan from WAKE_AT), and the fight starts as the flash ends. */
@@ -1034,6 +1045,8 @@ export const room: Stage = {
     let farAt = -Infinity;
     let lastNear = -Infinity;
     const attackGap = () => Math.round((score >= LATE_SCORE ? ATTACK_GAP_LATE_MS : ATTACK_GAP_MS) * Math.pow(RAGE_STEP, rage));
+    /** The fight's phase now, 1–3, by the machine's life left. */
+    const fightPhase = () => (HI - score <= PHASE_3_LIFE ? 3 : HI - score <= PHASE_2_LIFE ? 2 : 1);
     const scheduleBlink = (from: number, delay: number) => {
       nextBlinkAt = from + delay + Math.random() * (BLINK_MAX_MS - BLINK_MIN_MS);
     };
@@ -2311,15 +2324,20 @@ export const room: Stage = {
         startSlam(now);
         nextAttackAt = now + SLAM_TOTAL_MS + gap;
       } else if (kind === 'staples') {
-        for (let i = 0; i < 3; i++) {
-          staples.push({ kind: 'staple', ms: STAPLE_MS, x0: SLOT.x0 + 3 + Math.random() * (SLOT.x1 - SLOT.x0 - 6), x: 20 + Math.random() * 180, y: 40 + Math.random() * 70, at: now + i * STAPLE_STAGGER_MS, hit: false, shot: false, fed: false });
+        const n = STAPLES_BY_PHASE[fightPhase()];
+        const stagger = fightPhase() >= 2 ? STAGGER_PRESSED_MS : STAPLE_STAGGER_MS;
+        for (let i = 0; i < n; i++) {
+          staples.push({ kind: 'staple', ms: STAPLE_MS, x0: SLOT.x0 + 3 + Math.random() * (SLOT.x1 - SLOT.x0 - 6), x: 20 + Math.random() * 180, y: 40 + Math.random() * 70, at: now + i * stagger, hit: false, shot: false, fed: false });
         }
-        nextAttackAt = now + 2 * STAPLE_STAGGER_MS + STAPLE_MS + gap;
+        nextAttackAt = now + (n - 1) * stagger + STAPLE_MS + gap;
       } else {
-        PAGE_TARGETS_X.forEach((x1, i) => {
-          pages.push({ burning: fireAt !== null, x0: PAGE_ORIGINS_X[i], x1, y1: 60 + Math.random() * 70, at: now + i * PAGE_STAGGER_MS, landedAt: null, shot: false, fed: false, doc: i === 2, seed: 600 + x1 });
+        const stagger = fightPhase() >= 2 ? STAGGER_PRESSED_MS : PAGE_STAGGER_MS;
+        // from phase 2 the sixth page, last, out of the middle of the slot
+        const lanes = fightPhase() >= 2 ? [...PAGE_TARGETS_X, PAGE_SIXTH_X[Math.floor(Math.random() * PAGE_SIXTH_X.length)]] : PAGE_TARGETS_X;
+        lanes.forEach((x1, i) => {
+          pages.push({ burning: fireAt !== null, x0: i < PAGE_ORIGINS_X.length ? PAGE_ORIGINS_X[i] : PAGE_ORIGINS_X[2], x1, y1: 60 + Math.random() * 70, at: now + i * stagger, landedAt: null, shot: false, fed: false, doc: i === 2, seed: 600 + x1 });
         });
-        nextAttackAt = now + 4 * PAGE_STAGGER_MS + PAGE_MS + gap;
+        nextAttackAt = now + (lanes.length - 1) * stagger + PAGE_MS + gap;
       }
     };
 
@@ -2599,6 +2617,10 @@ export const room: Stage = {
         /** The pages on the glass: where each landed, and whether it is sliding off yet. */
         landed: () => pages.filter((p) => p.landedAt !== null).map((p) => ({ x: p.x1, y: p.y1, sliding: performance.now() - p.landedAt! >= PAGE_LANDED_MS })),
         thrown: () => staples.map((s) => ({ kind: s.kind, x: s.x, y: s.y, at: s.at, shot: s.shot, hit: s.hit })),
+        /** The pages in the air or on the glass: each one's origin, lane, start and whether it is the player's. */
+        pages: () => pages.map((p) => ({ x0: p.x0, x1: p.x1, at: p.at, doc: p.doc })),
+        /** The fight's phase now (1–3, PRNTR-PRESSURE.md). */
+        fightPhase: () => fightPhase(),
         /** How many things in flight have been shot down (staples, nuts, bolts, pages): a shot one of them took. */
         shotDown: () => staples.filter((s) => s.shot).length + pages.filter((p) => p.shot).length,
         ghosts: () => ghosts.length,
