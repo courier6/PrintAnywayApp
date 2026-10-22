@@ -14,6 +14,8 @@
   border-left: 1px solid #3c3c3c;
   cursor: default;
   box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
 }
 @media (max-width: 700px) {
   .dev-panel {
@@ -111,4 +113,27 @@
 .dev-keys kbd,
 .dev-keys code {
   color: #ce9178;
+}
+/* The screenshot drop zone sits at the bottom of the panel. */
+.dev-sec:last-child {
+  margin-top: auto;
+  padding-top: 10px;
+}
+.dev-drop {
+  min-height: 90px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  color: #8a8a8a;
+  border: 1px dashed #555;
+  border-radius: 4px;
+}
+.dev-drop.is-over {
+  color: #9cdcfe;
+  border-color: #9cdcfe;
+  background: #252b30;
+}
+.dev-row {
+  justify-content: space-between;
 }

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type DragEvent, type ReactNode } from 'react';
 import './devPanel.css';
 
 // Dev only (mounted from App.tsx behind import.meta.env.DEV): a DevTools-style side panel with
@@ -121,6 +121,103 @@ function NumberSet({ label, max, min, onSet, disabled }: { label: string; max: n
         Set
       </button>
     </div>
+  );
+}
+
+const SHOTS = '/__dev/screenshots';
+
+/** The drop zone: an image dragged here (the macOS screenshot thumbnail) is saved by the dev server into screenshots/. */
+function ScreenshotDrop() {
+  const [over, setOver] = useState(false);
+  const [count, setCount] = useState<number | null>(null);
+  const [last, setLast] = useState<string | null>(null);
+  const [note, setNote] = useState('');
+
+  const refresh = async () => {
+    try {
+      setCount(((await (await fetch(SHOTS)).json()) as { count: number }).count);
+    } catch {
+      setCount(null);
+    }
+  };
+  useEffect(() => {
+    void refresh();
+  }, []);
+
+  const save = async (files: File[]) => {
+    for (const file of files) {
+      if (!file.type.startsWith('image/')) {
+        setNote(`not an image: ${file.name}`);
+        continue;
+      }
+      try {
+        const res = await fetch(`${SHOTS}?name=${encodeURIComponent(file.name)}`, { method: 'POST', body: file });
+        const body = (await res.json()) as { path?: string; count?: number; error?: string };
+        if (!res.ok || !body.path) throw new Error(body.error ?? `HTTP ${res.status}`);
+        setLast(body.path);
+        setCount(body.count ?? null);
+        setNote('saved');
+      } catch (err) {
+        setNote(`failed: ${err instanceof Error ? err.message : 'error'}`);
+      }
+    }
+  };
+
+  // The app's own window-level drag listeners (App.tsx) must not see this drag: they would show the
+  // "drop a file" overlay and, on a drop, try to load the image as a document.
+  const allow = (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.nativeEvent.stopPropagation();
+  };
+
+  return (
+    <Section title="Screenshots">
+      <div
+        className={`dev-drop${over ? ' is-over' : ''}`}
+        onDragEnter={(e) => { allow(e); setOver(true); }}
+        onDragOver={allow}
+        onDragLeave={() => setOver(false)}
+        onDrop={(e) => {
+          allow(e);
+          setOver(false);
+          void save(Array.from(e.dataTransfer.files));
+        }}
+      >
+        Drop a screenshot here
+      </div>
+      {last && (
+        <button
+          title="Copy the path"
+          onClick={() => {
+            try {
+              void navigator.clipboard.writeText(last);
+              setNote('path copied');
+            } catch {
+              setNote('copy failed');
+            }
+          }}
+        >
+          {last}
+        </button>
+      )}
+      <div className="dev-row">
+        <span>{count === null ? '—' : count} saved</span>
+        <button
+          disabled={!count}
+          onClick={() => {
+            if (!confirm(`Delete ${count} screenshots?`)) return;
+            void fetch(SHOTS, { method: 'DELETE' }).then(() => {
+              setLast(null);
+              setNote('cleared');
+              void refresh();
+            });
+          }}
+        >
+          Clear all
+        </button>
+      </div>
+      {note && <p className="dev-note">{note}</p>}
+    </Section>
   );
 }
 
@@ -260,6 +357,8 @@ export default function DevPanel() {
           <code>/?prntr=0</code> opening · <code>/?prntr=1</code> room
         </p>
       </Section>
+
+      <ScreenshotDrop />
     </aside>
   );
 }
