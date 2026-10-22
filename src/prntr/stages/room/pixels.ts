@@ -60,6 +60,12 @@ const RGB = Object.fromEntries(
   }),
 ) as Record<PalKey, [number, number, number]>;
 
+/** The player's ink: the I key takes the app's ink colour for the run (the room's one colour not in the sheet). */
+export function setInk(hex: string): void {
+  const n = parseInt(hex.slice(1), 16);
+  RGB.I = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+
 export interface BlitOptions {
   /** Draw one palette key as another (the EXIT sign's n → R, the sticker's c → R). */
   remap?: Partial<Record<string, PalKey>>;
@@ -69,6 +75,8 @@ export interface BlitOptions {
   skew?: number;
   /** Lower the right end by this many output pixels, the left end fixed (the EXIT sign hanging from a corner). */
   tilt?: number;
+  /** Per output pixel (ox, oy from the sprite's top-left, after scale, before skew): null draws nothing there, a key draws that key, undefined draws as is (a burning page's front). */
+  fine?: (ox: number, oy: number, key: PalKey) => PalKey | null | undefined;
 }
 
 /**
@@ -124,7 +132,12 @@ export class Pix {
         for (let sy = 0; sy < scale; sy++) {
           const oy = dy * scale + sy;
           const shift = opts.skew ? Math.floor(oy / opts.skew) : 0;
-          for (let sx = 0; sx < scale; sx++) this.set(x + dx * scale + sx + shift, y + oy + drop, key);
+          for (let sx = 0; sx < scale; sx++) {
+            const ox = dx * scale + sx;
+            let k: PalKey = key;
+            if (opts.fine) { const f = opts.fine(ox, oy, key); if (f === null) continue; if (f) k = f; }
+            this.set(x + ox + shift, y + oy + drop, k);
+          }
         }
       }
     }

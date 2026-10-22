@@ -1,7 +1,9 @@
 import { reducedMotion, wait } from '../../anim';
 import type { Handoff, RunStats, Stage } from '../../types';
-import { H, Pix, W, frameScale, rotateSprite } from './pixels';
-import { BADGE_AT, CLOCK_AT, GLASS, KIT_AT, KNOB, MACHINE_AT, MACHINE_PIECES, NOZZLES, SPR, drawFireFront, drawFlame, drawMarks, drawRoom, drawWindowWreck, figLeaf, fireRect, inDoorway, knobX, lampX, markBox, tubeX, type Broken, type ExitSign, type Hole, type Mark, type SceneState, type Tube } from './scene';
+import { H, Pix, W, frameScale, rotateSprite, setInk } from './pixels';
+import { docSprites } from './docpage';
+import { ashFlecks, burnFine, flakes, frontFire } from './burnpage';
+import { ART_BREAK_SHOTS, BADGE_AT, CLOCK_AT, FIRE_TICK_MS, GLASS, KIT_AT, KNOB, MACHINE_AT, MACHINE_PIECES, NOZZLES, SPR, drawFireFront, drawFlames, drawMarks, drawRoom, drawWindowWreck, figEmitters, figLeaf, fireEmitters, fireRect, inDoorway, knobX, lampX, markBox, monsteraEmitters, tubeX, type Broken, type Emitter, type ExitSign, type Hole, type Mark, type Rect, type SceneState, type Tube } from './scene';
 import { ART_AT, ART_SUB, renderVictory } from './art';
 import { PAL, type PalKey } from './palette';
 import { createRoomSounds, type FireSound, type Hum } from './sounds';
@@ -150,6 +152,9 @@ const PAGE_MS = 2250;
 /** While the machine burns, the pages it throws are on fire: a quarter more
  * damage (HIT_DAMAGE.firePage, 34 × 1.25) and twice the points when shot. */
 const FIRE_PAGE_POINTS = PAGE_POINTS * 2;
+/** A burning page is eaten from the bottom: this much of it by the landing (§15), the rest on the glass. The player's page burns up in flight, at this much of it (§16). */
+const BURN_ARRIVE = 0.45;
+const BURN_GONE_AT = 0.85;
 const PAGE_STAGGER_MS = 450;
 const PAGE_LANDED_MS = 1500;
 const PAGE_SLIDE_MS = 400;
@@ -397,6 +402,13 @@ const CLOCK_SPIN_TAIL_MS = 600;
  * and the bolts in the rotation from then on, whatever its health. */
 const FIG_FALL_MS = 700;
 const FIG_CATCH_MS = 1200;
+/** Caught, the fig lights from its crown down to the foot of its trunk over this long (Fig.burn 0 → 1), then burns
+ * down (its flames smaller) over as long again. */
+const FIG_LIGHT_MS = 1500;
+/** The fallen monstera at the burning fig's foot catches this long after the fig is lit down to it (fig.burn ≥ 1). */
+const MONSTERA_CATCH_MS = 900;
+/** Lit from the fig's end to the pot over this long; then it burns down. */
+const MONSTERA_LIGHT_MS = 1200;
 /** The lights, out since the pounce, flicker back on at random once the machine has FLICKER_FROM of its
  * damage (20% of its health or less): one panel at a time (now and then both), on for FLICKER_ON_MIN–
  * FLICKER_ON_MAX ms with a buzz, then out with a click, the next coming FLICKER_GAP_MIN–FLICKER_GAP_MAX ms
@@ -516,6 +528,10 @@ interface Page {
   shot: boolean;
   /** The feed sound has played. */
   fed: boolean;
+  /** The player's page (the middle one of the volley): drawn from the document from 2× on. */
+  doc: boolean;
+  /** Its burning front's seed (600 + x1, the flames' seed in flight). */
+  seed: number;
 }
 
 /** A particle on the front layer (steam off the snuffed fire): thrown from x,y at born, under gravity g, for life ms. */
@@ -549,7 +565,7 @@ function el(tag: string, className: string, text?: string): HTMLElement {
 /**
  * Stage 1, the room: look around, click the sticker, fight the machine to 1337, one
  * second of quiet, out; or run out of hearts and it is over. Design: prntr/design/PRNTR-HANDOFF-STAGE-1.md §2–§3 (local);
- * spec: PRNTR-STAGE-1.md. The page in ctx.page is not used: the room is not about it.
+ * spec: PRNTR-STAGE-1.md. The middle page of every volley is the player's page (PRNTR-FIRE.md §14).
  */
 export const room: Stage = {
   name: 'room',
@@ -560,6 +576,8 @@ export const room: Stage = {
     if (signal.aborted) return { kind: 'start' };
     const reduced = reducedMotion();
     const sounds = createRoomSounds(audio);
+    setInk(ctx.inkHex);
+    const DOC = docSprites(ctx.page, ctx.inkHex);
     root.replaceChildren();
 
     // ---- DOM: the pixel layer, the three overlays, the HUD ----------------
@@ -612,9 +630,15 @@ export const room: Stage = {
     const rippleFront = rippleBack && RippleView.create('prntr-room-ripple', { src: fpix.image, x: 0, y: 0, w: W, h: H });
     const light = el('div', 'prntr-room-light');
     const spill = el('div', 'prntr-room-spill');
-    // The fire's light: an unpixelated orange glow sized to the flames each frame.
+    // The fire's light: an unpixelated orange glow sized to the flames each frame; one more over the burning
+    // fig and one over the burning machine (PRNTR-FIRE.md). The main one stays first in the DOM (the harness
+    // reads the first element of the class).
     const fireLight = el('div', 'prntr-room-fire-light');
     fireLight.hidden = true;
+    const figLight = el('div', 'prntr-room-fire-light');
+    figLight.hidden = true;
+    const machineLight = el('div', 'prntr-room-fire-light');
+    machineLight.hidden = true;
     // The mad machine's slot, lit red like the door (.is-mad on the frame fades it in).
     const slotLight = el('div', 'prntr-room-slot-light');
     // The storm's light through the holes in the door and the blind, one box per hole.
@@ -634,7 +658,7 @@ export const room: Stage = {
     const glowFills = el('div', 'prntr-room-glow-fills');
     // The red lights' wash over the room (under the front layer), faded in by .is-red-lit on the frame.
     const redLight = el('div', 'prntr-room-red-light');
-    for (const n of [light, spill, fireLight, slotLight, holeLights, windowLight, stormWash, wash, glows, glowFills]) n.setAttribute('aria-hidden', 'true');
+    for (const n of [light, spill, fireLight, figLight, machineLight, slotLight, holeLights, windowLight, stormWash, wash, glows, glowFills]) n.setAttribute('aria-hidden', 'true');
     const hud = el('div', 'prntr-room-hud');
     const scoreEl = el('div', 'prntr-room-score', 'SCORE 0000');
     const hiEl = el('div', 'prntr-room-hi', 'HI 1337');
@@ -750,7 +774,7 @@ export const room: Stage = {
     const deathEl = el('div', 'prntr-room-death');
     deathEl.setAttribute('aria-hidden', 'true');
     deathEl.hidden = true;
-    frame.append(art, canvas, ...(rippleBack ? [rippleBack.canvas] : []), light, spill, fireLight, slotLight, holeLights, windowLight, glowFills, redLight, front, ...(rippleFront ? [rippleFront.canvas] : []), stormWash, wash, glows, badgeGlow, hud, cursor, hurtEl, deathEl, continueEl, badgeEl, overEl);
+    frame.append(art, canvas, ...(rippleBack ? [rippleBack.canvas] : []), light, spill, fireLight, figLight, machineLight, slotLight, holeLights, windowLight, glowFills, redLight, front, ...(rippleFront ? [rippleFront.canvas] : []), stormWash, wash, glows, badgeGlow, hud, cursor, hurtEl, deathEl, continueEl, badgeEl, overEl);
     wrap.append(frame);
     root.append(wrap);
 
@@ -789,8 +813,10 @@ export const room: Stage = {
       machine: { lid: 0, lamp: null, lampOut: false, flash: false, power: true, angry: false, back: 1, t: 0, error: null, lift: 0 },
       flashWhite: false,
       buttonBright: false,
-      broken: { clock: false, poster: false, tank: false, plant: false, vase: false, kit: false, fig: false, figPot: false },
-      fig: { fall: 0, burning: false },
+      broken: { clock: false, poster: false, tank: false, plant: false, vase: false, kit: false, fig: false, figPot: false, art: false },
+      tornSince: 0,
+      fig: { fall: 0, burning: false, burn: 0 },
+      monstera: { burning: false, burn: 0 },
       clock: { state: 'up', x: CLOCK_AT.x, y: CLOCK_AT.y, rot: 0 },
       clockSpin: null,
       exit: { state: 'up', x: EXIT_WALL.x, y: EXIT_WALL.y, tilt: 0, lit: true },
@@ -913,6 +939,14 @@ export const room: Stage = {
     /** The fig: when its planter was shot (it falls from then), and when it catches from the fire. */
     let figFallAt: number | null = null;
     let figCatchAt: number | null = null;
+    /** When the fig caught (Fig.burn counts from here). */
+    let figBurnAt: number | null = null;
+    /** When the fallen monstera will catch from the fig, and when it did (PRNTR-FIRE.md §11.3). */
+    let monsteraCatchAt: number | null = null;
+    let monsteraBurnAt: number | null = null;
+    /** Shots into the print so far, and when the fifth tore it open (PRNTR-FIRE.md §12). */
+    let artShots = 0;
+    let artBrokeAt: number | null = null;
     /** The flicker: when the next panel comes on, and when each lit one goes out (null: out). */
     let flickerNext = 0;
     const flickerOff: (number | null)[] = [null, null];
@@ -1160,6 +1194,11 @@ export const room: Stage = {
       lastNear += d;
       exitAt += d;
       clockAt += d;
+      if (figCatchAt !== null) figCatchAt += d;
+      if (figBurnAt !== null) figBurnAt += d;
+      if (monsteraCatchAt !== null) monsteraCatchAt += d;
+      if (monsteraBurnAt !== null) monsteraBurnAt += d;
+      if (artBrokeAt !== null) artBrokeAt += d;
     };
     const startContinue = (now: number) => {
       phase = 'continue';
@@ -1351,15 +1390,27 @@ export const room: Stage = {
       const u = Math.min(1, (now - p.at) / PAGE_MS);
       if (u < PAGE_EJECT) {
         const rows = Math.max(1, Math.ceil((u / PAGE_EJECT) * SPR.PAGE_PRINTED.h));
-        return { x: p.x0 - 5, y: SLOT.y - rows, w: 10, h: rows };
+        return { x: p.x0 - 5, y: SLOT.y - rows, w: 10, h: rows, sc: 1 };
       }
       const v = (u - PAGE_EJECT) / (1 - PAGE_EJECT);
       const sc = v < 0.5 ? 1 : 2;
       const y0 = SLOT.y - 6.5;
       const x = p.x0 + (p.x1 - p.x0) * v;
       const y = y0 + (p.y1 - y0) * v;
-      return { x: Math.floor(x - 5 * sc), y: Math.floor(y - 6.5 * sc), w: 10 * sc, h: 13 * sc };
+      return { x: Math.floor(x - 5 * sc), y: Math.floor(y - 6.5 * sc), w: 10 * sc, h: 13 * sc, sc };
     };
+    /** How much of a burning page the fire has eaten, 0 whole … 1 gone: in flight to BURN_ARRIVE by the landing (the player's page: to 1 at BURN_GONE_AT of the flight, and 1 from then on, §16), on the glass the rest over its time there. */
+    const burnOf = (p: Page, now: number): number => {
+      if (!p.burning) return 0;
+      const u = (now - p.at) / PAGE_MS;
+      if (u < PAGE_EJECT) return 0;
+      const v = (u - PAGE_EJECT) / (1 - PAGE_EJECT);
+      if (p.doc) return Math.min(1, v / BURN_GONE_AT);
+      if (u < 1) return BURN_ARRIVE * v;
+      return Math.min(1, BURN_ARRIVE + (1 - BURN_ARRIVE) * ((now - p.at - PAGE_MS) / (PAGE_LANDED_MS + PAGE_SLIDE_MS)));
+    };
+    /** The player's page burnt up in flight: no page left to draw, its flakes carry the hit (§16). */
+    const gone = (p: Page, now: number) => p.burning && p.doc && burnOf(p, now) >= 1;
     /** A thrown thing's sprite: a staple tumbles a quarter turn every STAPLE_SPIN_MS, a nut or a bolt every BOLT_SPIN_MS. */
     const thrownSprite = (s: Staple, now: number) => {
       const spr = SPR[THROWN_SPR[s.kind]];
@@ -1701,6 +1752,19 @@ export const room: Stage = {
         misses++;
         return;
       }
+      // The print: a shot into it is a dark cross on it and a miss (below), until the fifth tears it open: the wall
+      // behind it shot through, the roof leak dripping in it (PRNTR-FIRE.md §12). Torn, its rect is wall.
+      if (!scene.broken.art && x >= ART_AT.x && x < ART_AT.x + ART_AT.w && y >= ART_AT.y && y < ART_AT.y + ART_AT.h) {
+        artShots++;
+        if (artShots >= ART_BREAK_SHOTS) {
+          scene.broken.art = true;
+          artBrokeAt = now;
+          sounds.tear();
+          addScore(BREAK_POINTS, now);
+          ctx.announce('The print tears open. The wall behind it is dripping.');
+          return;
+        }
+      }
       if (x >= DOOR.x0 && x < DOOR.x1 && y >= DOOR.y0 && y < DOOR.y1) addHole('door', x, y, now);
       else if (x >= WINDOW.x0 && x < WINDOW.x1 && y >= WINDOW.y0 && y < WINDOW.y1) windowShot(x, y, now);
       else {
@@ -1889,6 +1953,7 @@ export const room: Stage = {
       fireSound = null;
       scene.fire = null;
       fireLight.hidden = true;
+      machineLight.hidden = true;
       spreadAt = null;
       ctx.announce('The fire is out.');
     };
@@ -2157,7 +2222,7 @@ export const room: Stage = {
         nextAttackAt = now + 2 * STAPLE_STAGGER_MS + STAPLE_MS + gap;
       } else {
         PAGE_TARGETS_X.forEach((x1, i) => {
-          pages.push({ burning: fireAt !== null, x0: PAGE_ORIGINS_X[i], x1, y1: 60 + Math.random() * 70, at: now + i * PAGE_STAGGER_MS, landedAt: null, shot: false, fed: false });
+          pages.push({ burning: fireAt !== null, x0: PAGE_ORIGINS_X[i], x1, y1: 60 + Math.random() * 70, at: now + i * PAGE_STAGGER_MS, landedAt: null, shot: false, fed: false, doc: i === 2, seed: 600 + x1 });
         });
         nextAttackAt = now + 4 * PAGE_STAGGER_MS + PAGE_MS + gap;
       }
@@ -2418,6 +2483,7 @@ export const room: Stage = {
         },
         bolts: () => staples.filter((s) => s.kind !== 'staple').length,
         burningPages: () => pages.filter((p) => p.burning && !p.shot).length,
+        docPage: () => { const p = pages.find((q) => q.doc); return p ? { burning: p.burning, shot: p.shot, landed: p.landedAt !== null, burn: burnOf(p, performance.now()), gone: gone(p, performance.now()) } : null; },
         deadTubes: () => [...scene.stubs],
         sprays: () => sprays.length,
         tubes: () => scene.tubes.map((t) => ({ ...t })),
@@ -2441,6 +2507,8 @@ export const room: Stage = {
         lightsRed: () => scene.lightsRed,
         daze: () => dazeNow(performance.now()),
         fig: () => ({ ...scene.fig, leaves: scene.broken.fig, pot: scene.broken.figPot }),
+        monstera: () => ({ ...scene.monstera, down: scene.broken.vase }),
+        art: () => ({ shots: artShots, torn: scene.broken.art, since: scene.tornSince }),
         wreck: () => scene.printer === 'wreck',
         pieces: () => scene.pieces.map((q) => [Math.round(q.x), Math.round(q.y)]),
         windowOpen: () => scene.windowOpen,
@@ -2693,7 +2761,8 @@ export const room: Stage = {
           }
           if (!p.shot && p.landedAt === null && now - p.at >= PAGE_MS) {
             p.landedAt = now;
-            sounds.paperSlap();
+            // a burnt-up page lands as its flakes: no paper to slap, the fire is crackling already
+            if (!gone(p, now)) sounds.paperSlap();
             hurt(p.burning ? 'firePage' : 'page', now);
           }
         }
@@ -2820,18 +2889,31 @@ export const room: Stage = {
       const v = Math.min(1, (now - spreadAt) / spreadMs);
       return scene.printer === 'wreck' ? v + RAGE_MORE * Math.min(1, Math.max(0, now - burstAt - DEPLETE_MS) / 1000) : v;
     };
-    // The fire grows for FIRE_GROW_MS, then holds; its glow box follows the flames.
+    /** A fire light over a box of flames (FIRE_GLOW_PAD past it), flickering in step with the fire's ticks; hidden with no box. */
+    const poseLight = (light: HTMLElement, box: Rect | null, now: number) => {
+      light.hidden = box === null;
+      if (box === null) return;
+      light.style.left = `${(box.x0 - FIRE_GLOW_PAD) * scale}px`;
+      light.style.top = `${(box.y0 - FIRE_GLOW_PAD) * scale}px`;
+      light.style.width = `${(box.x1 - box.x0 + 2 * FIRE_GLOW_PAD) * scale}px`;
+      light.style.height = `${(box.y1 - box.y0 + 2 * FIRE_GLOW_PAD) * scale}px`;
+      light.style.opacity = reduced ? '0.8' : String(0.65 + 0.35 * Math.abs(Math.sin(Math.floor(now / FIRE_TICK_MS) * 1.1)));
+    };
+    /** The box round a group of flames that are there at all, or null. */
+    const emitterBox = (es: Emitter[]): Rect | null => {
+      const live = es.filter((e) => e.w >= 0.5 && e.h >= 1);
+      if (live.length === 0) return null;
+      return { x0: Math.min(...live.map((e) => e.x - e.w)), y0: Math.min(...live.map((e) => e.floor - e.h)), x1: Math.max(...live.map((e) => e.x + e.w)), y1: Math.max(...live.map((e) => e.floor)) };
+    };
+    // The fire grows for FIRE_GROW_MS, then holds; its glow box follows the flames, and the machine's its flames.
     const poseFire = (now: number) => {
       if (fireAt === null) return;
       scene.fire = { u: fireU(now), t: reduced ? 0 : now, v: spreadU(now) };
-      const r = fireRect(scene.fire.u);
-      fireLight.hidden = false;
-      fireLight.style.left = `${(r.x0 - FIRE_GLOW_PAD) * scale}px`;
-      fireLight.style.top = `${(r.y0 - FIRE_GLOW_PAD) * scale}px`;
-      fireLight.style.width = `${(r.x1 - r.x0 + 2 * FIRE_GLOW_PAD) * scale}px`;
-      fireLight.style.height = `${(r.y1 - r.y0 + 2 * FIRE_GLOW_PAD) * scale}px`;
-      fireLight.style.opacity = reduced ? '0.8' : String(0.65 + 0.35 * Math.abs(Math.sin(now / 90)));
+      poseLight(fireLight, fireRect(scene.fire.u), now);
+      poseLight(machineLight, emitterBox(fireEmitters(scene.fire, scene.printer === 'wreck' ? scene.pieces : null).machine), now);
     };
+    // The burning fig's light, over its flames and the fallen monstera's with them (it burns on after the fire is out).
+    const poseFigLight = (now: number) => poseLight(figLight, scene.fig.burning ? emitterBox(figEmitters(scene.fig.burn, scene.broken.fig).concat(scene.monstera.burning ? monsteraEmitters(scene.monstera.burn) : [])) : null, now);
     // The storm outside: a near strike (its bolt in the door's or the window's view), far lightning
     // between, and what the room sees of it this frame.
     const strike = (now: number) => {
@@ -2887,6 +2969,7 @@ export const room: Stage = {
       poseClock(now);
       poseDoor(now);
       poseStorm(now);
+      if (scene.printer === 'wreck') posePieces(now);
       poseFire(now);
       scene.flashWhite = flashFrames > 0;
       scene.damage = score / HI;
@@ -2897,7 +2980,6 @@ export const room: Stage = {
       scene.machine.t = reduced ? 0 : now;
       if (flashFrames > 0) flashFrames--;
       scene.buttonBright = phase === 'fight' && scene.printer === 'up' && (mad || buttonBright(now));
-      if (scene.printer === 'wreck') posePieces(now);
       // The tremble: a new offset of ±1 px every few frames while the mad machine fights; the
       // pounce's landing before that, and the slam's lift and landing over it.
       frameCount++;
@@ -2923,6 +3005,7 @@ export const room: Stage = {
         figCatchAt ??= now + FIG_CATCH_MS;
         if (now >= figCatchAt) {
           scene.fig.burning = true;
+          figBurnAt = now;
           sounds.whoosh();
           boltsNow = true;
           nextAttackAt = Math.min(nextAttackAt, now);
@@ -2935,6 +3018,27 @@ export const room: Stage = {
           }
         }
       }
+      // Lit from the crown down over FIG_LIGHT_MS, then burning down (at once under reduced motion).
+      if (figBurnAt !== null) {
+        const b = (now - figBurnAt) / FIG_LIGHT_MS;
+        scene.fig.burn = reduced ? Math.max(1, b) : b;
+      }
+      // The fallen monstera lies at the fig's foot: once the fig is lit down to it, it catches too, whichever fell first.
+      if (scene.broken.vase && scene.fig.burning && scene.fig.burn >= 1 && !scene.monstera.burning && frozenAt === null) {
+        monsteraCatchAt ??= now + MONSTERA_CATCH_MS;
+        if (now >= monsteraCatchAt) {
+          scene.monstera.burning = true;
+          monsteraBurnAt = now;
+          sounds.whoosh();
+        }
+      }
+      if (monsteraBurnAt !== null) {
+        const b = (now - monsteraBurnAt) / MONSTERA_LIGHT_MS;
+        scene.monstera.burn = reduced ? Math.max(1, b) : b;
+      }
+      // The leak's clock, from the break; one still frame under reduced motion (the stain full, a bead at the top).
+      scene.tornSince = artBrokeAt === null ? 0 : reduced ? 20_000 : now - artBrokeAt;
+      poseFigLight(now);
       // The clock's hands spin while the machine moves: forward in the pounce, shaking as it lands, trembling mad.
       const moving = landing !== null || (scene.machine.back > 0 && scene.machine.back < 1) || scene.shake.x !== 0 || scene.shake.y !== 0;
       if (moving && !reduced && frozenAt === null) {
@@ -3011,7 +3115,7 @@ export const room: Stage = {
       // front flames with it: the flames on the burning machine were behind that glow too.
       fpix.clear();
       if (scene.windowOpen) drawWindowWreck(fpix);
-      if (scene.fire) drawFireFront(fpix, scene.fire);
+      if (scene.fire) drawFireFront(fpix, scene.fire, scene.printer === 'wreck' ? scene.pieces : null);
       // The marks on the glass, under the things in flight, the landed pages and the ink.
       drawMarks(fpix, scene.marks);
       // Out of the slot: only the top rows of the sprite so far, then the whole thing.
@@ -3032,28 +3136,45 @@ export const room: Stage = {
         const spr = rotateSprite(d.kind === 'nut' ? SPR.NUT : d.kind === 'staple' ? SPR.STAPLE : SPR.BOLT, Math.floor(a / DROP_SPIN_MS) % 4);
         fpix.blit(Math.floor(d.x - (spr.w * sc) / 2 + 8 * k), Math.floor(d.y + DROP_GRAVITY * k * k + 10 * k - (spr.h * sc) / 2), spr, sc);
       }
-      // A burning page (thrown while the machine burns) carries flames up its face, from its
-      // bottom edge, scaled with it; its paper is scorched at the edges.
-      const pageFire = (x: number, y: number, w: number, h: number, seed: number) => {
-        drawFlame(fpix, x + w / 2, w / 2 - 1, h * 0.8, y + h, seed, reduced ? 0 : now);
-      };
+      // A burning page (thrown while the machine burns) is eaten from its bottom edge (PRNTR-FIRE.md §15): a
+      // ragged front climbs it, black char on its last row with ember glints, scorch above, and the fire's
+      // three flames (a tongue up the middle, a lick at each quarter) stand on the front, dying down as the
+      // paper goes. Its paper is scorched at the edges. The flames go in one layer per pass, drawn over the
+      // pages of that pass; they follow a page in flight every frame and step, with the front, at 10 fps.
+      const tick = reduced ? 0 : Math.floor(now / FIRE_TICK_MS);
+      const flying: Emitter[] = [];
       for (const p of pages) {
         if (p.shot || now < p.at || p.landedAt !== null) continue;
         const r = pagePose(p, now);
         const spr = SPR.PAGE_PRINTED;
-        if (r.h < spr.h) fpix.blit(r.x, r.y, { w: spr.w, h: r.h, rows: spr.rows.slice(0, r.h) });
-        else fpix.blit(r.x, r.y, spr, r.w / spr.w, p.burning ? { remap: { K: 'G', w: 'r' } } : {});
-        if (p.burning && r.h >= spr.h) pageFire(r.x, r.y, r.w, r.h, 600 + p.x1);
+        if (r.h < spr.h) { fpix.blit(r.x, r.y, { w: spr.w, h: r.h, rows: spr.rows.slice(0, r.h) }); continue; }
+        if (gone(p, now)) continue;
+        const big = p.doc && r.sc === 2, b = burnOf(p, now);
+        fpix.blit(r.x, r.y, big ? DOC.flying : spr, big ? 1 : r.sc, p.burning ? { remap: { K: 'G', w: 'r' }, fine: burnFine(13, r.sc, b, p.seed, tick) } : {});
+        if (p.burning) flying.push(...frontFire(r.x, r.y, r.w, r.h, r.sc, b, p.seed, tick));
       }
-      // A page on the glass: big, at a slight angle, then it slides off.
+      if (flying.length) drawFlames(fpix, 'pages', flying, reduced ? 0 : now);
+      // A page on the glass: big, at a slight angle, then it slides off; a burning one keeps charring and sheds ash.
+      const landed: Emitter[] = [];
       for (const p of pages) {
-        if (p.landedAt === null) continue;
+        if (p.landedAt === null || gone(p, now)) continue;
         const lt = now - p.landedAt;
         const slide = lt > PAGE_LANDED_MS ? ((lt - PAGE_LANDED_MS) / PAGE_SLIDE_MS) * 80 : 0;
         const lx = Math.floor(p.x1 - 20);
         const ly = Math.floor(p.y1 - 26 + slide);
-        fpix.blit(lx, ly, SPR.PAGE_PRINTED, 4, { skew: 10, ...(p.burning ? { remap: { K: 'G', w: 'r' } } : {}) });
-        if (p.burning) pageFire(lx + 3, ly, 40, 52, 700 + p.x1);
+        const b = burnOf(p, now);
+        fpix.blit(lx, ly, p.doc ? DOC.landed : SPR.PAGE_PRINTED, p.doc ? 1 : 4, { skew: 10, ...(p.burning ? { remap: { K: 'G', w: 'r' }, fine: burnFine(13, 4, b, p.seed + 100, tick) } : {}) });
+        if (p.burning) {
+          landed.push(...frontFire(lx + 3, ly, 40, 52, 4, b, 700 + p.x1, tick));
+          ashFlecks((x, y, k) => fpix.set(x, y, k), p.landedAt, now, lx, ly, 52, p.seed + 100, (t) => burnOf(p, t));
+        }
+      }
+      if (landed.length) drawFlames(fpix, 'pagesLanded', landed, reduced ? 0 : now);
+      // The player's page burning up: from three quarters burnt, three hot flakes trail it and, once it is gone,
+      // fly on to where it would have landed and splash there (the hit).
+      for (const p of pages) {
+        if (!p.doc || !p.burning || p.shot || now < p.at || burnOf(p, now) < 0.75) continue;
+        flakes((x, y, k) => fpix.set(x, y, k), ((now - p.at) / PAGE_MS - PAGE_EJECT) / (1 - PAGE_EJECT), p.x0, SLOT.y - 6.5, p.x1, p.y1, now, tick);
       }
       // Ink: the particles on the near half of their flight (the far half is behind the machine),
       // and the splat building up on the glass, then running down.
