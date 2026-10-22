@@ -827,6 +827,7 @@ export const room: Stage = {
       buttonBright: false,
       broken: { clock: false, poster: false, tank: false, plant: false, vase: false, kit: false, fig: false, figPot: false, art: false },
       tornSince: 0,
+      safe: { open: 0, drum: true, flash: false, glint: false },
       fig: { fall: 0, burning: false, burn: 0 },
       monstera: { burning: false, burn: 0 },
       clock: { state: 'up', x: CLOCK_AT.x, y: CLOCK_AT.y, rot: 0 },

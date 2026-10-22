@@ -1,4 +1,5 @@
 import { ART_AT } from './art';
+import { DISPLAY, DRUM, HANDLE, PAD, REVEAL, SAFE } from './safe';
 import { SPRITES, type PalKey } from './palette';
 import { H, Pix, W, parseSprite, rotateSprite, sliceRect, type Sprite } from './pixels';
 
@@ -234,6 +235,14 @@ export const tubeX = (tb: Tube, y: number): number => {
   return Math.round(tb.x + tb.reach * u * u);
 };
 
+/** The safe as the room draws it: the door 0 shut … 1 open, the drum still inside, the take's white flash, the drum's glint.
+ * The keypad and the display are the art canvas (safe.ts). */
+export interface SafeView {
+  open: number;
+  drum: boolean;
+  flash: boolean;
+  glint: boolean;
+}
 export interface SceneState {
   /** Left, right fluorescent panel. */
   lights: [boolean, boolean];
@@ -260,6 +269,8 @@ export interface SceneState {
   broken: Broken;
   /** Ms since the print was torn open (0 until it is); the leak's clock (PRNTR-FIRE.md §12). */
   tornSince: number;
+  /** The safe in the wall behind the print, seen once it is torn (PRNTR-SAFE.md). */
+  safe: SafeView;
   clock: Clock;
   /** The clock's hands spinning out of control while the machine shakes: ms into the spin, or null (still, 1:37). */
   clockSpin: number | null;
@@ -1211,8 +1222,11 @@ function drawHoles(p: Pix, s: SceneState): void {
 // ---- The print shot out (PRNTR-FIRE.md §12): the tear, the drywall's rim, the cavity with its studs, the roof leak ----
 /** Shots into the print before the fifth tears it open. */
 export const ART_BREAK_SHOTS = 5;
-/** The tear through the print and the wall: a ragged ellipse, its centre and half-sizes; the studs' left edges (STUD_W wide, 16 on centre). */
-const TEAR = { cx: 110, cy: 52, rx: 16, ry: 11, seed: 31 };
+/** The tear through the print and the wall: a ragged ellipse, its centre and half-sizes, always open to the safe's REVEAL rect
+ * (PRNTR-SAFE.md); the studs' left edges (STUD_W wide, 16 on centre); the second stud shot out, only its stubs STUB_FROM rows
+ * and more from the tear's centre are left. */
+const TEAR = { cx: 111, cy: 52, rx: 19, ry: 13, seed: 31 };
+const STUB_FROM = 10;
 const STUDS = [99, 115] as const;
 const STUD_W = 4;
 /** The leak: the water runs down the left stud's right face (LEAK_X) from LEAK_TOP to LEAK_BOTTOM, a drop every DROP_MS, the
@@ -1225,11 +1239,24 @@ const DRIP_AFTER_MS = 1500;
 const DROPS_MAX = 12;
 /** The tear's edge: 16 spokes, each up to 14 % off round. */
 const TEAR_R = Array.from({ length: 16 }, (_, i) => 1 + 0.28 * (hash(TEAR.seed + i * 7) - 0.5));
-/** How far a pixel is from the tear's centre: 0 there, 1 on the torn edge, more outside. */
+/** The tear's edge in a direction: the 16 spokes blended. */
+function ragAt(dx: number, dy: number): number {
+  const a = (Math.atan2(dy, dx) / (2 * Math.PI) + 1) * 16, i = Math.floor(a) % 16, f = a - Math.floor(a);
+  return TEAR_R[i] + (TEAR_R[(i + 1) % 16] - TEAR_R[i]) * f;
+}
+/** How far a pixel is from the tear's centre: 0 there, 1 on the torn edge, more outside. Inside the safe's REVEAL rect it is
+ * 0.8 at most (the cavity), the rect's rim as ragged as the ellipse's; the ellipse is big enough that the rect only matters
+ * at its corners. */
 function tearDist(x: number, y: number): number {
   const dx = (x + 0.5 - TEAR.cx) / TEAR.rx, dy = (y + 0.5 - TEAR.cy) / TEAR.ry;
-  const a = (Math.atan2(dy, dx) / (2 * Math.PI) + 1) * 16, i = Math.floor(a) % 16, f = a - Math.floor(a);
-  return Math.hypot(dx, dy) / (TEAR_R[i] + (TEAR_R[(i + 1) % 16] - TEAR_R[i]) * f);
+  const d = Math.hypot(dx, dy) / ragAt(dx, dy);
+  const rcx = (REVEAL.x0 + REVEAL.x1) / 2, rcy = (REVEAL.y0 + REVEAL.y1) / 2, hw = (REVEAL.x1 - REVEAL.x0) / 2, hh = (REVEAL.y1 - REVEAL.y0) / 2;
+  const ex = (x + 0.5 - rcx) / hw, ey = (y + 0.5 - rcy) / hh;
+  return Math.min(d, (0.8 * Math.max(Math.abs(ex), Math.abs(ey))) / ragAt(ex, ey));
+}
+/** Whether a room point is in the cavity (the tear's inside, within the print's rect): where the safe's steel can be hit. */
+export function inCavity(x: number, y: number): boolean {
+  return x >= ART_AT.x && x < ART_AT.x + ART_AT.w && y >= ART_AT.y && y < ART_AT.y + ART_AT.h && tearDist(x, y) <= 0.8;
 }
 /** The leak's beat `t` ms into the dripping, stepped at 100 ms like the fire: the drops so far, the phase of the one forming, how far into it. */
 function dripAt(t: number): { n: number; phase: 'form' | 'run' | 'fall' | 'splash'; u: number } {
@@ -1241,7 +1268,8 @@ function dripAt(t: number): { n: number; phase: 'form' | 'run' | 'fall' | 'splas
   return { n, phase: 'splash', u: (q - 0.84) / 0.16 };
 }
 /**
- * The print torn open and the wall behind it shot through, `since` ms after the break (the wall sheet's #2, 2026-10-22):
+ * The print torn open and the wall behind it shot through, `since` ms after the break (the wall sheet's #2, 2026-10-22; the
+ * safe sheet's #5, PRNTR-SAFE.md: the tear bigger, the second stud in stubs, the safe in the cavity):
  * the paper's torn edge (white, curling), the gypsum's rim, the cavity dark behind it with two studs lit from the left, a
  * noggin between them and a cable looped across; from DRIP_AFTER_MS on, the roof leak: a bead forms at the top of the
  * hole, runs down the left stud's face, drops out of the bottom of the tear (behind the frame's rail) onto the wall under
@@ -1249,10 +1277,12 @@ function dripAt(t: number): { n: number; phase: 'form' | 'run' | 'fall' | 'splas
  * first half second. Drawn over the print's rect, so it covers the print wherever the paper is gone; `lit` is the left
  * light, which the wall under the frame is drawn by.
  */
-export function drawWallHole(p: Pix, since: number, near: number, lit: boolean): void {
+export function drawWallHole(p: Pix, since: number, near: number, lit: boolean, safe: SafeView): void {
   const { cx, cy, rx, ry } = TEAR;
-  const x0 = Math.floor(cx - rx * 1.3), x1 = Math.ceil(cx + rx * 1.3), y0 = Math.floor(cy - ry * 1.3), y1 = Math.ceil(cy + ry * 1.3);
-  const inside = (x: number, y: number) => tearDist(x, y) <= 0.8;
+  // never outside the print's rect: the frame round it stays whole
+  const x0 = Math.max(ART_AT.x, Math.floor(cx - rx * 1.3)), x1 = Math.min(ART_AT.x + ART_AT.w - 1, Math.ceil(cx + rx * 1.3));
+  const y0 = Math.max(ART_AT.y, Math.floor(cy - ry * 1.3)), y1 = Math.min(ART_AT.y + ART_AT.h - 1, Math.ceil(cy + ry * 1.3));
+  const inside = inCavity;
   for (let y = y0; y <= y1; y++) {
     for (let x = x0; x <= x1; x++) {
       const d = tearDist(x, y);
@@ -1262,20 +1292,81 @@ export function drawWallHole(p: Pix, since: number, near: number, lit: boolean):
       else p.set(x, y, 'i');
     }
   }
-  // the studs, lit from the left, a grain mark now and then; the noggin between them low down
+  // the safe (PRNTR-SAFE.md): the inside once the door is off its face (black, a steel lining, a shelf; the drum magazine on
+  // it, glinting; white for a beat when it is taken), then the door, hinged on its left: shut, the whole face; opening, the
+  // face narrows to a 2 px slab at the hinge, its thickness seen edge on
+  const inSafe = (x: number, y: number) => x >= SAFE.x0 && x < SAFE.x1 && y >= SAFE.y0 && y < SAFE.y1;
+  if (safe.open > 0) {
+    for (let y = SAFE.y0; y < SAFE.y1; y++) {
+      for (let x = SAFE.x0; x < SAFE.x1; x++) {
+        if (!inside(x, y)) continue;
+        const edge = x === SAFE.x0 || x === SAFE.x1 - 1 || y === SAFE.y0 || y === SAFE.y1 - 1;
+        p.set(x, y, safe.flash ? 'W' : edge ? 'X' : y === SAFE.y1 - 2 ? 'G' : 'z');
+      }
+    }
+    if (safe.drum && !safe.flash) {
+      for (let dy = -4; dy <= 4; dy++) {
+        for (let dx = -4; dx <= 4; dx++) {
+          const d = Math.hypot(dx, dy);
+          if (d > DRUM.r) continue;
+          const x = DRUM.cx + dx, y = DRUM.cy + dy;
+          if (!inside(x, y)) continue;
+          p.set(x, y, dx === 0 && dy === 0 ? 'K' : safe.glint && dx === -1 && dy === -1 ? 'W' : d > 2.8 ? 'K' : dx + dy > 1.5 ? 'o' : 'y');
+        }
+      }
+      for (let y = DRUM.cy + 4; y < DRUM.cy + 6; y++) for (let x = DRUM.cx - 1; x <= DRUM.cx + 1; x++) if (inside(x, y)) p.set(x, y, y === DRUM.cy + 4 ? 'K' : 'G');
+    }
+  }
+  const dw = safe.open === 0 ? SAFE.x1 - SAFE.x0 : Math.max(2, Math.round((SAFE.x1 - SAFE.x0) * (1 - safe.open)));
+  const doorX1 = SAFE.x0 + dw;
+  for (let y = SAFE.y0; y < SAFE.y1; y++) {
+    for (let x = SAFE.x0; x < doorX1; x++) {
+      if (!inside(x, y)) continue;
+      let k: PalKey = 'x';
+      if (x === SAFE.x0 || y === SAFE.y0) k = 'C';
+      else if (x === doorX1 - 1 || y === SAFE.y1 - 1) k = 'G';
+      else if (x === SAFE.x0 + 1 || y === SAFE.y0 + 1 || x === doorX1 - 2 || y === SAFE.y1 - 2) k = 'X';
+      if (safe.open > 0 && x >= doorX1 - 2) k = 'G';
+      p.set(x, y, k);
+    }
+  }
+  if (safe.open === 0) {
+    // the keypad's and the display's bezels, dark; the keys and the display themselves are the art canvas (safe.ts
+    // paintKeypad), seen through the rects cleared here; the handle beside the display
+    for (let y = PAD.y - 1; y <= PAD.y + PAD.kh * 4; y++) for (let x = PAD.x - 1; x <= PAD.x + PAD.kw * 3; x++) if (inside(x, y)) p.set(x, y, 'i');
+    for (let y = DISPLAY.y - 1; y <= DISPLAY.y + DISPLAY.h; y++) for (let x = DISPLAY.x - 1; x <= DISPLAY.x + DISPLAY.w; x++) if (inside(x, y)) p.set(x, y, 'i');
+    p.clearRect(PAD.x, PAD.y, PAD.x + PAD.kw * 3, PAD.y + PAD.kh * 4);
+    p.clearRect(DISPLAY.x, DISPLAY.y, DISPLAY.x + DISPLAY.w, DISPLAY.y + DISPLAY.h);
+    for (let x = HANDLE.x; x < HANDLE.x + HANDLE.w; x++) {
+      if (inside(x, HANDLE.y)) p.set(x, HANDLE.y, x === HANDLE.x ? 'z' : 'i');
+      if (inside(x, HANDLE.y + 1)) p.set(x, HANDLE.y + 1, 'G');
+    }
+  }
+  // the studs, lit from the left, a grain mark now and then; the second one shot out: its stubs at the top and the bottom
+  // of the hole, their ends splintered pale, a few chips beside them; the noggin between them low down and the cable
+  // looped across, both stopping at the safe
   for (const sx of STUDS) {
+    const out = sx === STUDS[1];
     for (let y = y0; y <= y1; y++) {
+      if (out && Math.abs(y - cy) < STUB_FROM) continue;
       for (let x = sx; x < sx + STUD_W; x++) {
         if (!inside(x, y)) continue;
-        p.set(x, y, x === sx ? 'E' : x === sx + STUD_W - 1 ? 'D' : y % 5 === 0 && hash(x + y * 13) > 0.5 ? 'D' : 'p');
+        let k: PalKey = x === sx ? 'E' : x === sx + STUD_W - 1 ? 'D' : y % 5 === 0 && hash(x + y * 13) > 0.5 ? 'D' : 'p';
+        if (out && Math.abs(y - cy) === STUB_FROM && hash(x * 7 + y) > 0.4) k = 's';
+        p.set(x, y, k);
+      }
+    }
+    if (out) {
+      for (let i = 0; i < 6; i++) {
+        const x = sx + Math.floor(hash(i * 3) * STUD_W), y = cy + (i < 3 ? -STUB_FROM - 1 : STUB_FROM + 1) + (i % 3);
+        if (inside(x, y) && !inSafe(x, y)) p.set(x, y, 'p');
       }
     }
   }
-  for (let x = STUDS[0] + STUD_W; x < STUDS[1]; x++) for (let y = cy + 6; y < cy + 9; y++) if (inside(x, y)) p.set(x, y, y === cy + 6 ? 'D' : 'E');
-  // a cable stapled to the left stud, looping across to the right one
+  for (let x = STUDS[0] + STUD_W; x < STUDS[1]; x++) for (let y = cy + 6; y < cy + 9; y++) if (inside(x, y) && !inSafe(x, y)) p.set(x, y, y === cy + 6 ? 'D' : 'E');
   for (let i = 0; i <= 16; i++) {
     const x = STUDS[0] + STUD_W + i, y = Math.round(cy - 4 + 3 * Math.sin((i / 16) * Math.PI));
-    if (inside(x, y) && !(x >= STUDS[1] && x < STUDS[1] + STUD_W)) p.set(x, y, 'G');
+    if (inside(x, y) && !(x >= STUDS[1] && x < STUDS[1] + STUD_W) && !inSafe(x, y)) p.set(x, y, 'G');
   }
   // the leak: the streak it has left, the bead forming, running, falling, splashing; the stain under the frame
   const wk: PalKey = near > 0.3 ? 'H' : 'h', bk: PalKey = near > 0.3 ? 'W' : 'H';
@@ -1402,7 +1493,7 @@ export function drawRoom(p: Pix, s: SceneState): void {
   p.rect(ART_AT.x - 1, ART_AT.y - 1, ART_AT.x + ART_AT.w + 1, ART_AT.y + ART_AT.h + 1, 'D');
   p.clearRect(ART_AT.x, ART_AT.y, ART_AT.x + ART_AT.w, ART_AT.y + ART_AT.h);
   // torn open by the fifth shot into it: the wall behind it, shot through and dripping, over the print (PRNTR-FIRE.md §12)
-  if (s.broken.art) drawWallHole(p, s.tornSince, s.storm.near, s.lights[0]);
+  if (s.broken.art) drawWallHole(p, s.tornSince, s.storm.near, s.lights[0], s.safe);
   // the clock where the board was, the post-it board lower and by the window
   if (s.clock.state === 'up') {
     if (s.clockSpin === null) p.blit(CLOCK_AT.x, CLOCK_AT.y, SPR.CLOCK);
