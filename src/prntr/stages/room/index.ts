@@ -1,7 +1,7 @@
 import { reducedMotion, wait } from '../../anim';
 import type { Handoff, RunStats, Stage } from '../../types';
 import { H, Pix, W, frameScale, rotateSprite } from './pixels';
-import { BADGE_AT, CLOCK_AT, GLASS, KIT_AT, KNOB, MACHINE_AT, MACHINE_PIECES, NOZZLES, SPR, drawFireFront, drawFlame, drawMarks, drawRoom, drawWindowWreck, figLeaf, fireRect, inDoorway, knobX, lampX, markBox, tubeX, type Broken, type ExitSign, type Hole, type Mark, type SceneState, type Tube } from './scene';
+import { BADGE_AT, CLOCK_AT, FIRE_TICK_MS, GLASS, KIT_AT, KNOB, MACHINE_AT, MACHINE_PIECES, NOZZLES, SPR, drawFireFront, drawFlame, drawMarks, drawRoom, drawWindowWreck, figEmitters, figLeaf, fireEmitters, fireRect, inDoorway, knobX, lampX, markBox, tubeX, type Broken, type Emitter, type ExitSign, type Hole, type Mark, type Rect, type SceneState, type Tube } from './scene';
 import { ART_AT, ART_SUB, renderVictory } from './art';
 import { PAL, type PalKey } from './palette';
 import { createRoomSounds, type FireSound, type Hum } from './sounds';
@@ -397,6 +397,9 @@ const CLOCK_SPIN_TAIL_MS = 600;
  * and the bolts in the rotation from then on, whatever its health. */
 const FIG_FALL_MS = 700;
 const FIG_CATCH_MS = 1200;
+/** Caught, the fig lights from its crown down to the foot of its trunk over this long (Fig.burn 0 → 1), then burns
+ * down (its flames smaller) over as long again. */
+const FIG_LIGHT_MS = 1500;
 /** The lights, out since the pounce, flicker back on at random once the machine has FLICKER_FROM of its
  * damage (20% of its health or less): one panel at a time (now and then both), on for FLICKER_ON_MIN–
  * FLICKER_ON_MAX ms with a buzz, then out with a click, the next coming FLICKER_GAP_MIN–FLICKER_GAP_MAX ms
@@ -612,9 +615,15 @@ export const room: Stage = {
     const rippleFront = rippleBack && RippleView.create('prntr-room-ripple', { src: fpix.image, x: 0, y: 0, w: W, h: H });
     const light = el('div', 'prntr-room-light');
     const spill = el('div', 'prntr-room-spill');
-    // The fire's light: an unpixelated orange glow sized to the flames each frame.
+    // The fire's light: an unpixelated orange glow sized to the flames each frame; one more over the burning
+    // fig and one over the burning machine (PRNTR-FIRE.md). The main one stays first in the DOM (the harness
+    // reads the first element of the class).
     const fireLight = el('div', 'prntr-room-fire-light');
     fireLight.hidden = true;
+    const figLight = el('div', 'prntr-room-fire-light');
+    figLight.hidden = true;
+    const machineLight = el('div', 'prntr-room-fire-light');
+    machineLight.hidden = true;
     // The mad machine's slot, lit red like the door (.is-mad on the frame fades it in).
     const slotLight = el('div', 'prntr-room-slot-light');
     // The storm's light through the holes in the door and the blind, one box per hole.
@@ -634,7 +643,7 @@ export const room: Stage = {
     const glowFills = el('div', 'prntr-room-glow-fills');
     // The red lights' wash over the room (under the front layer), faded in by .is-red-lit on the frame.
     const redLight = el('div', 'prntr-room-red-light');
-    for (const n of [light, spill, fireLight, slotLight, holeLights, windowLight, stormWash, wash, glows, glowFills]) n.setAttribute('aria-hidden', 'true');
+    for (const n of [light, spill, fireLight, figLight, machineLight, slotLight, holeLights, windowLight, stormWash, wash, glows, glowFills]) n.setAttribute('aria-hidden', 'true');
     const hud = el('div', 'prntr-room-hud');
     const scoreEl = el('div', 'prntr-room-score', 'SCORE 0000');
     const hiEl = el('div', 'prntr-room-hi', 'HI 1337');
@@ -747,7 +756,7 @@ export const room: Stage = {
     const deathEl = el('div', 'prntr-room-death');
     deathEl.setAttribute('aria-hidden', 'true');
     deathEl.hidden = true;
-    frame.append(art, canvas, ...(rippleBack ? [rippleBack.canvas] : []), light, spill, fireLight, slotLight, holeLights, windowLight, glowFills, redLight, front, ...(rippleFront ? [rippleFront.canvas] : []), stormWash, wash, glows, badgeGlow, hud, cursor, hurtEl, deathEl, continueEl, badgeEl, overEl);
+    frame.append(art, canvas, ...(rippleBack ? [rippleBack.canvas] : []), light, spill, fireLight, figLight, machineLight, slotLight, holeLights, windowLight, glowFills, redLight, front, ...(rippleFront ? [rippleFront.canvas] : []), stormWash, wash, glows, badgeGlow, hud, cursor, hurtEl, deathEl, continueEl, badgeEl, overEl);
     wrap.append(frame);
     root.append(wrap);
 
@@ -908,6 +917,8 @@ export const room: Stage = {
     /** The fig: when its planter was shot (it falls from then), and when it catches from the fire. */
     let figFallAt: number | null = null;
     let figCatchAt: number | null = null;
+    /** When the fig caught (Fig.burn counts from here). */
+    let figBurnAt: number | null = null;
     /** The flicker: when the next panel comes on, and when each lit one goes out (null: out). */
     let flickerNext = 0;
     const flickerOff: (number | null)[] = [null, null];
@@ -1855,6 +1866,7 @@ export const room: Stage = {
       fireSound = null;
       scene.fire = null;
       fireLight.hidden = true;
+      machineLight.hidden = true;
       spreadAt = null;
       ctx.announce('The fire is out.');
     };
@@ -2761,18 +2773,31 @@ export const room: Stage = {
       const v = Math.min(1, (now - spreadAt) / spreadMs);
       return scene.printer === 'wreck' ? v + RAGE_MORE * Math.min(1, Math.max(0, now - burstAt - DEPLETE_MS) / 1000) : v;
     };
-    // The fire grows for FIRE_GROW_MS, then holds; its glow box follows the flames.
+    /** A fire light over a box of flames (FIRE_GLOW_PAD past it), flickering in step with the fire's ticks; hidden with no box. */
+    const poseLight = (light: HTMLElement, box: Rect | null, now: number) => {
+      light.hidden = box === null;
+      if (box === null) return;
+      light.style.left = `${(box.x0 - FIRE_GLOW_PAD) * scale}px`;
+      light.style.top = `${(box.y0 - FIRE_GLOW_PAD) * scale}px`;
+      light.style.width = `${(box.x1 - box.x0 + 2 * FIRE_GLOW_PAD) * scale}px`;
+      light.style.height = `${(box.y1 - box.y0 + 2 * FIRE_GLOW_PAD) * scale}px`;
+      light.style.opacity = reduced ? '0.8' : String(0.65 + 0.35 * Math.abs(Math.sin(Math.floor(now / FIRE_TICK_MS) * 1.1)));
+    };
+    /** The box round a group of flames that are there at all, or null. */
+    const emitterBox = (es: Emitter[]): Rect | null => {
+      const live = es.filter((e) => e.w >= 0.5 && e.h >= 1);
+      if (live.length === 0) return null;
+      return { x0: Math.min(...live.map((e) => e.x - e.w)), y0: Math.min(...live.map((e) => e.floor - e.h)), x1: Math.max(...live.map((e) => e.x + e.w)), y1: Math.max(...live.map((e) => e.floor)) };
+    };
+    // The fire grows for FIRE_GROW_MS, then holds; its glow box follows the flames, and the machine's its flames.
     const poseFire = (now: number) => {
       if (fireAt === null) return;
       scene.fire = { u: fireU(now), t: reduced ? 0 : now, v: spreadU(now) };
-      const r = fireRect(scene.fire.u);
-      fireLight.hidden = false;
-      fireLight.style.left = `${(r.x0 - FIRE_GLOW_PAD) * scale}px`;
-      fireLight.style.top = `${(r.y0 - FIRE_GLOW_PAD) * scale}px`;
-      fireLight.style.width = `${(r.x1 - r.x0 + 2 * FIRE_GLOW_PAD) * scale}px`;
-      fireLight.style.height = `${(r.y1 - r.y0 + 2 * FIRE_GLOW_PAD) * scale}px`;
-      fireLight.style.opacity = reduced ? '0.8' : String(0.65 + 0.35 * Math.abs(Math.sin(now / 90)));
+      poseLight(fireLight, fireRect(scene.fire.u), now);
+      poseLight(machineLight, emitterBox(fireEmitters(scene.fire).machine), now);
     };
+    // The burning fig's light, over its flames (it burns on after the fire is out).
+    const poseFigLight = (now: number) => poseLight(figLight, scene.fig.burning ? emitterBox(figEmitters(scene.fig.burn, scene.broken.fig)) : null, now);
     // The storm outside: a near strike (its bolt in the door's or the window's view), far lightning
     // between, and what the room sees of it this frame.
     const strike = (now: number) => {
@@ -2864,6 +2889,7 @@ export const room: Stage = {
         figCatchAt ??= now + FIG_CATCH_MS;
         if (now >= figCatchAt) {
           scene.fig.burning = true;
+          figBurnAt = now;
           sounds.whoosh();
           boltsNow = true;
           nextAttackAt = Math.min(nextAttackAt, now);
@@ -2876,6 +2902,12 @@ export const room: Stage = {
           }
         }
       }
+      // Lit from the crown down over FIG_LIGHT_MS, then burning down (at once under reduced motion).
+      if (figBurnAt !== null) {
+        const b = (now - figBurnAt) / FIG_LIGHT_MS;
+        scene.fig.burn = reduced ? Math.max(1, b) : b;
+      }
+      poseFigLight(now);
       // The clock's hands spin while the machine moves: forward in the pounce, shaking as it lands, trembling mad.
       const moving = landing !== null || (scene.machine.back > 0 && scene.machine.back < 1) || scene.shake.x !== 0 || scene.shake.y !== 0;
       if (moving && !reduced && frozenAt === null) {
