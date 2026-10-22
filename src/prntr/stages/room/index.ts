@@ -2182,6 +2182,7 @@ export const room: Stage = {
         playerName = name;
         scene.badge = 'taken';
         lifeName.textContent = playerName;
+        drawHealth(); // the bar's label names the player too
         setCaption('YOU CLIP IT ON.');
         sounds.uiClick();
         ctx.announce(`Name set: ${name}.`);
@@ -2330,6 +2331,7 @@ export const room: Stage = {
         setName: (n: string) => {
           playerName = cleanName(n) || DEFAULT_NAME;
           lifeName.textContent = playerName;
+          drawHealth();
         },
         stats: () => ({ shotsFired, misses, pagesShot, staplesShot, deaths, fireEver, wonBy, fightAt }),
         setScore: (n: number) => {
