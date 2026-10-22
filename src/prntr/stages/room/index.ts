@@ -95,12 +95,13 @@ const DAZE_MS = 2000;
 const DAZE_PX = 12;
 /** On touch there is no hover cross: it shows at the tap for this long, so the kick and the bloom show. */
 const TOUCH_CROSS_MS = 500;
-/** Slowed to 2.5 / 3 / 2 s, then made a quarter faster. */
+/** Slowed to 2.5 / 3 / 2 s, then made a quarter faster. The late gap from phase 3. From phase 2 the next attack is
+ * timed from a volley's launch, not from its last landing: the gap runs while the staples, pages, nuts and bolts or
+ * ink are still in the air, so volleys overlap (PRNTR-PRESSURE.md §4.2). A scan and a slam keep their whole time
+ * (nothing comes while the lid is up, and the player gets the gap after the flash). */
 const FIRST_ATTACK_MS = 2000;
 const ATTACK_GAP_MS = 2250;
 const ATTACK_GAP_LATE_MS = 1500;
-/** From this score on, the attacks come faster. */
-const LATE_SCORE = 900;
 /** The fight's phases (PRNTR-V2.md §2.1), by the machine's life left of its HI: phase 2 from PHASE_2_LIFE left,
  * phase 3 from PHASE_3_LIFE. The slam joins the rotation with phase 2 (SLAM_LIFE). */
 const PHASE_2_LIFE = 900;
@@ -1044,9 +1045,9 @@ export const room: Stage = {
     let nextFar = phaseAt + FAR_FIRST_MS;
     let farAt = -Infinity;
     let lastNear = -Infinity;
-    const attackGap = () => Math.round((score >= LATE_SCORE ? ATTACK_GAP_LATE_MS : ATTACK_GAP_MS) * Math.pow(RAGE_STEP, rage));
     /** The fight's phase now, 1–3, by the machine's life left. */
     const fightPhase = () => (HI - score <= PHASE_3_LIFE ? 3 : HI - score <= PHASE_2_LIFE ? 2 : 1);
+    const attackGap = () => Math.round((fightPhase() === 3 ? ATTACK_GAP_LATE_MS : ATTACK_GAP_MS) * Math.pow(RAGE_STEP, rage));
     const scheduleBlink = (from: number, delay: number) => {
       nextBlinkAt = from + delay + Math.random() * (BLINK_MAX_MS - BLINK_MIN_MS);
     };
@@ -2262,6 +2263,10 @@ export const room: Stage = {
     };
     const launchAttack = (now: number) => {
       const gap = attackGap();
+      /** The next attack after a volley this long: after it has landed in phase 1, from its launch from phase 2. */
+      const after = (volleyMs: number) => {
+        nextAttackAt = now + (fightPhase() >= 2 ? 0 : volleyMs) + gap;
+      };
       const kinds = rotation();
       const nozzles = NOZZLES_X.filter((x) => !scene.stubs.includes(x));
       // Nothing while the lid is up (a scan or a slam is on), and no scan or slam while a tube is up: the lid
@@ -2289,14 +2294,14 @@ export const room: Stage = {
           return;
         }
         sprays.push({ nx: BLACK_X, x: BLACK_X, y: TUBE_TOP, at: now + TUBE_RISE_MS, color: 'z', fire: false, landing: null, stoppedAt: null, done: true, fed: false, dud: true });
-        nextAttackAt = now + TUBE_RISE_MS + SPRAY_MS + TUBE_RISE_MS + gap;
+        after(TUBE_RISE_MS + SPRAY_MS + TUBE_RISE_MS);
         return;
       }
       if (kind === 'bolts') {
         for (let i = 0; i < 3; i++) {
           staples.push({ kind: Math.random() < 0.5 ? 'nut' : 'bolt', ms: BOLT_MS, x0: SLOT.x0 + 4 + Math.random() * (SLOT.x1 - SLOT.x0 - 8), x: 20 + Math.random() * 180, y: 40 + Math.random() * 70, at: now + i * BOLT_STAGGER_MS, hit: false, shot: false, fed: false });
         }
-        nextAttackAt = now + 2 * BOLT_STAGGER_MS + BOLT_MS + gap;
+        after(2 * BOLT_STAGGER_MS + BOLT_MS);
       } else if (kind === 'ink') {
         if (!nozzles.length) {
           nextAttackAt = now + gap;
@@ -2316,7 +2321,7 @@ export const room: Stage = {
           const nx = nozzles[Math.floor(Math.random() * nozzles.length)];
           sprays.push({ nx, x, y, at: now + TUBE_RISE_MS + i * SPRAY_STAGGER_MS, color: NOZZLES.find((n) => n.x === nx)!.color, fire: atFire, landing: null, stoppedAt: null, done: false, fed: false, dud: false });
         }
-        nextAttackAt = now + TUBE_RISE_MS + (SPRAY_COUNT - 1) * SPRAY_STAGGER_MS + SPRAY_MS + SPRAY_FLIGHT_MS + gap;
+        after(TUBE_RISE_MS + (SPRAY_COUNT - 1) * SPRAY_STAGGER_MS + SPRAY_MS + SPRAY_FLIGHT_MS);
       } else if (kind === 'scan') {
         startScan(now);
         nextAttackAt = now + SCAN_TOTAL_MS + gap;
@@ -2329,7 +2334,7 @@ export const room: Stage = {
         for (let i = 0; i < n; i++) {
           staples.push({ kind: 'staple', ms: STAPLE_MS, x0: SLOT.x0 + 3 + Math.random() * (SLOT.x1 - SLOT.x0 - 6), x: 20 + Math.random() * 180, y: 40 + Math.random() * 70, at: now + i * stagger, hit: false, shot: false, fed: false });
         }
-        nextAttackAt = now + (n - 1) * stagger + STAPLE_MS + gap;
+        after((n - 1) * stagger + STAPLE_MS);
       } else {
         const stagger = fightPhase() >= 2 ? STAGGER_PRESSED_MS : PAGE_STAGGER_MS;
         // from phase 2 the sixth page, last, out of the middle of the slot
@@ -2337,7 +2342,7 @@ export const room: Stage = {
         lanes.forEach((x1, i) => {
           pages.push({ burning: fireAt !== null, x0: i < PAGE_ORIGINS_X.length ? PAGE_ORIGINS_X[i] : PAGE_ORIGINS_X[2], x1, y1: 60 + Math.random() * 70, at: now + i * stagger, landedAt: null, shot: false, fed: false, doc: i === 2, seed: 600 + x1 });
         });
-        nextAttackAt = now + (lanes.length - 1) * stagger + PAGE_MS + gap;
+        after((lanes.length - 1) * stagger + PAGE_MS);
       }
     };
 
@@ -2570,6 +2575,8 @@ export const room: Stage = {
         broken: () => BREAKABLES.filter((b) => scene.broken[b.id]).map((b) => b.id),
         kit: () => scene.broken.kit,
         attackGap,
+        /** Ms until the next attack is due (negative: overdue, waiting on the lid). */
+        nextAttackIn: () => nextAttackAt - performance.now(),
         exit: (): ExitSign['state'] => scene.exit.state,
         doorGap: () => scene.doorGap,
         door: () => (scene.doorBroken ? 'broken' : scene.doorGap >= DOOR_OPEN ? 'open' : scene.doorGap > 0 ? 'cracked' : 'closed'),
