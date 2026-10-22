@@ -430,11 +430,14 @@ export default function App() {
   // The certificate becomes the loaded document: one page, a PDF to download, recoloured
   // in the chosen ink like any other. A document still processing is dropped (only its
   // rendered pages are kept for the vortex); one entered from nothing (the dev entrance) has
-  // nothing to keep.
+  // nothing to keep. A win from a certificate keeps the document the first win replaced, so the
+  // vortex never brings back a certificate.
   function loadCertificate({ id, page }: Certificate) {
-    const original: OriginalDocument | null = store.hasSource(currentPage)
-      ? { pages: store.snapshot(), file: lastFile.current, fileName, format, page: currentPage }
-      : null;
+    const original: OriginalDocument | null =
+      vortexOriginal ??
+      (store.hasSource(currentPage)
+        ? { pages: store.snapshot(), file: lastFile.current, fileName, format, page: currentPage }
+        : null);
     lastFile.current = null;
     startDocument(`prntr-certificate-${id.slice(-9).replace('-', '')}.pdf`, 'pdf');
     // the certificate comes up in gold, the secret ink, which stays on offer from here on
