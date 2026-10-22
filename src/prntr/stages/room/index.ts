@@ -2291,7 +2291,9 @@ export const room: Stage = {
       'pointerdown',
       (e) => {
         e.stopPropagation();
-        reload(performance.now());
+        // under CONTINUE? the pips are part of the room: a press on them answers it like a press anywhere else
+        if (phase === 'continue') answerContinue(performance.now());
+        else reload(performance.now());
       },
       { signal },
     );
@@ -2301,7 +2303,8 @@ export const room: Stage = {
         if (phase === 'badge') return;
         if (phase === 'continue' && (e.key === ' ' || e.key === 'Enter')) {
           e.preventDefault();
-          answerContinue(performance.now());
+          // not a held key: the Space that was held down while the player died would answer it the moment it is armed
+          if (!e.repeat) answerContinue(performance.now());
         } else if (e.key === ' ' || e.key === 'r' || e.key === 'R') {
           e.preventDefault();
           reload(performance.now());
