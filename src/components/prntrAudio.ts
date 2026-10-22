@@ -10,7 +10,7 @@ let suspendTimer: number | undefined;
 export function prntrAudioContext(): AudioContext | null {
   if (shared === undefined) shared = typeof AudioContext === 'undefined' ? null : new AudioContext();
   keepPrntrAudio();
-  if (shared && shared.state === 'suspended') void shared.resume().catch(() => undefined);
+  if (shared && shared.state !== 'running' && shared.state !== 'closed') void shared.resume().catch(() => undefined);
   return shared;
 }
 

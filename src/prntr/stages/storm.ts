@@ -858,8 +858,9 @@ export function startStorm(root: HTMLElement, h1: HTMLElement, slots: StormSlot[
       if (age > 600 && d.y > bottom[Math.min(W - 1, Math.max(0, d.x))] + 8 * P) drips.splice(i, 1);
     }
     // lightning, once it storms
-    if (weather === 'storm' && now >= nextStrike) strike(now);
-    if (weather === 'storm' && now >= nextFar) farStrike(now);
+    // (not before the first measure has made the cloud: strike and farStrike read it)
+    if (weather === 'storm' && ready && now >= nextStrike) strike(now);
+    if (weather === 'storm' && ready && now >= nextFar) farStrike(now);
   };
 
   const draw = (now: number) => {
@@ -941,8 +942,20 @@ export function startStorm(root: HTMLElement, h1: HTMLElement, slots: StormSlot[
 
   const loop = (now: number) => {
     if (stopped) return;
-    step(now);
-    draw(now);
+    // The storm is the title's weather and nothing else depends on it: a frame that throws puts the storm out, and the
+    // opening goes on without it (a dead loop would have left a frozen cloud and its thunder going).
+    try {
+      step(now);
+      draw(now);
+    } catch (err) {
+      console.error('[prntr] storm', err);
+      stopped = true;
+      sound?.stop(0.05);
+      window.removeEventListener('resize', onResize);
+      canvas.remove();
+      flash.remove();
+      return;
+    }
     raf = requestAnimationFrame(loop);
   };
   const onResize = () => {
@@ -973,7 +986,7 @@ export function startStorm(root: HTMLElement, h1: HTMLElement, slots: StormSlot[
       nextStrike = Infinity;
       nextFar = Infinity;
       sound?.finale();
-      if (reduced || weather !== 'storm') return 0;
+      if (reduced || weather !== 'storm' || !ready) return 0;
       strike(performance.now(), true);
       return 400;
     },
