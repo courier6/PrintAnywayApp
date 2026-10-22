@@ -820,10 +820,14 @@
   background: #1E1433;
 }
 
+/* The fill stays full width and shrinks by a scale from its left end: a shrinking width
+   repaints the bar while the hit's blink holds the fill on a layer of its own, and Safari can
+   leave the old right end standing there as a green line. */
 .prntr-room-life-fill {
   height: 100%;
   background: #46D36E;
-  transition: width 200ms linear;
+  transform-origin: left;
+  transition: transform 200ms linear;
 }
 
 .prntr-room-life.is-hurt .prntr-room-life-fill {

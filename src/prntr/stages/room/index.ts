@@ -1088,7 +1088,7 @@ export const room: Stage = {
       healthFill.style.width = `${(1 - score / HI) * 100}%`;
     };
     const drawHealth = () => {
-      lifeFill.style.width = `${health}%`;
+      lifeFill.style.transform = `scaleX(${health / PLAYER_HEALTH})`;
       lifeEl.setAttribute('aria-label', `${playerName}, health ${health} of ${PLAYER_HEALTH}`);
       // the name wears with the bar: worn at half, rough near the end
       lifeName.classList.toggle('is-worn', health <= WORN_HEALTH && health > ROUGH_HEALTH);
@@ -2213,7 +2213,7 @@ export const room: Stage = {
       t.on = true;
       t.el.classList.add(!reduced && Math.random() < TEAR_DROP ? 'is-dropped' : 'is-torn');
       if (t.el === healthEl) healthFill.style.width = `${Math.random() * 100}%`;
-      else if (t.el === lifeEl) lifeFill.style.width = `${Math.random() * 100}%`;
+      else if (t.el === lifeEl) lifeFill.style.transform = `scaleX(${Math.random()})`;
       else {
         const n = t.el === captionEl ? captionText : t.el;
         if (n.childElementCount === 0 && n.textContent) {
