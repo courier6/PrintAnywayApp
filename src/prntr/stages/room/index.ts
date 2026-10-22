@@ -218,10 +218,9 @@ const FIRE_GROW_MS = 12_000;
  * the door, its button stays bright, and it trembles (a new offset every SHAKE_FRAMES frames). */
 const MAD_AFTER_MS = 1500;
 const SHAKE_FRAMES = 3;
-/** Once the machine's health is down to SPREAD_HEALTH and the fire is burning, it spreads onto the
+/** Once the machine is in phase 3 (PHASE_3_LIFE left) and the fire is burning, it spreads onto the
  * machine over FIRE_SPREAD_MS; engulfed, the machine's health runs out over DEPLETE_MS and the
- * player wins, unless the machine gets them first (three quarters). */
-const SPREAD_HEALTH = 0.75;
+ * player wins, unless the machine gets them first. Before phase 3 the fire only burns beside it. */
 const FIRE_SPREAD_MS = 20_000;
 const DEPLETE_MS = 1500;
 /** Shooting the machine where it burns stokes the fire: every FIRE_STOKE_SHOTS
@@ -423,8 +422,8 @@ const CLOCK_SPIN_TAIL_MS = 600;
 /** The fig's planter shot: the tree collapses toward the machine over FIG_FALL_MS, faster as it goes
  * (a cut under reduced motion), and lands leaning on the machine's back corner with a crash of leaves.
  * Leaning there while the fire burns, it catches FIG_CATCH_MS later and burns, and the burning tree
- * sets the machine going: the fire's spread onto it starts at once whatever its health, or, already
- * spreading, goes a stoke faster. The machine answers with its nuts and bolts: a volley of them at once,
+ * sets the machine going: in phase 3 the fire's spread onto it starts at once; before that, or already
+ * spreading, it is a stoke. The machine answers with its nuts and bolts: a volley of them at once,
  * and the bolts in the rotation from then on, whatever its health. */
 const FIG_FALL_MS = 700;
 const FIG_CATCH_MS = 1200;
@@ -2835,7 +2834,7 @@ export const room: Stage = {
           nextAttackAt = now + RESPAWN_MS;
         }
         // The fire takes the weak machine; engulfed, its health runs out and the fight is won.
-        if (fireAt !== null && spreadAt === null && score >= HI * (1 - SPREAD_HEALTH)) spreadAt = now;
+        if (fireAt !== null && spreadAt === null && fightPhase() === 3) spreadAt = now;
         if (spreadAt !== null && depleteAt === null && now - spreadAt >= spreadMs) {
           depleteAt = now;
           depleteFrom = score;
@@ -3158,12 +3157,14 @@ export const room: Stage = {
           sounds.whoosh();
           boltsNow = true;
           nextAttackAt = Math.min(nextAttackAt, now);
-          if (spreadAt === null) spreadAt = now;
+          // phase 3: the burning tree sets the spread going at once; earlier it is a stoke, and the spread is the
+          // faster for it when phase 3 comes (as shots in the flames before the spread)
+          if (spreadAt === null && fightPhase() === 3) spreadAt = now;
           else if (stokes < STOKE_MAX) {
             const v = spreadU(now);
             stokes++;
             spreadMs = Math.round(FIRE_SPREAD_MS * Math.pow(STOKE_STEP, stokes));
-            spreadAt = now - v * spreadMs;
+            if (spreadAt !== null) spreadAt = now - v * spreadMs;
           }
         }
       }
