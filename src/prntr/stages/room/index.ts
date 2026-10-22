@@ -3126,7 +3126,7 @@ export const room: Stage = {
     };
 
     // ---- loop and exit ----------------------------------------------------
-    return new Promise<Handoff>((resolve) => {
+    return new Promise<Handoff>((resolve, reject) => {
       let raf = 0;
       let done = false;
       const stop = () => {
@@ -3171,8 +3171,16 @@ export const room: Stage = {
       };
       const loop = (now: number) => {
         if (done) return;
-        update(now);
-        render(frozenAt ?? now);
+        // a throw in a frame must end the run (the host leaves as for a stage that throws), not the loop alone: with the
+        // loop dead the promise never settled, and the hum, the fire and the storm played on under a frozen frame
+        try {
+          update(now);
+          render(frozenAt ?? now);
+        } catch (err) {
+          stop();
+          reject(err);
+          return;
+        }
         raf = requestAnimationFrame(loop);
       };
       render(performance.now());
