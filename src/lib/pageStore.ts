@@ -56,9 +56,10 @@ export class PageStore {
     return this.pages.slice(0, n < 0 ? this.pages.length : n).map((p) => ({ ...p }));
   }
 
-  /** The reverse of snapshot(): a reset to the snapshot's pages, each one ready at once. */
-  restore(snap: PageSnapshot): void {
-    this.reset(snap.length);
+  /** The reverse of snapshot(): a reset to `count` pages (the snapshot's own by default), the snapshot's ready at once
+   *  and any after them waiting for setSource like a document still rendering. */
+  restore(snap: PageSnapshot, count = snap.length): void {
+    this.reset(Math.max(count, snap.length));
     snap.forEach((p, i) => {
       this.pages[i] = { ...p };
       this.readyResolvers[i]?.();
