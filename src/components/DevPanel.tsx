@@ -190,12 +190,11 @@ function ScreenshotDrop() {
         <button
           title="Copy the path"
           onClick={() => {
-            try {
-              void navigator.clipboard.writeText(last);
-              setNote('path copied');
-            } catch {
-              setNote('copy failed');
-            }
+            // writeText reports a refusal (no focus, no permission) by rejecting, not by throwing
+            navigator.clipboard.writeText(last).then(
+              () => setNote('path copied'),
+              () => setNote('copy failed'),
+            );
           }}
         >
           {last}
