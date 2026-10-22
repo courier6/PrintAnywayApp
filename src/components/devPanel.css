@@ -1,0 +1,139 @@
+/* Dev only; see DevPanel.tsx. Above Prntr (z 100) and the drops (z 101). Desktop only. */
+.dev-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 280px;
+  z-index: 1000;
+  overflow-y: auto;
+  padding: 8px 10px 16px;
+  background: #1e1e1e;
+  color: #ccc;
+  font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+  border-left: 1px solid #3c3c3c;
+  cursor: default;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+}
+@media (max-width: 700px) {
+  .dev-panel {
+    display: none;
+  }
+}
+.dev-panel header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #3c3c3c;
+}
+.dev-panel .dev-x {
+  width: 24px;
+  padding: 0;
+  font-size: 16px;
+}
+.dev-sec {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.dev-sec h3 {
+  margin: 0 0 2px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #8a8a8a;
+}
+.dev-panel button {
+  font: inherit;
+  color: #ddd;
+  background: #333;
+  border: 1px solid #4a4a4a;
+  border-radius: 3px;
+  padding: 3px 8px;
+  cursor: pointer;
+  text-align: left;
+}
+.dev-panel button:hover:not(:disabled) {
+  background: #3f3f3f;
+}
+.dev-panel button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.dev-panel input[type='number'] {
+  width: 90px;
+  font: inherit;
+  color: #ddd;
+  background: #2a2a2a;
+  border: 1px solid #4a4a4a;
+  border-radius: 3px;
+  padding: 2px 4px;
+}
+.dev-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.dev-row label {
+  width: 46px;
+}
+.dev-check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.dev-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  margin-top: 4px;
+}
+.dev-read {
+  display: grid;
+  grid-template-columns: 50px 1fr;
+  margin: 0;
+}
+.dev-read dd {
+  margin: 0;
+  color: #9cdcfe;
+}
+.dev-note {
+  margin: 4px 0 0;
+  color: #dcdcaa;
+}
+.dev-keys {
+  margin: 0;
+  color: #9a9a9a;
+}
+.dev-keys kbd,
+.dev-keys code {
+  color: #ce9178;
+}
+/* The screenshot drop zone sits at the bottom of the panel. */
+.dev-sec:last-child {
+  margin-top: auto;
+  padding-top: 10px;
+}
+.dev-drop {
+  min-height: 90px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  color: #8a8a8a;
+  border: 1px dashed #555;
+  border-radius: 4px;
+}
+.dev-drop.is-over {
+  color: #9cdcfe;
+  border-color: #9cdcfe;
+  background: #252b30;
+}
+.dev-row {
+  justify-content: space-between;
+}

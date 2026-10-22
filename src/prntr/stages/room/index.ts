@@ -2278,7 +2278,7 @@ export const room: Stage = {
       // Harness hook (PRNTR-STAGE-1.md §5). Compiled out of builds; vite.config.ts
       // fails the build if its marker survives.
       console.info('prntr-dev-room');
-      (window as unknown as { __prntrRoom?: unknown }).__prntrRoom = {
+      const hook = {
         phase: () => phase,
         badge: () => scene.badge,
         playerName: () => playerName,
@@ -2310,6 +2310,26 @@ export const room: Stage = {
             plugAt = performance.now();
           }
         },
+        /** Toward the fight: plugs the USB from the look, and runs the sticker beat's last steps now. Call until phase() is 'fight'. */
+        fight: () => {
+          if (phase === 'look' && plugAt === null) {
+            scene.usb = false;
+            plugAt = performance.now();
+          } else if (phase === 'sticker') {
+            // a second past the last step: the frame's clock runs a little behind performance.now(), and the panel calls this every frame
+            phaseAt = performance.now() - (WAKE_AT + LID_MS + SWEEP_MS + WASH_MS + 1000);
+          }
+        },
+        /** The machine is beaten now, as at 1337 (the gun's end). */
+        win: () => {
+          if (phase === 'fight' && frozenAt === null) startEnd(performance.now());
+        },
+        /** Game over now, from the fight or the CONTINUE?. */
+        over: () => {
+          if (phase === 'fight' || phase === 'continue') startOver(performance.now());
+        },
+        isGod: () => god,
+        isSteady: () => steady,
         broken: () => BREAKABLES.filter((b) => scene.broken[b.id]).map((b) => b.id),
         kit: () => scene.broken.kit,
         attackGap,
@@ -2396,6 +2416,12 @@ export const room: Stage = {
         /** The machine's shake this frame (the tremble, the landing): what is attached to it moves with it. */
         shake: () => ({ ...scene.shake }),
       };
+      const holder = window as unknown as { __prntrRoom?: unknown };
+      holder.__prntrRoom = hook;
+      // the next run, or the end of this one, must not leave a hook on a stopped run
+      signal.addEventListener('abort', () => {
+        if (holder.__prntrRoom === hook) delete holder.__prntrRoom;
+      });
     }
 
     // ---- timelines (ms from the start of the phase) -----------------------

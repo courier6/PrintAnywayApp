@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { cpSync, createReadStream, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { cpSync, createReadStream, existsSync, mkdirSync, readdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import { basename, extname, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defineConfig, type Plugin } from 'vite';
@@ -284,6 +284,71 @@ function pdfjsData(): Plugin {
   };
 }
 
+/** The name a dropped screenshot is saved under: its own when it already carries a date (macOS's
+ * "Screenshot 2026-10-22 at 10.15.32.png"), else prefixed with the local time. Only a base name, safe characters. */
+function screenshotName(original: string, now = new Date()): string {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const stamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}_${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}`;
+  const base = basename(original).replace(/[^\w .-]/g, '_').replace(/^\.+/, '');
+  const ext = /\.(png|jpe?g)$/i.test(base) ? extname(base) : '.png';
+  const stem = (ext === extname(base) ? base.slice(0, -ext.length) : base).trim() || 'screenshot';
+  return /\d{4}-\d{2}-\d{2}/.test(stem) ? stem + ext : `${stamp}_${stem}${ext}`;
+}
+
+/** Dev server only: the dev panel's drop zone saves screenshots into <root>/screenshots (gitignored). */
+function devScreenshots(): Plugin {
+  const MAX_BYTES = 20 * 1024 * 1024;
+  const IMAGE = /\.(png|jpe?g)$/i;
+  return {
+    name: 'dev-screenshots',
+    apply: 'serve',
+    configureServer(server) {
+      const dir = resolve(server.config.root, 'screenshots');
+      const images = () => (existsSync(dir) ? readdirSync(dir).filter((f) => IMAGE.test(f)) : []);
+      const send = (res: import('node:http').ServerResponse, status: number, body: unknown) => {
+        res.statusCode = status;
+        res.setHeader('Content-Type', 'application/json');
+        res.end(JSON.stringify(body));
+      };
+      server.middlewares.use('/__dev/screenshots', (req, res) => {
+        try {
+          if (req.method === 'GET') return send(res, 200, { count: images().length, dir });
+          if (req.method === 'DELETE') {
+            for (const f of images()) unlinkSync(resolve(dir, f));
+            return send(res, 200, { count: 0 });
+          }
+          if (req.method !== 'POST') return send(res, 405, { error: 'method not allowed' });
+          const chunks: Buffer[] = [];
+          let size = 0;
+          let refused = false;
+          req.on('data', (c: Buffer) => {
+            size += c.length;
+            if (size > MAX_BYTES) refused = true;
+            else chunks.push(c);
+          });
+          req.on('end', () => {
+            try {
+              if (refused) return send(res, 413, { error: 'too large' });
+              mkdirSync(dir, { recursive: true });
+              const name = screenshotName(new URL(req.url ?? '', 'http://x').searchParams.get('name') ?? '');
+              const ext = extname(name);
+              const stem = name.slice(0, -ext.length);
+              let file = name;
+              for (let n = 2; existsSync(resolve(dir, file)); n++) file = `${stem}-${n}${ext}`;
+              writeFileSync(resolve(dir, file), Buffer.concat(chunks));
+              send(res, 200, { path: `screenshots/${file}`, count: images().length });
+            } catch (err) {
+              send(res, 500, { error: String(err) });
+            }
+          });
+        } catch (err) {
+          send(res, 500, { error: String(err) });
+        }
+      });
+    },
+  };
+}
+
 /** Prntr ships as its own lazy chunk; its dev-only code (entrance, harness hooks) must not ship at all. */
 function prntrGuard(): Plugin {
   let outDir = '';
@@ -315,5 +380,5 @@ function prntrGuard(): Plugin {
 export default defineConfig({
   // Served from https://printanyway.app/
   base: '/',
-  plugins: [i18nPlugin(), pdfjsData(), prntrGuard(), react()],
+  plugins: [i18nPlugin(), pdfjsData(), prntrGuard(), devScreenshots(), react()],
 });

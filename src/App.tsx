@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ChangeEvent, type CSSProperties } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState, type ChangeEvent, type CSSProperties } from 'react';
 import { flushSync } from 'react-dom';
 import { Header } from './components/Header';
 import { EmptyState } from './components/EmptyState';
@@ -47,6 +47,26 @@ const cancelIdle: (handle: number) => void =
   typeof window.cancelIdleCallback === 'function'
     ? (handle) => window.cancelIdleCallback(handle)
     : (handle) => window.clearTimeout(handle);
+
+// Dev only: the side panel with jumps and fight controls. A constant-false branch in builds, so the
+// import() is dropped and no chunk is made.
+const DevPanel = import.meta.env.DEV ? lazy(() => import('./components/DevPanel')) : null;
+
+// Dev only (see the ?prntr entrance below): a letter-size page of "text" lines, black for the
+// source, the ink for the recolored copy.
+function devStandIn(ink: string): HTMLCanvasElement {
+  const canvas = document.createElement('canvas');
+  canvas.width = 612;
+  canvas.height = 792;
+  const g = canvas.getContext('2d');
+  if (!g) return canvas;
+  g.fillStyle = '#ffffff';
+  g.fillRect(0, 0, 612, 792);
+  g.fillStyle = ink;
+  g.fillRect(72, 80, 300, 28);
+  for (let y = 140; y < 700; y += 24) g.fillRect(72, y, 300 + ((y * 7) % 170), 10);
+  return canvas;
+}
 
 export default function App() {
   // Re-render everything when the language picker switches locale.
@@ -194,23 +214,40 @@ export default function App() {
       if (!Number.isInteger(n) || n < 0) return;
       devSkipUsed.current = true;
       console.info('prntr-dev-skip', n);
-      // A letter-size page of "text" lines: black for the source, the ink for the recolored copy.
-      const standIn = (ink: string) => {
-        const canvas = document.createElement('canvas');
-        canvas.width = 612;
-        canvas.height = 792;
-        const g = canvas.getContext('2d');
-        if (!g) return canvas;
-        g.fillStyle = '#ffffff';
-        g.fillRect(0, 0, 612, 792);
-        g.fillStyle = ink;
-        g.fillRect(72, 80, 300, 28);
-        for (let y = 140; y < 700; y += 24) g.fillRect(72, y, 300 + ((y * 7) % 170), 10);
-        return canvas;
-      };
-      enterPrntr(n, { source: standIn('#000000'), recolored: standIn(inkRef.current) });
+      enterPrntr(n, { source: devStandIn('#000000'), recolored: devStandIn(inkRef.current) });
     }
   }, [appState]);
+
+  // Dev only: the dev panel's hooks (src/components/DevPanel.tsx). loadStandIn makes the stand-in a
+  // real one-page document, so a won room has an original for the vortex to bring back; enter needs
+  // that document (appState 'preview'). Bound again every render so they never see stale state.
+  useEffect(() => {
+    if (import.meta.env.DEV) {
+      (window as unknown as { __prntrApp?: unknown }).__prntrApp = {
+        appState: () => appState,
+        loadStandIn: () => {
+          lastFile.current = null;
+          startDocument('stand-in.pdf', 'pdf');
+          store.reset(1);
+          store.setSource(0, devStandIn('#000000'), { width: 612, height: 792 });
+          store.ensureRecolored(0, inkRef.current);
+          setPageCount(1);
+          setProcessedCount(1);
+          setPagesVersion((v) => v + 1);
+          setAppState('preview');
+        },
+        enter: (stage: number) => enterPrntr(stage),
+      };
+    }
+  });
+  useEffect(() => {
+    if (import.meta.env.DEV) {
+      console.info('prntr-dev-app');
+      return () => {
+        delete (window as unknown as { __prntrApp?: unknown }).__prntrApp;
+      };
+    }
+  }, []);
 
   function openPicker() {
     prefetchPdfjs();
@@ -581,6 +618,11 @@ export default function App() {
           onExit={exitPrntr}
           onDone={finishPrntr}
         />
+      )}
+      {import.meta.env.DEV && DevPanel && (
+        <Suspense fallback={null}>
+          <DevPanel />
+        </Suspense>
       )}
       <input
         ref={fileInput}
