@@ -25,6 +25,8 @@
   background: #000000;
   color: #EDEDED;
   outline: none;
+  /* no pinch or double-tap zoom in any stage (the room had it; the opening did not, and a zoomed-in page could be entered) */
+  touch-action: none;
 }
 
 .prntr-stage {
