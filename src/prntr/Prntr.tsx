@@ -8,6 +8,8 @@ import { runChain } from './runner';
 import { STAGES } from './stages';
 import type { Certificate, StageContext } from './types';
 
+export { createVortex } from './vortex';
+
 /** After a finished run, how long its last sounds (the fanfare, the game-over sting) may play on. */
 const FINISHED_TAIL_MS = 4000;
 /** Esc or ✕: the fade that silences what the run still had playing or scheduled. */
@@ -69,6 +71,16 @@ export default function Prntr({ source, recolored, inkHex, stage, audioContext, 
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
+  // While Prntr is up the page does not zoom: iOS zooms into a text field set in a small face (the badge's name) and
+  // does not zoom back out, which would leave the fixed game screen cropped. Restored on unmount.
+  useEffect(() => {
+    const meta = document.querySelector('meta[name="viewport"]');
+    const before = meta?.getAttribute('content') ?? null;
+    if (!meta || before === null) return;
+    meta.setAttribute('content', `${before}, maximum-scale=1.0`);
+    return () => meta.setAttribute('content', before);
+  }, []);
+
   useEffect(() => {
     const stageEl = stageRef.current;
     if (!stageEl) return;
@@ -84,12 +96,15 @@ export default function Prntr({ source, recolored, inkHex, stage, audioContext, 
     const controller = new AbortController();
     keepPrntrAudio();
     let finished = false;
-    // Without a gesture before Prntr opened (the dev entrance), the browser keeps
-    // the context suspended: unlock it on the first press so later cues play.
-    if (audioContext?.state === 'suspended') {
-      const unlock = () => void audioContext.resume().catch(() => undefined);
-      window.addEventListener('pointerdown', unlock, { once: true, signal: controller.signal });
-      window.addEventListener('keydown', unlock, { once: true, signal: controller.signal });
+    // The context is brought back on every press and key, not only the first: without a gesture before Prntr opened (the dev
+    // entrance) the browser keeps it suspended until one, and iOS interrupts it for a call or an app switch ('interrupted',
+    // or suspended again), which would leave the rest of the run silent.
+    if (audioContext) {
+      const unlock = () => {
+        if (audioContext.state !== 'running' && audioContext.state !== 'closed') void audioContext.resume().catch(() => undefined);
+      };
+      window.addEventListener('pointerdown', unlock, { signal: controller.signal });
+      window.addEventListener('keydown', unlock, { signal: controller.signal });
     }
     // Start the webfonts now; stage 0 holds its card until they are in.
     const fontsReady = Promise.all([

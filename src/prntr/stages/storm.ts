@@ -269,12 +269,12 @@ const THUNDER_MAX_S = 1;
 /** A cloud's shades: its lit top edge, its body, the shade in its saddles and above its
  * underside, its underside. */
 type Shades = readonly [string, string, string, string];
-const STORM: Shades = ['#575770', '#3C3C50', '#343446', '#2C2C3C'];
+export const STORM: Shades = ['#575770', '#3C3C50', '#343446', '#2C2C3C'];
 /** A storm cloud lit all over by a strike. */
-const CLOUD_LIT = '#8C8CB4';
+export const CLOUD_LIT = '#8C8CB4';
 const CALM: Shades = ['#F4F4F8', '#DCDCE4', '#C8C8D4', '#B4B4C0'];
 /** The door's light (`.prntr-room-light`): its gradient's stops, and its glow. */
-const RED: Shades = ['#8A1410', '#5A0A0A', '#420707', '#2A0404'];
+export const RED: Shades = ['#8A1410', '#5A0A0A', '#420707', '#2A0404'];
 const RED_GLOW = 'rgba(138, 20, 16, 0.6)';
 const WATER = '#7FC8FF';
 const WATER_LIGHT = '#BFE7FF';
@@ -858,8 +858,9 @@ export function startStorm(root: HTMLElement, h1: HTMLElement, slots: StormSlot[
       if (age > 600 && d.y > bottom[Math.min(W - 1, Math.max(0, d.x))] + 8 * P) drips.splice(i, 1);
     }
     // lightning, once it storms
-    if (weather === 'storm' && now >= nextStrike) strike(now);
-    if (weather === 'storm' && now >= nextFar) farStrike(now);
+    // (not before the first measure has made the cloud: strike and farStrike read it)
+    if (weather === 'storm' && ready && now >= nextStrike) strike(now);
+    if (weather === 'storm' && ready && now >= nextFar) farStrike(now);
   };
 
   const draw = (now: number) => {
@@ -941,8 +942,20 @@ export function startStorm(root: HTMLElement, h1: HTMLElement, slots: StormSlot[
 
   const loop = (now: number) => {
     if (stopped) return;
-    step(now);
-    draw(now);
+    // The storm is the title's weather and nothing else depends on it: a frame that throws puts the storm out, and the
+    // opening goes on without it (a dead loop would have left a frozen cloud and its thunder going).
+    try {
+      step(now);
+      draw(now);
+    } catch (err) {
+      console.error('[prntr] storm', err);
+      stopped = true;
+      sound?.stop(0.05);
+      window.removeEventListener('resize', onResize);
+      canvas.remove();
+      flash.remove();
+      return;
+    }
     raf = requestAnimationFrame(loop);
   };
   const onResize = () => {
@@ -973,7 +986,7 @@ export function startStorm(root: HTMLElement, h1: HTMLElement, slots: StormSlot[
       nextStrike = Infinity;
       nextFar = Infinity;
       sound?.finale();
-      if (reduced || weather !== 'storm') return 0;
+      if (reduced || weather !== 'storm' || !ready) return 0;
       strike(performance.now(), true);
       return 400;
     },

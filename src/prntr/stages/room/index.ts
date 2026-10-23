@@ -1,8 +1,11 @@
 import { reducedMotion, wait } from '../../anim';
 import type { Handoff, RunStats, Stage } from '../../types';
-import { H, Pix, W, rotateSprite } from './pixels';
-import { BADGE_AT, CLOCK_AT, GLASS, KIT_AT, KNOB, MACHINE_AT, MACHINE_PIECES, NOZZLES, SPR, drawFireFront, drawFlame, drawMarks, drawRoom, drawWindowWreck, figLeaf, fireRect, inDoorway, knobX, lampX, markBox, tubeX, type Broken, type ExitSign, type Hole, type Mark, type SceneState, type Tube } from './scene';
+import { H, Pix, W, frameScale, rotateSprite } from './pixels';
+import { DocContent, docFine } from './docpage';
+import { ashFlecks, burnFine, flakes, frontFire } from './burnpage';
+import { ART_BREAK_SHOTS, BADGE_AT, CAPS_TOP, CLOCK_AT, FIRE_TICK_MS, GLASS, KIT_AT, KNOB, MACHINE_AT, MACHINE_PIECES, NOZZLES, SPR, drawFireFront, drawFlames, drawMarks, drawRoom, drawTubes, drawWindowWreck, figEmitters, figLeaf, fireEmitters, fireRect, inCavity, inDoorway, knobX, lampX, markBox, monsteraEmitters, tubeX, type Broken, type Emitter, type ExitSign, type Hole, type Mark, type Rect, type SceneState, type Tube } from './scene';
 import { ART_AT, ART_SUB, renderVictory } from './art';
+import { MAG_BOB, MAG_BOB_MS, MAG_BOX, MAG_SPIN_MS, MAG_STEPS, SAFE, SAFE_CODE, keyAt, paintKeypad } from './safe';
 import { PAL, type PalKey } from './palette';
 import { createRoomSounds, type FireSound, type Hum } from './sounds';
 import { RIPPLE_MS, RIPPLE_SPEED, RippleView, rippleAt } from './ripple';
@@ -71,6 +74,19 @@ const BLOOM_BASE = 1;
 const BLOOM_PER_SHOT = 3;
 const BLOOM_MAX = 12;
 const BLOOM_COOL = 6;
+/** The safe in the wall (PRNTR-SAFE.md): a key stays pressed PRESS_MS after a shot; a wrong code shows ERR for ERR_MS and
+ * is cleared; the right one unlocks the door, which starts to swing OPEN_DELAY_MS later and is open DOOR_MS after that; the
+ * rifle magazine taken flashes the inside white for TAKE_FLASH_MS. The upgrade: a round every MG_MS while the button is held,
+ * MG_SHOTS a magazine (six more pips of the same look), each round opening the cross by BLOOM_PER_SHOT_MG instead of
+ * BLOOM_PER_SHOT. */
+const PRESS_MS = 150;
+const ERR_MS = 600;
+const OPEN_DELAY_MS = 300;
+const DOOR_MS = 400;
+const TAKE_FLASH_MS = 150;
+const MG_MS = 110;
+const MG_SHOTS = 12;
+const BLOOM_PER_SHOT_MG = 1.5;
 /** The flash dazes the player: for DAZE_MS the cross wanders about the mouse (or the tap) by up to DAZE_PX,
  * lurching on two beats that never line up, easing back as the eyes clear; the shot goes where the cross is.
  * Under reduced motion, and on touch (no cross to show the wander before a tap), the cross stays still and the
@@ -79,12 +95,17 @@ const DAZE_MS = 2000;
 const DAZE_PX = 12;
 /** On touch there is no hover cross: it shows at the tap for this long, so the kick and the bloom show. */
 const TOUCH_CROSS_MS = 500;
-/** Slowed to 2.5 / 3 / 2 s, then made a quarter faster. */
+/** Slowed to 2.5 / 3 / 2 s, then made a quarter faster. The late gap from phase 3. From phase 2 the next attack is
+ * timed from a volley's launch, not from its last landing: the gap runs while the staples, pages, nuts and bolts or
+ * ink are still in the air, so volleys overlap (PRNTR-PRESSURE.md §4.2). A scan and a slam keep their whole time
+ * (nothing comes while the lid is up, and the player gets the gap after the flash). */
 const FIRST_ATTACK_MS = 2000;
 const ATTACK_GAP_MS = 2250;
 const ATTACK_GAP_LATE_MS = 1500;
-/** From this score on, the attacks come faster. */
-const LATE_SCORE = 900;
+/** The fight's phases (PRNTR-V2.md §2.1), by the machine's life left of its HI: phase 2 from PHASE_2_LIFE left,
+ * phase 3 from PHASE_3_LIFE. The slam joins the rotation with phase 2 (SLAM_LIFE). */
+const PHASE_2_LIFE = 900;
+const PHASE_3_LIFE = 450;
 /** The scan: the lid rises over LID_MS, the lamp sweeps the glass for SWEEP_MS (the window:
  * PRNTR-FIGHT-DESIGN.md §5), the flash washes the screen for WASH_MS, the lid falls over LID_MS.
  * A shot on the lamp during the sweep pops the bulb (LAMP_POINTS): the sweep stops where it is,
@@ -103,7 +124,7 @@ const LAMP_HIT_PAD = 1;
  * phase 2): the machine strains up SLAM_LIFT px over SLAM_LIFT_MS, drops in SLAM_DROP_MS and
  * lands shaking for SLAM_SHAKE_MS; the lid bangs open at the landing and stands while the world ripples
  * out from SLAM_AT (SLAM_OPEN_MS, the ripple's length), the glass worth SLAM_GLASS_POINTS, then falls over LID_MS. */
-const SLAM_LIFE = 900;
+const SLAM_LIFE = PHASE_2_LIFE;
 const SLAM_LIFT = 6;
 const SLAM_LIFT_MS = 500;
 const SLAM_DROP_MS = 90;
@@ -121,6 +142,10 @@ const SLAM_GLASS_POINTS = 25;
 const GLASS_HIT_PAD = 1;
 const STAPLE_MS = 1500;
 const STAPLE_STAGGER_MS = 500;
+/** The volleys grow with the phase (PRNTR-PRESSURE.md §4.1): staples a volley by phase (index 1–3), and from
+ * phase 2 the staples and the pages come STAGGER_PRESSED_MS apart instead of their own stagger. */
+const STAPLES_BY_PHASE = [0, 3, 4, 5];
+const STAGGER_PRESSED_MS = 350;
 /** The staple's hit box: its sprite at the current scale, plus this many virtual px around. */
 const STAPLE_HIT_PAD = 3;
 /** A staple tumbles a quarter turn every STAPLE_SPIN_MS in flight (a nut or a bolt every BOLT_SPIN_MS). */
@@ -150,6 +175,9 @@ const PAGE_MS = 2250;
 /** While the machine burns, the pages it throws are on fire: a quarter more
  * damage (HIT_DAMAGE.firePage, 34 × 1.25) and twice the points when shot. */
 const FIRE_PAGE_POINTS = PAGE_POINTS * 2;
+/** A burning page is eaten from the bottom: this much of it by the landing (§15), the rest on the glass. The player's page burns up in flight, at this much of it (§16). */
+const BURN_ARRIVE = 0.45;
+const BURN_GONE_AT = 0.85;
 const PAGE_STAGGER_MS = 450;
 const PAGE_LANDED_MS = 1500;
 const PAGE_SLIDE_MS = 400;
@@ -190,10 +218,9 @@ const FIRE_GROW_MS = 12_000;
  * the door, its button stays bright, and it trembles (a new offset every SHAKE_FRAMES frames). */
 const MAD_AFTER_MS = 1500;
 const SHAKE_FRAMES = 3;
-/** Once the machine's health is down to SPREAD_HEALTH and the fire is burning, it spreads onto the
+/** Once the machine is in phase 2 (PHASE_2_LIFE left) and the fire is burning, it spreads onto the
  * machine over FIRE_SPREAD_MS; engulfed, the machine's health runs out over DEPLETE_MS and the
- * player wins, unless the machine gets them first (three quarters). */
-const SPREAD_HEALTH = 0.75;
+ * player wins, unless the machine gets them first. Before phase 2 the fire only burns beside it. */
 const FIRE_SPREAD_MS = 20_000;
 const DEPLETE_MS = 1500;
 /** Shooting the machine where it burns stokes the fire: every FIRE_STOKE_SHOTS
@@ -340,6 +367,9 @@ const STAPLE_EJECT = 0.15;
 const PAGE_TARGETS_X = [30, 75, 120, 165, 210];
 /** Where each of the five pages comes out, left to right along the slot. */
 const PAGE_ORIGINS_X = [94, 107, 120, 133, 146];
+/** From phase 2 a sixth page, thrown last out of the middle of the slot to one of the lanes between two of the
+ * five, so it lands over their edges. */
+const PAGE_SIXTH_X = [52, 97, 142, 187];
 /** The beat after the USB goes in: the machine pounces from the back of the room at POUNCE_AT, growing
  * to its place over POUNCE_MS (a cut under reduced motion), lands two px low for LAND_MS and shakes for
  * POUNCE_SHAKE_MS; then it wakes (a scan from WAKE_AT), and the fight starts as the flash ends. */
@@ -392,11 +422,18 @@ const CLOCK_SPIN_TAIL_MS = 600;
 /** The fig's planter shot: the tree collapses toward the machine over FIG_FALL_MS, faster as it goes
  * (a cut under reduced motion), and lands leaning on the machine's back corner with a crash of leaves.
  * Leaning there while the fire burns, it catches FIG_CATCH_MS later and burns, and the burning tree
- * sets the machine going: the fire's spread onto it starts at once whatever its health, or, already
- * spreading, goes a stoke faster. The machine answers with its nuts and bolts: a volley of them at once,
+ * sets the machine going: from phase 2 the fire's spread onto it starts at once; before that, or already
+ * spreading, it is a stoke. The machine answers with its nuts and bolts: a volley of them at once,
  * and the bolts in the rotation from then on, whatever its health. */
 const FIG_FALL_MS = 700;
 const FIG_CATCH_MS = 1200;
+/** Caught, the fig lights from its crown down to the foot of its trunk over this long (Fig.burn 0 → 1), then burns
+ * down (its flames smaller) over as long again. */
+const FIG_LIGHT_MS = 1500;
+/** The fallen monstera at the burning fig's foot catches this long after the fig is lit down to it (fig.burn ≥ 1). */
+const MONSTERA_CATCH_MS = 900;
+/** Lit from the fig's end to the pot over this long; then it burns down. */
+const MONSTERA_LIGHT_MS = 1200;
 /** The lights, out since the pounce, flicker back on at random once the machine has FLICKER_FROM of its
  * damage (20% of its health or less): one panel at a time (now and then both), on for FLICKER_ON_MIN–
  * FLICKER_ON_MAX ms with a buzz, then out with a click, the next coming FLICKER_GAP_MIN–FLICKER_GAP_MAX ms
@@ -415,8 +452,9 @@ const RED_LIGHTS_FROM = 0.4;
 /** The USB stick's hit area in screen px (the handoff's 44 px for the sticker), whatever the scale. */
 const USB_HIT_PX = 44;
 /** The badge's hotspot and hit box: its sprite (BADGE_AT in scene.ts) plus about 4 px. */
-const BADGE_HIT = { x0: 5, y0: 116, x1: 28, y1: 134 };
-const inBadge = (x: number, y: number) => x >= BADGE_HIT.x0 && x < BADGE_HIT.x1 && y >= BADGE_HIT.y0 && y < BADGE_HIT.y1;
+const BADGE_HIT = { x0: 5, y0: 116, x1: 32, y1: 134 };
+/** `pad`: virtual px more on every side (the touch form, so a finger need not be exact). */
+const inBadge = (x: number, y: number, pad = 0) => x >= BADGE_HIT.x0 - pad && x < BADGE_HIT.x1 + pad && y >= BADGE_HIT.y0 - pad && y < BADGE_HIT.y1 + pad;
 const cleanName = (s: string) => s.toUpperCase().replace(/[^A-Z0-9 ]/g, '').replace(/ +/g, ' ').trim().slice(0, NAME_MAX);
 /** The radius of the badge's pulse, virtual px. */
 const BADGE_GLOW_R = 16;
@@ -424,6 +462,9 @@ const BADGE_GLOW_R = 16;
 const BAR = '11010010111011010011010110';
 /** How far a thrown thing's glow and the fire's light reach past the sprite, virtual px: the gradient's fade. */
 const GLOW_PAD = 7;
+/** A glow's box, virtual px. */
+type GlowBox = { x: number; y: number; w: number; h: number };
+const SVG_NS = 'http://www.w3.org/2000/svg';
 const FIRE_GLOW_PAD = 12;
 
 interface Hotspot {
@@ -442,7 +483,6 @@ interface Hotspot {
 const HOTSPOTS: Hotspot[] = [
   { id: 'page', x0: 96, y0: 108, x1: 144, y1: 114, captions: ['A PAGE. BLANK.', 'A PAGE. BLANK.'] },
   { id: 'printer', x0: 84, y0: 86, x1: 156, y1: 138, captions: ["A PRINTER. IT'S ON.", "IT'S WARM."] },
-  // Too frightening to go through (the handoff had LOCKED. / STILL LOCKED.).
   { id: 'door', x0: 6, y0: 27, x1: 48, y1: 112, captions: ['THE EXIT IS LOCKED.', 'STILL LOCKED. IT SHAKES WITH THE WIND.'] },
   { id: 'poster', ...BOARD_HIT, captions: ['SIMPLE PRODUCTS. WE PRINT.', 'SIMPLE PRODUCTS. WE PRINT.'] },
   { id: 'clock', ...CLOCK_HIT, captions: ['1:37.', '1:37.'] },
@@ -516,6 +556,10 @@ interface Page {
   shot: boolean;
   /** The feed sound has played. */
   fed: boolean;
+  /** The player's page (the middle one of the volley): its content is the document, on the doc canvas (§18). */
+  doc: boolean;
+  /** Its burning front's seed (600 + x1, the flames' seed in flight). */
+  seed: number;
 }
 
 /** A particle on the front layer (steam off the snuffed fire): thrown from x,y at born, under gravity g, for life ms. */
@@ -549,7 +593,7 @@ function el(tag: string, className: string, text?: string): HTMLElement {
 /**
  * Stage 1, the room: look around, click the sticker, fight the machine to 1337, one
  * second of quiet, out; or run out of hearts and it is over. Design: prntr/design/PRNTR-HANDOFF-STAGE-1.md §2–§3 (local);
- * spec: PRNTR-STAGE-1.md. The page in ctx.page is not used: the room is not about it.
+ * spec: PRNTR-STAGE-1.md. The middle page of every volley is the player's page (PRNTR-FIRE.md §14).
  */
 export const room: Stage = {
   name: 'room',
@@ -560,6 +604,7 @@ export const room: Stage = {
     if (signal.aborted) return { kind: 'start' };
     const reduced = reducedMotion();
     const sounds = createRoomSounds(audio);
+    const DOC = new DocContent(ctx.page);
     root.replaceChildren();
 
     // ---- DOM: the pixel layer, the three overlays, the HUD ----------------
@@ -591,6 +636,23 @@ export const room: Stage = {
     front.setAttribute('aria-hidden', 'true');
     const fg = front.getContext('2d', { willReadFrequently: true });
     if (!fg) throw new Error('prntr: no 2d context');
+    // The lit layer (PRNTR-GLOWS.md): the room's own pixels where a glowing subject shows (a tube, the bright
+    // button), copied each frame onto a transparent canvas just over the room canvas and the glows under them,
+    // so a glow lies under its subject and never over it.
+    const lit = document.createElement('canvas');
+    lit.className = 'prntr-room-lit';
+    lit.width = W;
+    lit.height = H;
+    lit.setAttribute('aria-hidden', 'true');
+    const lg = lit.getContext('2d', { willReadFrequently: true });
+    if (!lg) throw new Error('prntr: no 2d context');
+    // The player's page's content on a canvas at the screen's resolution over the front layer, filling the hole
+    // the front leaves inside the thrown page's frame (PRNTR-FIRE.md §18); sized in fit().
+    const doc = document.createElement('canvas');
+    doc.className = 'prntr-room-doc';
+    doc.setAttribute('aria-hidden', 'true');
+    const dg = doc.getContext('2d');
+    if (!dg) throw new Error('prntr: no 2d context');
     // The print on the wall: its own canvas under the room canvas, seen through the hole the
     // room leaves over the print's rect, at ART_SUB cells to the room's pixel, so it is finer
     // than anything around it and behind everything the room draws (the lid, the tubes).
@@ -605,16 +667,26 @@ export const room: Stage = {
     // The room's pixels and the front layer's, presented to their canvases each frame.
     const pix = new Pix();
     const fpix = new Pix();
+    // The lit layer's pixels, and its mask: where the glowing subjects are drawn this frame.
+    const lpix = new Pix();
+    const mpix = new Pix();
     // The slam's ripple: the room (the print under its hole) and the front layer redrawn bent by WebGL, each
     // over the 2D canvas it comes from, while the ripple runs. None under reduced motion, none without WebGL.
-    // (The print's canvas is uploaded as it is: it changes only where a shot holes it.)
+    // (The print's canvas is uploaded as it is: it changes only where a shot holes it. The doc canvas fills the
+    // front's hole in the player's page, bent with it.)
     const rippleBack = reduced ? null : RippleView.create('prntr-room-ripple', { src: pix.image, x: 0, y: 0, w: W, h: H }, { src: art, ...ART_AT });
-    const rippleFront = rippleBack && RippleView.create('prntr-room-ripple', { src: fpix.image, x: 0, y: 0, w: W, h: H });
+    const rippleFront = rippleBack && RippleView.create('prntr-room-ripple', { src: fpix.image, x: 0, y: 0, w: W, h: H }, { src: doc, x: 0, y: 0, w: W, h: H });
     const light = el('div', 'prntr-room-light');
     const spill = el('div', 'prntr-room-spill');
-    // The fire's light: an unpixelated orange glow sized to the flames each frame.
+    // The fire's light: an unpixelated orange glow sized to the flames each frame; one more over the burning
+    // fig and one over the burning machine (PRNTR-FIRE.md). The main one stays first in the DOM (the harness
+    // reads the first element of the class).
     const fireLight = el('div', 'prntr-room-fire-light');
     fireLight.hidden = true;
+    const figLight = el('div', 'prntr-room-fire-light');
+    figLight.hidden = true;
+    const machineLight = el('div', 'prntr-room-fire-light');
+    machineLight.hidden = true;
     // The mad machine's slot, lit red like the door (.is-mad on the frame fades it in).
     const slotLight = el('div', 'prntr-room-slot-light');
     // The storm's light through the holes in the door and the blind, one box per hole.
@@ -626,15 +698,20 @@ export const room: Stage = {
     // A near strike reaching into the room: a pale wash over everything, its opacity the storm's.
     const stormWash = el('div', 'prntr-room-storm-wash');
     const wash = el('div', 'prntr-room-wash');
-    // The red glow on everything that can be shot: DOM boxes over the pixel layer,
-    // unpixelated like the door's light. One per projectile, pooled.
-    const glows = el('div', 'prntr-room-glows');
+    // The red glows of the tubes and the button (PRNTR-GLOWS.md): filled shapes on the room canvas, under the lit
+    // layer that redraws their subjects crisp. A spraying tube's follows its hose (pooled); the bright button's is a
+    // gradient box like a thrown thing's.
+    const litGlows = el('div', 'prntr-room-lit-glows');
+    const tubeGlows = el('div', 'prntr-room-tube-glows');
+    const buttonGlow = el('div', 'prntr-room-glow-fill');
+    buttonGlow.hidden = true;
+    litGlows.append(tubeGlows, buttonGlow);
     // The inside of the glows of what the machine throws, under the front layer, so its sprites stay crisp
     // over it and the glow has no hollow where a sprite is open (a staple's loop, a burning page's edges).
     const glowFills = el('div', 'prntr-room-glow-fills');
     // The red lights' wash over the room (under the front layer), faded in by .is-red-lit on the frame.
     const redLight = el('div', 'prntr-room-red-light');
-    for (const n of [light, spill, fireLight, slotLight, holeLights, windowLight, stormWash, wash, glows, glowFills]) n.setAttribute('aria-hidden', 'true');
+    for (const n of [light, spill, fireLight, figLight, machineLight, slotLight, holeLights, windowLight, stormWash, wash, litGlows, glowFills]) n.setAttribute('aria-hidden', 'true');
     const hud = el('div', 'prntr-room-hud');
     const scoreEl = el('div', 'prntr-room-score', 'SCORE 0000');
     const hiEl = el('div', 'prntr-room-hi', 'HI 1337');
@@ -672,6 +749,9 @@ export const room: Stage = {
     const hintEl = el('div', 'prntr-room-hint');
     hintEl.setAttribute('aria-hidden', 'true');
     const touch = window.matchMedia('(hover: none)').matches;
+    /** Whether the last pointer was a finger. `touch` is the device (no hover); a touchscreen laptop has both a mouse and taps, and the
+     * cross shows by the pointer, so the daze and the bloom follow the pointer too: a tap must not land off where it was with no cross to show why. */
+    let touched = touch;
     hintEl.append(el('div', 'prntr-room-hint-title', 'PROTECT YOURSELF.'), el('div', 'prntr-room-hint-keys', touch ? 'TAP TO SHOOT' : 'CLICK TO SHOOT'));
     hintEl.hidden = true;
     hud.append(scoreEl, hiEl, creditEl, captionEl, healthEl, healthName, lifeEl, lifeName, pipsEl, shotsBtn, hintEl);
@@ -747,21 +827,29 @@ export const room: Stage = {
     const deathEl = el('div', 'prntr-room-death');
     deathEl.setAttribute('aria-hidden', 'true');
     deathEl.hidden = true;
-    frame.append(art, canvas, ...(rippleBack ? [rippleBack.canvas] : []), light, spill, fireLight, slotLight, holeLights, windowLight, glowFills, redLight, front, ...(rippleFront ? [rippleFront.canvas] : []), stormWash, wash, glows, badgeGlow, hud, cursor, hurtEl, deathEl, continueEl, badgeEl, overEl);
+    frame.append(art, canvas, ...(rippleBack ? [rippleBack.canvas] : []), litGlows, lit, light, spill, fireLight, figLight, machineLight, slotLight, holeLights, windowLight, glowFills, redLight, front, doc, ...(rippleFront ? [rippleFront.canvas] : []), stormWash, wash, badgeGlow, hud, cursor, hurtEl, deathEl, continueEl, badgeEl, overEl);
     wrap.append(frame);
     root.append(wrap);
 
-    // ---- fit: the largest whole-number scale, letterboxed in black --------
+    // ---- fit: the largest scale that is a whole number of device px per virtual px, letterboxed in black --------
     let scale = 1;
+    /** Device px to the virtual px on the doc canvas (frameScale makes it whole). */
+    let docPx = 1;
     const fit = () => {
-      scale = Math.max(1, Math.floor(Math.min(root.clientWidth / W, root.clientHeight / H)));
+      scale = frameScale(root.clientWidth, root.clientHeight);
       frame.style.width = `${W * scale}px`;
       frame.style.height = `${H * scale}px`;
       frame.style.setProperty('--s', String(scale));
       frame.classList.toggle('is-small', scale <= 3);
-      const px = scale * (window.devicePixelRatio || 1);
+      // the badge card (120 virtual px wide, every rule of it in var(--s)) is read and typed on, so on touch it is up to twice
+      // the room's scale, and never wider than the frame
+      badgeEl.style.setProperty('--s', String(touch ? Math.min(2 * scale, (W * scale * 0.94) / 120) : scale));
+      const px = Math.round(scale * (window.devicePixelRatio || 1));
       rippleBack?.resize(px);
       rippleFront?.resize(px);
+      doc.width = W * px;
+      doc.height = H * px;
+      docPx = px;
     };
     fit();
     window.addEventListener('resize', fit, { signal });
@@ -783,8 +871,11 @@ export const room: Stage = {
       machine: { lid: 0, lamp: null, lampOut: false, flash: false, power: true, angry: false, back: 1, t: 0, error: null, lift: 0 },
       flashWhite: false,
       buttonBright: false,
-      broken: { clock: false, poster: false, tank: false, plant: false, vase: false, kit: false, fig: false, figPot: false },
-      fig: { fall: 0, burning: false },
+      broken: { clock: false, poster: false, tank: false, plant: false, vase: false, kit: false, fig: false, figPot: false, art: false },
+      tornSince: 0,
+      safe: { open: 0, magIn: true, flash: false, spin: 0, bob: 0 },
+      fig: { fall: 0, burning: false, burn: 0 },
+      monstera: { burning: false, burn: 0 },
       clock: { state: 'up', x: CLOCK_AT.x, y: CLOCK_AT.y, rot: 0 },
       clockSpin: null,
       exit: { state: 'up', x: EXIT_WALL.x, y: EXIT_WALL.y, tilt: 0, lit: true },
@@ -882,6 +973,8 @@ export const room: Stage = {
     let lampStop = 0;
     let autoReloadAt: number | null = null;
     let reloadSecondAt: number | null = null;
+    /** The shots the reload's second step still adds: what the first step did not give, whatever is fired in between. */
+    let reloadOwed = 0;
     /** The one continue has been used: the next death is the end. */
     let continued = false;
     let outcome: 'cleared' | 'over' = 'cleared';
@@ -905,6 +998,29 @@ export const room: Stage = {
     /** The fig: when its planter was shot (it falls from then), and when it catches from the fire. */
     let figFallAt: number | null = null;
     let figCatchAt: number | null = null;
+    /** When the fig caught (Fig.burn counts from here). */
+    let figBurnAt: number | null = null;
+    /** When the fallen monstera will catch from the fig, and when it did (PRNTR-FIRE.md §11.3). */
+    let monsteraCatchAt: number | null = null;
+    let monsteraBurnAt: number | null = null;
+    /** Shots into the print so far, and when the fifth tore it open (PRNTR-FIRE.md §12). */
+    let artShots = 0;
+    let artBrokeAt: number | null = null;
+    // ---- the safe (PRNTR-SAFE.md) ----
+    /** The digits shot in so far (up to four), the key pressed and since when, the verdict on a full code and since when, when
+     * the code was right (the door swings from OPEN_DELAY_MS after), when the magazine was taken; the keypad as last painted. */
+    let safeEntry = '';
+    let safePress: { key: string; at: number } | null = null;
+    let safeVerdict: { ok: boolean; at: number } | null = null;
+    let safeOpenAt: number | null = null;
+    let safeTakenAt: number | null = null;
+    let keypadDrawn = '';
+    /** The machine gun: on once the rifle magazine is taken; the held button's point (null: not held) and the next round's moment. */
+    let mg = false;
+    let holdV: { x: number; y: number } | null = null;
+    let nextHoldAt = 0;
+    /** The magazine: the pistol's SHOTS, the rifle magazine's MG_SHOTS. */
+    const magSize = () => (mg ? MG_SHOTS : SHOTS);
     /** The flicker: when the next panel comes on, and when each lit one goes out (null: out). */
     let flickerNext = 0;
     const flickerOff: (number | null)[] = [null, null];
@@ -949,7 +1065,9 @@ export const room: Stage = {
     let nextFar = phaseAt + FAR_FIRST_MS;
     let farAt = -Infinity;
     let lastNear = -Infinity;
-    const attackGap = () => Math.round((score >= LATE_SCORE ? ATTACK_GAP_LATE_MS : ATTACK_GAP_MS) * Math.pow(RAGE_STEP, rage));
+    /** The fight's phase now, 1–3, by the machine's life left. */
+    const fightPhase = () => (HI - score <= PHASE_3_LIFE ? 3 : HI - score <= PHASE_2_LIFE ? 2 : 1);
+    const attackGap = () => Math.round((fightPhase() === 3 ? ATTACK_GAP_LATE_MS : ATTACK_GAP_MS) * Math.pow(RAGE_STEP, rage));
     const scheduleBlink = (from: number, delay: number) => {
       nextBlinkAt = from + delay + Math.random() * (BLINK_MAX_MS - BLINK_MIN_MS);
     };
@@ -983,7 +1101,7 @@ export const room: Stage = {
       healthFill.style.width = `${(1 - score / HI) * 100}%`;
     };
     const drawHealth = () => {
-      lifeFill.style.width = `${health}%`;
+      lifeFill.style.transform = `scaleX(${health / PLAYER_HEALTH})`;
       lifeEl.setAttribute('aria-label', `${playerName}, health ${health} of ${PLAYER_HEALTH}`);
       // the name wears with the bar: worn at half, rough near the end
       lifeName.classList.toggle('is-worn', health <= WORN_HEALTH && health > ROUGH_HEALTH);
@@ -1095,7 +1213,7 @@ export const room: Stage = {
     };
     const drawShots = () => {
       Array.from(shotsBtn.children).forEach((p, i) => p.classList.toggle('is-off', i >= shots));
-      shotsBtn.setAttribute('aria-label', `Shots ${shots} of ${SHOTS}. Reload`);
+      shotsBtn.setAttribute('aria-label', `Shots ${shots} of ${magSize()}. Reload`);
     };
     const showFightUi = (on: boolean) => {
       for (const n of [healthEl, healthName, lifeEl, lifeName, pipsEl, shotsBtn]) {
@@ -1132,6 +1250,32 @@ export const room: Stage = {
       scheduleBlink(now, BLINK_FIRST_MS);
       ctx.announce(`The printer is open. Protect yourself. ${touch ? 'Tap' : 'Click'} to shoot.`);
     };
+    // The room unfreezes. The frame was drawn at the time it froze (render(frozenAt)), so everything the room's own clock
+    // runs, the short, the fire, its spread, the door, the storm and the sign and the clock, moves on by the time it was
+    // frozen: it goes on from the frame that was seen, and does not jump ahead by the 1.2 s beat or the CONTINUE? count.
+    const thaw = (now: number) => {
+      if (frozenAt === null) return;
+      const d = now - frozenAt;
+      frozenAt = null;
+      if (shortAt !== null) shortAt += d;
+      if (fireAt !== null) fireAt += d;
+      if (spreadAt !== null) spreadAt += d;
+      if (doorAt !== null) doorAt += d;
+      if (doorOpenAt !== null) doorOpenAt += d;
+      stokeAt += d;
+      nextStrike += d;
+      nextFar += d;
+      strikeAt += d;
+      farAt += d;
+      lastNear += d;
+      exitAt += d;
+      clockAt += d;
+      if (figCatchAt !== null) figCatchAt += d;
+      if (figBurnAt !== null) figBurnAt += d;
+      if (monsteraCatchAt !== null) monsteraCatchAt += d;
+      if (monsteraBurnAt !== null) monsteraBurnAt += d;
+      if (artBrokeAt !== null) artBrokeAt += d;
+    };
     const startContinue = (now: number) => {
       phase = 'continue';
       phaseAt = now;
@@ -1154,13 +1298,14 @@ export const room: Stage = {
       audio.play(audio.cues.creditA);
       continueEl.hidden = true;
       continued = true;
-      frozenAt = null;
+      thaw(now);
       lives = LIVES_CONTINUE;
       health = PLAYER_HEALTH;
       drawHealth();
-      shots = SHOTS;
+      shots = magSize();
       autoReloadAt = null;
       reloadSecondAt = null;
+      reloadOwed = 0;
       staples = [];
       pages = [];
       sprays = [];
@@ -1321,15 +1466,27 @@ export const room: Stage = {
       const u = Math.min(1, (now - p.at) / PAGE_MS);
       if (u < PAGE_EJECT) {
         const rows = Math.max(1, Math.ceil((u / PAGE_EJECT) * SPR.PAGE_PRINTED.h));
-        return { x: p.x0 - 5, y: SLOT.y - rows, w: 10, h: rows };
+        return { x: p.x0 - 5, y: SLOT.y - rows, w: 10, h: rows, sc: 1 };
       }
       const v = (u - PAGE_EJECT) / (1 - PAGE_EJECT);
       const sc = v < 0.5 ? 1 : 2;
       const y0 = SLOT.y - 6.5;
       const x = p.x0 + (p.x1 - p.x0) * v;
       const y = y0 + (p.y1 - y0) * v;
-      return { x: Math.floor(x - 5 * sc), y: Math.floor(y - 6.5 * sc), w: 10 * sc, h: 13 * sc };
+      return { x: Math.floor(x - 5 * sc), y: Math.floor(y - 6.5 * sc), w: 10 * sc, h: 13 * sc, sc };
     };
+    /** How much of a burning page the fire has eaten, 0 whole … 1 gone: in flight to BURN_ARRIVE by the landing (the player's page: to 1 at BURN_GONE_AT of the flight, and 1 from then on, §16), on the glass the rest over its time there. */
+    const burnOf = (p: Page, now: number): number => {
+      if (!p.burning) return 0;
+      const u = (now - p.at) / PAGE_MS;
+      if (u < PAGE_EJECT) return 0;
+      const v = (u - PAGE_EJECT) / (1 - PAGE_EJECT);
+      if (p.doc) return Math.min(1, v / BURN_GONE_AT);
+      if (u < 1) return BURN_ARRIVE * v;
+      return Math.min(1, BURN_ARRIVE + (1 - BURN_ARRIVE) * ((now - p.at - PAGE_MS) / (PAGE_LANDED_MS + PAGE_SLIDE_MS)));
+    };
+    /** The player's page burnt up in flight: no page left to draw, its flakes carry the hit (§16). */
+    const gone = (p: Page, now: number) => p.burning && p.doc && burnOf(p, now) >= 1;
     /** A thrown thing's sprite: a staple tumbles a quarter turn every STAPLE_SPIN_MS, a nut or a bolt every BOLT_SPIN_MS. */
     const thrownSprite = (s: Staple, now: number) => {
       const spr = SPR[THROWN_SPR[s.kind]];
@@ -1430,7 +1587,7 @@ export const room: Stage = {
     /** The cross's wander from the flash's daze now (none when steady, none under reduced motion, none on
      * touch: a tap would land off where it was with no cross to show why, so touch takes the open bloom instead). */
     const dazeNow = (now: number) => {
-      if (dazeAt === null || steady || reduced || touch) return { x: 0, y: 0 };
+      if (dazeAt === null || steady || reduced || touched) return { x: 0, y: 0 };
       const u = (now - dazeAt) / DAZE_MS;
       if (u >= 1) return { x: 0, y: 0 };
       const a = DAZE_PX * Math.pow(1 - u, 1.2);
@@ -1451,7 +1608,7 @@ export const room: Stage = {
     };
     /** The shot's recoil: the lines open and the cross kicks. */
     const recoil = (now: number) => {
-      heat = Math.min(BLOOM_MAX - BLOOM_BASE, spreadNow(now) - BLOOM_BASE + BLOOM_PER_SHOT);
+      heat = Math.min(BLOOM_MAX - BLOOM_BASE, spreadNow(now) - BLOOM_BASE + (mg ? BLOOM_PER_SHOT_MG : BLOOM_PER_SHOT));
       heatAt = now;
       kickAt = now;
       kickDx = (Math.floor(Math.random() * 3) - 1) * KICK_SIDE;
@@ -1466,13 +1623,65 @@ export const room: Stage = {
     };
     const reload = (now: number) => {
       if (phase !== 'fight' || frozenAt !== null) return;
-      if (shots === SHOTS || reloadSecondAt !== null) return;
+      if (shots === magSize() || reloadSecondAt !== null) return;
       sounds.reload();
       heat = 0;
       autoReloadAt = null;
-      shots = Math.max(shots, SHOTS / 2);
+      reloadOwed = magSize() - Math.max(shots, magSize() / 2);
+      shots = Math.max(shots, magSize() / 2);
       drawShots();
       reloadSecondAt = now + RELOAD_STEP_MS;
+    };
+    /** A shot at (x, y) into the safe (PRNTR-SAFE.md): true when the safe took it. A key: pressed, its digit entered, the
+     * fourth judged. The open safe's rifle magazine: taken, the gun upgraded. The steel anywhere else in the cavity: a clang, a miss.
+     * A shot into the cavity outside the safe is a wall hole as today (drawHoles draws it over the cavity). */
+    const safeHit = (x: number, y: number, now: number): boolean => {
+      const px = Math.floor(x), py = Math.floor(y);
+      if (safeOpenAt !== null) {
+        const open = now - safeOpenAt >= OPEN_DELAY_MS + DOOR_MS || reduced;
+        if (safeTakenAt === null && open && px >= MAG_BOX.x0 && px < MAG_BOX.x1 && py >= MAG_BOX.y0 && py < MAG_BOX.y1) {
+          safeTakenAt = now;
+          mg = true;
+          shots = MG_SHOTS;
+          autoReloadAt = null;
+          reloadSecondAt = null;
+          reloadOwed = 0;
+          while (shotsBtn.children.length < MG_SHOTS) shotsBtn.append(el('span', ''));
+          drawShots();
+          sounds.magIn();
+          addScore(BREAK_POINTS, now);
+          ctx.announce('A rifle magazine. The gun fires while the button is held: twelve rounds.');
+          return true;
+        }
+      } else {
+        const key = keyAt(px, py);
+        if (key !== null) {
+          if (safeVerdict !== null) return true; // ERR still showing: the press is swallowed
+          safePress = { key, at: now };
+          sounds.keyBeep();
+          if (key >= '0' && key <= '9') safeEntry += key;
+          if (safeEntry.length === 4) {
+            const ok = safeEntry === SAFE_CODE;
+            safeVerdict = { ok, at: now };
+            if (ok) {
+              safeOpenAt = now;
+              sounds.safeThunk();
+              addScore(BREAK_POINTS, now);
+              ctx.announce('The safe opens. A rifle magazine inside.');
+            } else {
+              sounds.keyErr();
+              ctx.announce('Wrong code.');
+            }
+          }
+          return true;
+        }
+      }
+      if (px >= SAFE.x0 && px < SAFE.x1 && py >= SAFE.y0 && py < SAFE.y1 && inCavity(px, py)) {
+        sounds.clang();
+        misses++;
+        return true;
+      }
+      return false;
     };
     const fire = (x: number, y: number, now: number) => {
       if (shots === 0) {
@@ -1590,8 +1799,9 @@ export const room: Stage = {
           return;
         }
       }
-      // The button: more damage, and the machine answers faster. Bright or not.
-      if (x >= BUTTON.x - BUTTON_HIT_PAD && x < BUTTON.x + BUTTON.w + BUTTON_HIT_PAD && y >= BUTTON.y - BUTTON_HIT_PAD && y < BUTTON.y + BUTTON.h + BUTTON_HIT_PAD) {
+      // The button: more damage, and the machine answers faster. Bright or not. (Not once the machine has burst into its
+      // pieces: where it stood is the wall behind it then, and a shot there is a miss.)
+      if (scene.printer !== 'wreck' && x >= BUTTON.x - BUTTON_HIT_PAD && x < BUTTON.x + BUTTON.w + BUTTON_HIT_PAD && y >= BUTTON.y - BUTTON_HIT_PAD && y < BUTTON.y + BUTTON.h + BUTTON_HIT_PAD) {
         flashFrames = HIT_FLASH_FRAMES;
         stoke(x, y, now);
         rage = Math.min(RAGE_MAX, rage + 1);
@@ -1600,7 +1810,7 @@ export const room: Stage = {
         addScore(BUTTON_POINTS, now);
         return;
       }
-      if (x >= MACHINE.x0 && x < MACHINE.x1 && y >= MACHINE.y0 && y < MACHINE.y1) {
+      if (scene.printer !== 'wreck' && x >= MACHINE.x0 && x < MACHINE.x1 && y >= MACHINE.y0 && y < MACHINE.y1) {
         flashFrames = HIT_FLASH_FRAMES;
         stoke(x, y, now);
         addScore(HIT_POINTS, now);
@@ -1669,6 +1879,21 @@ export const room: Stage = {
         misses++;
         return;
       }
+      // The safe in the wall, once the print is torn (PRNTR-SAFE.md): a key, the magazine, or the steel.
+      if (scene.broken.art && safeHit(x, y, now)) return;
+      // The print: a shot into it is a dark cross on it and a miss (below), until the fifth tears it open: the wall
+      // behind it shot through, the roof leak dripping in it (PRNTR-FIRE.md §12). Torn, its rect is wall.
+      if (!scene.broken.art && x >= ART_AT.x && x < ART_AT.x + ART_AT.w && y >= ART_AT.y && y < ART_AT.y + ART_AT.h) {
+        artShots++;
+        if (artShots >= ART_BREAK_SHOTS) {
+          scene.broken.art = true;
+          artBrokeAt = now;
+          sounds.tear();
+          addScore(BREAK_POINTS, now);
+          ctx.announce('The print tears open. The wall behind it is dripping, and a safe with a keypad is set in it.');
+          return;
+        }
+      }
       if (x >= DOOR.x0 && x < DOOR.x1 && y >= DOOR.y0 && y < DOOR.y1) addHole('door', x, y, now);
       else if (x >= WINDOW.x0 && x < WINDOW.x1 && y >= WINDOW.y0 && y < WINDOW.y1) windowShot(x, y, now);
       else {
@@ -1676,6 +1901,9 @@ export const room: Stage = {
         if (y < FLOOR_Y) addHole('wall', x, y);
       }
     };
+    // Whether a hole's storm light is out: the same test drawHoles uses to leave the hole undrawn (in the doorway the
+    // door has swung off it, a broken door and a shot-open blind took their holes with them).
+    const holeHidden = (h: Hole) => inDoorway(h, scene.doorGap) || (h.kind === 'door' && scene.doorBroken) || (h.kind === 'window' && scene.windowOpen);
     // A hole where the shot landed; through the door or the blind, the storm's light in it. Every hole in
     // the door counts toward its breaking.
     const addHole = (kind: Hole['kind'], x: number, y: number, now = 0) => {
@@ -1702,7 +1930,7 @@ export const room: Stage = {
       const box = el('div', 'prntr-room-hole-light');
       box.style.left = `calc(${hole.x - 1}px * var(--s))`;
       box.style.top = `calc(${hole.y - 1}px * var(--s))`;
-      box.hidden = inDoorway(hole, scene.doorGap);
+      box.hidden = holeHidden(hole);
       holeLightOf.set(hole, box);
       holeLights.append(box);
       if (kind === 'door') {
@@ -1723,7 +1951,7 @@ export const room: Stage = {
       scene.doorBroken = true;
       doorOpenAt = null;
       scene.doorGap = DOOR_OPEN;
-      for (const [hole, box] of holeLightOf) if (hole.kind === 'door') box.hidden = true;
+      for (const [hole, box] of holeLightOf) box.hidden = holeHidden(hole);
       frame.classList.add('is-open');
       sounds.doorBreak();
       addScore(BREAK_POINTS, now);
@@ -1746,7 +1974,7 @@ export const room: Stage = {
     const breakWindow = (now: number) => {
       scene.windowOpen = true;
       frame.classList.add('is-window-open');
-      for (const [hole, box] of holeLightOf) if (hole.kind === 'window') box.hidden = true;
+      for (const [hole, box] of holeLightOf) box.hidden = holeHidden(hole);
       sounds.shatter();
       // the slats clattering down after the crack
       window.setTimeout(() => {
@@ -1814,10 +2042,12 @@ export const room: Stage = {
       flashFrames = HIT_FLASH_FRAMES * 2;
       fireSound = sounds.fire();
     };
-    // A tube shot: every jet on that nozzle stops, the head and the hose fly
-    // apart in bits of plum, grey and its ink, and the stump stays; the nozzle is dead for good.
+    // A tube shot: the jet spraying from that nozzle stops, the jets still to come from it are gone, the head and the hose fly
+    // apart in bits of plum, grey and its ink, and the stump stays; the nozzle is dead for good. A jet of the nozzle that has
+    // already sprayed is left as it is: stopping it now would move its end, and its splat, to later.
     const explodeTube = (jet: Spray, now: number) => {
-      for (const s of sprays) if (s.nx === jet.nx && s.stoppedAt === null) s.stoppedAt = now;
+      for (const s of sprays) if (s.nx === jet.nx && spraying(s, now)) s.stoppedAt = now;
+      sprays = sprays.filter((s) => s.nx !== jet.nx || s.at <= now);
       if (!scene.stubs.includes(jet.nx)) scene.stubs.push(jet.nx);
       sounds.tubeBurst();
       flashFrames = 1;
@@ -1852,6 +2082,7 @@ export const room: Stage = {
       fireSound = null;
       scene.fire = null;
       fireLight.hidden = true;
+      machineLight.hidden = true;
       spreadAt = null;
       ctx.announce('The fire is out.');
     };
@@ -1884,7 +2115,7 @@ export const room: Stage = {
           washAt = performance.now();
           // the player is dazed by it: the cross wanders (or, under reduced motion and on touch, its bloom opens all the way)
           dazeAt = washAt;
-          if ((reduced || touch) && !steady) {
+          if ((reduced || touched) && !steady) {
             heat = BLOOM_MAX - BLOOM_BASE;
             heatAt = washAt;
           }
@@ -1995,7 +2226,7 @@ export const room: Stage = {
       t.on = true;
       t.el.classList.add(!reduced && Math.random() < TEAR_DROP ? 'is-dropped' : 'is-torn');
       if (t.el === healthEl) healthFill.style.width = `${Math.random() * 100}%`;
-      else if (t.el === lifeEl) lifeFill.style.width = `${Math.random() * 100}%`;
+      else if (t.el === lifeEl) lifeFill.style.transform = `scaleX(${Math.random()})`;
       else {
         const n = t.el === captionEl ? captionText : t.el;
         if (n.childElementCount === 0 && n.textContent) {
@@ -2052,6 +2283,10 @@ export const room: Stage = {
     };
     const launchAttack = (now: number) => {
       const gap = attackGap();
+      /** The next attack after a volley this long: after it has landed in phase 1, from its launch from phase 2. */
+      const after = (volleyMs: number) => {
+        nextAttackAt = now + (fightPhase() >= 2 ? 0 : volleyMs) + gap;
+      };
       const kinds = rotation();
       const nozzles = NOZZLES_X.filter((x) => !scene.stubs.includes(x));
       // Nothing while the lid is up (a scan or a slam is on), and no scan or slam while a tube is up: the lid
@@ -2079,14 +2314,14 @@ export const room: Stage = {
           return;
         }
         sprays.push({ nx: BLACK_X, x: BLACK_X, y: TUBE_TOP, at: now + TUBE_RISE_MS, color: 'z', fire: false, landing: null, stoppedAt: null, done: true, fed: false, dud: true });
-        nextAttackAt = now + TUBE_RISE_MS + SPRAY_MS + TUBE_RISE_MS + gap;
+        after(TUBE_RISE_MS + SPRAY_MS + TUBE_RISE_MS);
         return;
       }
       if (kind === 'bolts') {
         for (let i = 0; i < 3; i++) {
           staples.push({ kind: Math.random() < 0.5 ? 'nut' : 'bolt', ms: BOLT_MS, x0: SLOT.x0 + 4 + Math.random() * (SLOT.x1 - SLOT.x0 - 8), x: 20 + Math.random() * 180, y: 40 + Math.random() * 70, at: now + i * BOLT_STAGGER_MS, hit: false, shot: false, fed: false });
         }
-        nextAttackAt = now + 2 * BOLT_STAGGER_MS + BOLT_MS + gap;
+        after(2 * BOLT_STAGGER_MS + BOLT_MS);
       } else if (kind === 'ink') {
         if (!nozzles.length) {
           nextAttackAt = now + gap;
@@ -2106,7 +2341,7 @@ export const room: Stage = {
           const nx = nozzles[Math.floor(Math.random() * nozzles.length)];
           sprays.push({ nx, x, y, at: now + TUBE_RISE_MS + i * SPRAY_STAGGER_MS, color: NOZZLES.find((n) => n.x === nx)!.color, fire: atFire, landing: null, stoppedAt: null, done: false, fed: false, dud: false });
         }
-        nextAttackAt = now + TUBE_RISE_MS + (SPRAY_COUNT - 1) * SPRAY_STAGGER_MS + SPRAY_MS + SPRAY_FLIGHT_MS + gap;
+        after(TUBE_RISE_MS + (SPRAY_COUNT - 1) * SPRAY_STAGGER_MS + SPRAY_MS + SPRAY_FLIGHT_MS);
       } else if (kind === 'scan') {
         startScan(now);
         nextAttackAt = now + SCAN_TOTAL_MS + gap;
@@ -2114,15 +2349,20 @@ export const room: Stage = {
         startSlam(now);
         nextAttackAt = now + SLAM_TOTAL_MS + gap;
       } else if (kind === 'staples') {
-        for (let i = 0; i < 3; i++) {
-          staples.push({ kind: 'staple', ms: STAPLE_MS, x0: SLOT.x0 + 3 + Math.random() * (SLOT.x1 - SLOT.x0 - 6), x: 20 + Math.random() * 180, y: 40 + Math.random() * 70, at: now + i * STAPLE_STAGGER_MS, hit: false, shot: false, fed: false });
+        const n = STAPLES_BY_PHASE[fightPhase()];
+        const stagger = fightPhase() >= 2 ? STAGGER_PRESSED_MS : STAPLE_STAGGER_MS;
+        for (let i = 0; i < n; i++) {
+          staples.push({ kind: 'staple', ms: STAPLE_MS, x0: SLOT.x0 + 3 + Math.random() * (SLOT.x1 - SLOT.x0 - 6), x: 20 + Math.random() * 180, y: 40 + Math.random() * 70, at: now + i * stagger, hit: false, shot: false, fed: false });
         }
-        nextAttackAt = now + 2 * STAPLE_STAGGER_MS + STAPLE_MS + gap;
+        after((n - 1) * stagger + STAPLE_MS);
       } else {
-        PAGE_TARGETS_X.forEach((x1, i) => {
-          pages.push({ burning: fireAt !== null, x0: PAGE_ORIGINS_X[i], x1, y1: 60 + Math.random() * 70, at: now + i * PAGE_STAGGER_MS, landedAt: null, shot: false, fed: false });
+        const stagger = fightPhase() >= 2 ? STAGGER_PRESSED_MS : PAGE_STAGGER_MS;
+        // from phase 2 the sixth page, last, out of the middle of the slot
+        const lanes = fightPhase() >= 2 ? [...PAGE_TARGETS_X, PAGE_SIXTH_X[Math.floor(Math.random() * PAGE_SIXTH_X.length)]] : PAGE_TARGETS_X;
+        lanes.forEach((x1, i) => {
+          pages.push({ burning: fireAt !== null, x0: i < PAGE_ORIGINS_X.length ? PAGE_ORIGINS_X[i] : PAGE_ORIGINS_X[2], x1, y1: 60 + Math.random() * 70, at: now + i * stagger, landedAt: null, shot: false, fed: false, doc: i === 2, seed: 600 + x1 });
         });
-        nextAttackAt = now + 4 * PAGE_STAGGER_MS + PAGE_MS + gap;
+        after((lanes.length - 1) * stagger + PAGE_MS);
       }
     };
 
@@ -2145,6 +2385,7 @@ export const room: Stage = {
         playerName = name;
         scene.badge = 'taken';
         lifeName.textContent = playerName;
+        drawHealth(); // the bar's label names the player too
         setCaption('YOU CLIP IT ON.');
         sounds.uiClick();
         ctx.announce(`Name set: ${name}.`);
@@ -2181,7 +2422,9 @@ export const room: Stage = {
         setCaption(USB_CAPTION);
         return;
       }
-      if (scene.badge === 'floor' && inBadge(v.x, v.y)) {
+      // on touch the box grows until it is as tall as the USB's 44 screen px (its own height is 18 virtual px)
+      const badgePad = touch ? Math.max(0, Math.ceil(USB_HIT_PX / 2 / scale) - 9) : 0;
+      if (scene.badge === 'floor' && inBadge(v.x, v.y, badgePad)) {
         openBadge();
         return;
       }
@@ -2198,16 +2441,20 @@ export const room: Stage = {
     frame.addEventListener(
       'pointermove',
       (e) => {
+        touched = e.pointerType === 'touch';
         if (e.pointerType !== 'touch' && phase !== 'badge') pointer = toVirtual(e);
+        if (holdV !== null) holdV = toVirtual(e);
       },
       { signal },
     );
-    frame.addEventListener('pointerleave', () => (pointer = null), { signal });
+    frame.addEventListener('pointerleave', () => { pointer = null; holdV = null; }, { signal });
+    for (const ev of ['pointerup', 'pointercancel'] as const) window.addEventListener(ev, () => (holdV = null), { signal });
     frame.addEventListener('contextmenu', (e) => e.preventDefault(), { signal });
     frame.addEventListener(
       'pointerdown',
       (e) => {
         const now = performance.now();
+        touched = e.pointerType === 'touch';
         // the card up: a press on the dim sets the name (or puts the badge down); the card and the input do their own work
         if (phase === 'badge') {
           if (e.target === badgeEl) closeBadge(true);
@@ -2228,6 +2475,11 @@ export const room: Stage = {
           }
           const a = aim(v, now);
           fire(a.x, a.y, now);
+          // the machine gun: the button held keeps firing (the frame loop) until it is let go or the magazine is empty
+          if (mg) {
+            holdV = v;
+            nextHoldAt = now + MG_MS;
+          }
         }
         else if (phase === 'continue') answerContinue(now);
       },
@@ -2246,6 +2498,11 @@ export const room: Stage = {
       'pointerdown',
       (e) => {
         if (e.target !== wrap) return;
+        // the card up: a press off the frame is a press off the card, which sets the name (the field would lose its focus anyway)
+        if (phase === 'badge') {
+          closeBadge(true);
+          return;
+        }
         if (phase === 'continue') answerContinue(performance.now());
         else reload(performance.now());
       },
@@ -2256,7 +2513,9 @@ export const room: Stage = {
       'pointerdown',
       (e) => {
         e.stopPropagation();
-        reload(performance.now());
+        // under CONTINUE? the pips are part of the room: a press on them answers it like a press anywhere else
+        if (phase === 'continue') answerContinue(performance.now());
+        else reload(performance.now());
       },
       { signal },
     );
@@ -2266,7 +2525,8 @@ export const room: Stage = {
         if (phase === 'badge') return;
         if (phase === 'continue' && (e.key === ' ' || e.key === 'Enter')) {
           e.preventDefault();
-          answerContinue(performance.now());
+          // not a held key: the Space that was held down while the player died would answer it the moment it is armed
+          if (!e.repeat) answerContinue(performance.now());
         } else if (e.key === ' ' || e.key === 'r' || e.key === 'R') {
           e.preventDefault();
           reload(performance.now());
@@ -2279,13 +2539,14 @@ export const room: Stage = {
       // Harness hook (PRNTR-STAGE-1.md §5). Compiled out of builds; vite.config.ts
       // fails the build if its marker survives.
       console.info('prntr-dev-room');
-      (window as unknown as { __prntrRoom?: unknown }).__prntrRoom = {
+      const hook = {
         phase: () => phase,
         badge: () => scene.badge,
         playerName: () => playerName,
         setName: (n: string) => {
           playerName = cleanName(n) || DEFAULT_NAME;
           lifeName.textContent = playerName;
+          drawHealth();
         },
         stats: () => ({ shotsFired, misses, pagesShot, staplesShot, deaths, fireEver, wonBy, fightAt }),
         setScore: (n: number) => {
@@ -2311,9 +2572,31 @@ export const room: Stage = {
             plugAt = performance.now();
           }
         },
+        /** Toward the fight: plugs the USB from the look, and runs the sticker beat's last steps now. Call until phase() is 'fight'. */
+        fight: () => {
+          if (phase === 'look' && plugAt === null) {
+            scene.usb = false;
+            plugAt = performance.now();
+          } else if (phase === 'sticker') {
+            // a second past the last step: the frame's clock runs a little behind performance.now(), and the panel calls this every frame
+            phaseAt = performance.now() - (WAKE_AT + LID_MS + SWEEP_MS + WASH_MS + 1000);
+          }
+        },
+        /** The machine is beaten now, as at 1337 (the gun's end). */
+        win: () => {
+          if (phase === 'fight' && frozenAt === null) startEnd(performance.now());
+        },
+        /** Game over now, from the fight or the CONTINUE?. */
+        over: () => {
+          if (phase === 'fight' || phase === 'continue') startOver(performance.now());
+        },
+        isGod: () => god,
+        isSteady: () => steady,
         broken: () => BREAKABLES.filter((b) => scene.broken[b.id]).map((b) => b.id),
         kit: () => scene.broken.kit,
         attackGap,
+        /** Ms until the next attack is due (negative: overdue, waiting on the lid). */
+        nextAttackIn: () => nextAttackAt - performance.now(),
         exit: (): ExitSign['state'] => scene.exit.state,
         doorGap: () => scene.doorGap,
         door: () => (scene.doorBroken ? 'broken' : scene.doorGap >= DOOR_OPEN ? 'open' : scene.doorGap > 0 ? 'cracked' : 'closed'),
@@ -2322,6 +2605,12 @@ export const room: Stage = {
         storm: () => ({ ...scene.storm }),
         stormLevel: () => stormLevel,
         strike: () => strike(performance.now()),
+        /** The storm's and the fire's absolute times, and whether the room is frozen; `dueStrike` makes the next strike due. */
+        clocks: () => ({ nextStrike, nextFar, strikeAt, farAt, fireAt, spreadAt, frozen: frozenAt !== null }),
+        dueStrike: () => {
+          nextStrike = performance.now();
+        },
+        shots: () => shots,
         short: () => shortAt !== null,
         fire: () => fireAt !== null,
         fireU: () => fireU(performance.now()),
@@ -2341,17 +2630,24 @@ export const room: Stage = {
         },
         bolts: () => staples.filter((s) => s.kind !== 'staple').length,
         burningPages: () => pages.filter((p) => p.burning && !p.shot).length,
+        docPage: () => { const p = pages.find((q) => q.doc); return p ? { burning: p.burning, shot: p.shot, landed: p.landedAt !== null, y1: p.y1, burn: burnOf(p, performance.now()), gone: gone(p, performance.now()) } : null; },
         deadTubes: () => [...scene.stubs],
         sprays: () => sprays.length,
         tubes: () => scene.tubes.map((t) => ({ ...t })),
         /** Each jet's nozzle, start and where it is landing now (the hunt's lagged target). */
         jets: () => sprays.map((s) => ({ nx: s.nx, at: s.at, landing: landingOf(s, performance.now()) })),
+        /** Each jet's nozzle, start, stop time (null: it runs its length), end and whether its splat has landed. */
+        sprayState: () => sprays.map((s) => ({ nx: s.nx, at: s.at, stoppedAt: s.stoppedAt, end: jetEnd(s), done: s.done, dud: s.dud })),
         holes: () => scene.holes.map((h) => h.kind),
         marks: () => scene.marks.map((m) => ({ ...m })),
         drops: () => drops.length,
         /** The pages on the glass: where each landed, and whether it is sliding off yet. */
         landed: () => pages.filter((p) => p.landedAt !== null).map((p) => ({ x: p.x1, y: p.y1, sliding: performance.now() - p.landedAt! >= PAGE_LANDED_MS })),
         thrown: () => staples.map((s) => ({ kind: s.kind, x: s.x, y: s.y, at: s.at, shot: s.shot, hit: s.hit })),
+        /** The pages in the air or on the glass: each one's origin, lane, start and whether it is the player's. */
+        pages: () => pages.map((p) => ({ x0: p.x0, x1: p.x1, at: p.at, doc: p.doc })),
+        /** The fight's phase now (1–3, PRNTR-PRESSURE.md). */
+        fightPhase: () => fightPhase(),
         /** How many things in flight have been shot down (staples, nuts, bolts, pages): a shot one of them took. */
         shotDown: () => staples.filter((s) => s.shot).length + pages.filter((p) => p.shot).length,
         ghosts: () => ghosts.length,
@@ -2362,6 +2658,12 @@ export const room: Stage = {
         lightsRed: () => scene.lightsRed,
         daze: () => dazeNow(performance.now()),
         fig: () => ({ ...scene.fig, leaves: scene.broken.fig, pot: scene.broken.figPot }),
+        monstera: () => ({ ...scene.monstera, down: scene.broken.vase }),
+        art: () => ({ shots: artShots, torn: scene.broken.art, since: scene.tornSince }),
+        /** The safe: the digits in, the key pressed, the verdict, the door, whether the magazine is still inside (and its hover); the upgrade and the magazine. */
+        safe: () => ({ entry: safeEntry, press: safePress?.key ?? null, verdict: safeVerdict === null ? 'none' : safeVerdict.ok ? 'ok' : 'err', open: scene.safe.open, magIn: safeTakenAt === null, bob: scene.safe.bob, spin: scene.safe.spin, mg, shots, mag: magSize() }),
+        /** Shots that hit nothing (the steel counts as one). */
+        misses: () => misses,
         wreck: () => scene.printer === 'wreck',
         pieces: () => scene.pieces.map((q) => [Math.round(q.x), Math.round(q.y)]),
         windowOpen: () => scene.windowOpen,
@@ -2397,6 +2699,12 @@ export const room: Stage = {
         /** The machine's shake this frame (the tremble, the landing): what is attached to it moves with it. */
         shake: () => ({ ...scene.shake }),
       };
+      const holder = window as unknown as { __prntrRoom?: unknown };
+      holder.__prntrRoom = hook;
+      // the next run, or the end of this one, must not leave a hook on a stopped run
+      signal.addEventListener('abort', () => {
+        if (holder.__prntrRoom === hook) delete holder.__prntrRoom;
+      });
     }
 
     // ---- timelines (ms from the start of the phase) -----------------------
@@ -2471,7 +2779,7 @@ export const room: Stage = {
       if (hintHideAt && now >= hintHideAt) hideHint();
       poseName(now);
       // The short: a zap at each of its moments, then the fire.
-      if (shortAt !== null) {
+      if (shortAt !== null && frozenAt === null) {
         while (shortZaps < SHORT_ZAPS_MS.length && now - shortAt >= SHORT_ZAPS_MS[shortZaps]) {
           shortZaps++;
           zap(now);
@@ -2479,11 +2787,12 @@ export const room: Stage = {
         if (now - shortAt >= SHORT_MS) startFire(now);
       }
       if (fireAt !== null) fireSound?.setLevel(fireU(now) + 0.5 * spreadU(now) + (now - stokeAt < STOKE_FLARE_MS ? 0.3 : 0));
-      if (fireAt !== null && !mad && now - fireAt >= MAD_AFTER_MS) {
+      if (fireAt !== null && !mad && frozenAt === null && now - fireAt >= MAD_AFTER_MS) {
         mad = true;
         frame.classList.add('is-mad');
       }
-      // The falling sign lands (not while the room is frozen).
+      // The falling sign lands, the door swings, the storm strikes (none of it while the room is frozen: the frame drawn
+      // is the frozen one, and a thing stamped with the live time would be drawn with a negative age).
       if (scene.exit.state === 'falling' && frozenAt === null && now - exitAt >= (reduced ? 0 : EXIT_FALL_MS)) {
         scene.exit.state = 'down';
         scene.exit.x = EXIT_FLOOR.x;
@@ -2491,13 +2800,13 @@ export const room: Stage = {
         sounds.signCrash();
         doorAt = now + DOOR_DELAY_MS;
       }
-      if (doorAt !== null && now >= doorAt) {
+      if (doorAt !== null && frozenAt === null && now >= doorAt) {
         doorAt = null;
         swingDoor(now);
       }
       // The storm: a near strike now and then, far lightning between.
-      if (now >= nextStrike) strike(now);
-      if (now >= nextFar) farStrike(now);
+      if (frozenAt === null && now >= nextStrike) strike(now);
+      if (frozenAt === null && now >= nextFar) farStrike(now);
       // The clock: lands, comes to rest, catches fire by the burning cooler, rolls out (not while frozen).
       if (frozenAt === null) {
         const ck = scene.clock;
@@ -2539,14 +2848,14 @@ export const room: Stage = {
         if (deathUntil) {
           if (now < deathUntil) return;
           deathUntil = 0;
-          frozenAt = null;
+          thaw(now);
           deathEl.hidden = true;
           health = PLAYER_HEALTH;
           drawHealth();
           nextAttackAt = now + RESPAWN_MS;
         }
         // The fire takes the weak machine; engulfed, its health runs out and the fight is won.
-        if (fireAt !== null && spreadAt === null && score >= HI * (1 - SPREAD_HEALTH)) spreadAt = now;
+        if (fireAt !== null && spreadAt === null && fightPhase() >= 2) spreadAt = now;
         if (spreadAt !== null && depleteAt === null && now - spreadAt >= spreadMs) {
           depleteAt = now;
           depleteFrom = score;
@@ -2567,9 +2876,24 @@ export const room: Stage = {
           slamNow = true;
         }
         if (shots === 0 && autoReloadAt !== null && now >= autoReloadAt) reload(now);
+        // The machine gun (PRNTR-SAFE.md): a round every MG_MS while the button is held, until the magazine is empty (the
+        // hold ends there: no dry clicks; a new press fires again after the reload). On touch the cross stays at the finger.
+        if (mg && holdV !== null && phase === 'fight' && frozenAt === null) {
+          while (holdV !== null && now >= nextHoldAt) {
+            if (shots === 0) {
+              holdV = null;
+              break;
+            }
+            const a = aim(holdV, now);
+            fire(a.x, a.y, now);
+            if (touched) tap = { x: holdV.x, y: holdV.y, at: now };
+            nextHoldAt += MG_MS;
+          }
+        }
         if (reloadSecondAt !== null && now >= reloadSecondAt) {
           reloadSecondAt = null;
-          shots = SHOTS;
+          shots = Math.min(magSize(), shots + reloadOwed);
+          reloadOwed = 0;
           drawShots();
         }
         if (now >= nextAttackAt) launchAttack(now);
@@ -2588,10 +2912,13 @@ export const room: Stage = {
             s.hit = true;
             if (s.kind === 'staple') sounds.stapleHit();
             else sounds.boltHit();
-            hurt(s.kind, now);
             // the mark it leaves: a staple or a bolt sticks in the glass; a nut bounces off and drops out of the frame
+            // (before the hurt: the hit that takes the last of the health clears what is in the air, the nut with it)
             if (s.kind === 'nut') drops.push({ kind: 'nut', x: s.x, y: s.y, at: now });
             else addMark(s.kind, s.x, s.y);
+            hurt(s.kind, now);
+            // a death ends this frame's hits: what else was about to land goes with the rest of what was in the air
+            if (phase !== 'fight' || frozenAt !== null) break;
           }
         }
         staples = staples.filter((s) => !s.hit && !s.shot);
@@ -2603,7 +2930,8 @@ export const room: Stage = {
           }
           if (!p.shot && p.landedAt === null && now - p.at >= PAGE_MS) {
             p.landedAt = now;
-            sounds.paperSlap();
+            // a burnt-up page lands as its flakes: no paper to slap, the fire is crackling already
+            if (!gone(p, now)) sounds.paperSlap();
             hurt(p.burning ? 'firePage' : 'page', now);
           }
         }
@@ -2635,24 +2963,17 @@ export const room: Stage = {
     };
 
     // ---- render -----------------------------------------------------------
-    // A glow box per projectile in flight (never a landed page: it cannot be shot),
-    // in screen px over the frame; spare boxes are hidden.
+    // The glows (PRNTR-GLOWS.md), in screen px over the frame; spare boxes are hidden. Each is a filled shape under
+    // its subject: a thrown thing in flight (never a landed page: it cannot be shot) on the glow-fill layer under the
+    // front canvas; the bright button and a spraying tube on the lit-glows layer under the lit canvas.
     const drawGlows = (now: number) => {
-      const rects: { x: number; y: number; w: number; h: number }[] = [];
-      for (const s of staples) if (now >= s.at && !s.hit && !s.shot) rects.push(staplePose(s, now));
-      for (const p of pages) if (now >= p.at && !p.shot && p.landedAt === null) rects.push(pagePose(p, now));
-      for (const s of sprays) {
-        if (!spraying(s, now)) continue;
-        const tb = poseTube(s.nx, 1, now);
-        const hx = tubeX(tb, tb.top);
-        rects.push({ x: Math.min(s.nx, hx) - 3 + scene.shake.x, y: tb.top + scene.shake.y, w: Math.abs(hx - s.nx) + 6, h: TUBE_BASE - tb.top });
-      }
-      // the thrown things (the staples, nuts and bolts, then the pages) glow under the front layer, as one
-      // gradient on a box GLOW_PAD wider a side; the tubes and the button keep the outer glow over everything
-      const thrown = rects.splice(0, staples.filter((s) => now >= s.at && !s.hit && !s.shot).length + pages.filter((p) => now >= p.at && !p.shot && p.landedAt === null).length);
-      if (scene.buttonBright) rects.push({ ...BUTTON, x: BUTTON.x + scene.shake.x, y: BUTTON.y + scene.shake.y });
-      placeGlows(glows, 'prntr-room-glow', rects);
-      placeGlows(glowFills, 'prntr-room-glow-fill', thrown.map((r) => ({ x: r.x - GLOW_PAD, y: r.y - GLOW_PAD, w: r.w + 2 * GLOW_PAD, h: r.h + 2 * GLOW_PAD })));
+      const thrown: GlowBox[] = [];
+      for (const s of staples) if (now >= s.at && !s.hit && !s.shot) thrown.push(staplePose(s, now));
+      for (const p of pages) if (now >= p.at && !p.shot && p.landedAt === null) thrown.push(pagePose(p, now));
+      placeGlows(glowFills, 'prntr-room-glow-fill', thrown.map(padGlow));
+      buttonGlow.hidden = !scene.buttonBright;
+      if (scene.buttonBright) placeBox(buttonGlow, padGlow({ ...BUTTON, x: BUTTON.x + scene.shake.x, y: BUTTON.y + scene.shake.y }));
+      placeTubeGlows(sprays.filter((s) => spraying(s, now)).map((s) => poseTube(s.nx, 1, now)));
       // the badge's pulse: only while it can still be picked up, out for good once the USB is clicked
       badgeGlow.hidden = !(scene.badge === 'floor' && (phase === 'look' || phase === 'badge') && plugAt === null);
       if (!badgeGlow.hidden) {
@@ -2662,17 +2983,55 @@ export const room: Stage = {
         badgeGlow.style.width = badgeGlow.style.height = `${2 * BADGE_GLOW_R * scale}px`;
       }
     };
-    const placeGlows = (layer: HTMLElement, cls: string, rects: { x: number; y: number; w: number; h: number }[]) => {
+    /** A sprite's box grown GLOW_PAD a side: the glow's gradient fades out over the pad. */
+    const padGlow = (r: GlowBox): GlowBox => ({ x: r.x - GLOW_PAD, y: r.y - GLOW_PAD, w: r.w + 2 * GLOW_PAD, h: r.h + 2 * GLOW_PAD });
+    const placeBox = (box: HTMLElement, r: GlowBox) => {
+      box.style.left = `${r.x * scale}px`;
+      box.style.top = `${r.y * scale}px`;
+      box.style.width = `${r.w * scale}px`;
+      box.style.height = `${r.h * scale}px`;
+    };
+    const placeGlows = (layer: HTMLElement, cls: string, rects: GlowBox[]) => {
       while (layer.children.length < rects.length) layer.append(el('div', cls));
       Array.from(layer.children).forEach((n, i) => {
         const r = rects[i];
         const box = n as HTMLElement;
         box.hidden = !r;
-        if (!r) return;
-        box.style.left = `${r.x * scale}px`;
-        box.style.top = `${r.y * scale}px`;
-        box.style.width = `${r.w * scale}px`;
-        box.style.height = `${r.h * scale}px`;
+        if (r) placeBox(box, r);
+      });
+    };
+    // A spraying tube's glow: its hose's path from the head down to the machine's edge, stroked wide and blurred
+    // (.prntr-room-tube-glow), in a box GLOW_PAD larger a side than the hose's. A box glow round a snaking hose
+    // would be lit at its rim and hollow inside.
+    const placeTubeGlows = (tubes: Tube[]) => {
+      while (tubeGlows.children.length < tubes.length) {
+        const box = el('div', 'prntr-room-tube-glow');
+        const svg = document.createElementNS(SVG_NS, 'svg');
+        for (const cls of ['is-outer', 'is-inner']) {
+          const path = document.createElementNS(SVG_NS, 'path');
+          path.setAttribute('class', cls);
+          svg.append(path);
+        }
+        box.append(svg);
+        tubeGlows.append(box);
+      }
+      Array.from(tubeGlows.children).forEach((n, i) => {
+        const tb = tubes[i];
+        const box = n as HTMLElement;
+        box.hidden = !tb;
+        if (!tb) return;
+        const hx = tubeX(tb, tb.top);
+        const x0 = Math.min(tb.x, hx) - 3 - GLOW_PAD;
+        const y0 = tb.top - GLOW_PAD;
+        const w = Math.abs(hx - tb.x) + 6 + 2 * GLOW_PAD;
+        const h = TUBE_BASE - tb.top + 2 * GLOW_PAD;
+        placeBox(box, { x: x0 + scene.shake.x, y: y0 + scene.shake.y, w, h });
+        let d = `M${hx - x0} ${tb.top + 2 - y0}`;
+        for (let y = tb.top + 4; y < TUBE_BASE; y += 2) d += `L${tubeX(tb, y) - x0} ${y + 0.5 - y0}`;
+        d += `L${tubeX(tb, TUBE_BASE) - x0} ${TUBE_BASE - y0}`;
+        const svg = box.firstElementChild!;
+        svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
+        for (const path of Array.from(svg.children)) path.setAttribute('d', d);
       });
     };
     // The sign: loose, it hangs from its left corner and swings a little while its letters
@@ -2720,7 +3079,7 @@ export const room: Stage = {
       if (scene.doorGap !== lightGap) {
         lightGap = scene.doorGap;
         light.style.width = `calc(${lightGap}px * var(--s))`;
-        for (const [hole, box] of holeLightOf) box.hidden = inDoorway(hole, scene.doorGap);
+        for (const [hole, box] of holeLightOf) box.hidden = holeHidden(hole);
       }
     };
     /** The spread onto the machine, 0..1; once the machine has burst it rages on, up to 1 + RAGE_MORE
@@ -2730,18 +3089,31 @@ export const room: Stage = {
       const v = Math.min(1, (now - spreadAt) / spreadMs);
       return scene.printer === 'wreck' ? v + RAGE_MORE * Math.min(1, Math.max(0, now - burstAt - DEPLETE_MS) / 1000) : v;
     };
-    // The fire grows for FIRE_GROW_MS, then holds; its glow box follows the flames.
+    /** A fire light over a box of flames (FIRE_GLOW_PAD past it), flickering in step with the fire's ticks; hidden with no box. */
+    const poseLight = (light: HTMLElement, box: Rect | null, now: number) => {
+      light.hidden = box === null;
+      if (box === null) return;
+      light.style.left = `${(box.x0 - FIRE_GLOW_PAD) * scale}px`;
+      light.style.top = `${(box.y0 - FIRE_GLOW_PAD) * scale}px`;
+      light.style.width = `${(box.x1 - box.x0 + 2 * FIRE_GLOW_PAD) * scale}px`;
+      light.style.height = `${(box.y1 - box.y0 + 2 * FIRE_GLOW_PAD) * scale}px`;
+      light.style.opacity = reduced ? '0.8' : String(0.65 + 0.35 * Math.abs(Math.sin(Math.floor(now / FIRE_TICK_MS) * 1.1)));
+    };
+    /** The box round a group of flames that are there at all, or null. */
+    const emitterBox = (es: Emitter[]): Rect | null => {
+      const live = es.filter((e) => e.w >= 0.5 && e.h >= 1);
+      if (live.length === 0) return null;
+      return { x0: Math.min(...live.map((e) => e.x - e.w)), y0: Math.min(...live.map((e) => e.floor - e.h)), x1: Math.max(...live.map((e) => e.x + e.w)), y1: Math.max(...live.map((e) => e.floor)) };
+    };
+    // The fire grows for FIRE_GROW_MS, then holds; its glow box follows the flames, and the machine's its flames.
     const poseFire = (now: number) => {
       if (fireAt === null) return;
       scene.fire = { u: fireU(now), t: reduced ? 0 : now, v: spreadU(now) };
-      const r = fireRect(scene.fire.u);
-      fireLight.hidden = false;
-      fireLight.style.left = `${(r.x0 - FIRE_GLOW_PAD) * scale}px`;
-      fireLight.style.top = `${(r.y0 - FIRE_GLOW_PAD) * scale}px`;
-      fireLight.style.width = `${(r.x1 - r.x0 + 2 * FIRE_GLOW_PAD) * scale}px`;
-      fireLight.style.height = `${(r.y1 - r.y0 + 2 * FIRE_GLOW_PAD) * scale}px`;
-      fireLight.style.opacity = reduced ? '0.8' : String(0.65 + 0.35 * Math.abs(Math.sin(now / 90)));
+      poseLight(fireLight, fireRect(scene.fire.u), now);
+      poseLight(machineLight, emitterBox(fireEmitters(scene.fire, scene.printer === 'wreck' ? scene.pieces : null).machine), now);
     };
+    // The burning fig's light, over its flames and the fallen monstera's with them (it burns on after the fire is out).
+    const poseFigLight = (now: number) => poseLight(figLight, scene.fig.burning ? emitterBox(figEmitters(scene.fig.burn, scene.broken.fig).concat(scene.monstera.burning ? monsteraEmitters(scene.monstera.burn) : [])) : null, now);
     // The storm outside: a near strike (its bolt in the door's or the window's view), far lightning
     // between, and what the room sees of it this frame.
     const strike = (now: number) => {
@@ -2797,6 +3169,7 @@ export const room: Stage = {
       poseClock(now);
       poseDoor(now);
       poseStorm(now);
+      if (scene.printer === 'wreck') posePieces(now);
       poseFire(now);
       scene.flashWhite = flashFrames > 0;
       scene.damage = score / HI;
@@ -2807,7 +3180,6 @@ export const room: Stage = {
       scene.machine.t = reduced ? 0 : now;
       if (flashFrames > 0) flashFrames--;
       scene.buttonBright = phase === 'fight' && scene.printer === 'up' && (mad || buttonBright(now));
-      if (scene.printer === 'wreck') posePieces(now);
       // The tremble: a new offset of ±1 px every few frames while the mad machine fights; the
       // pounce's landing before that, and the slam's lift and landing over it.
       frameCount++;
@@ -2833,18 +3205,66 @@ export const room: Stage = {
         figCatchAt ??= now + FIG_CATCH_MS;
         if (now >= figCatchAt) {
           scene.fig.burning = true;
+          figBurnAt = now;
           sounds.whoosh();
           boltsNow = true;
           nextAttackAt = Math.min(nextAttackAt, now);
-          if (spreadAt === null) spreadAt = now;
+          // from phase 2: the burning tree sets the spread going at once; earlier it is a stoke, and the spread is the
+          // faster for it when phase 2 comes (as shots in the flames before the spread)
+          if (spreadAt === null && fightPhase() >= 2) spreadAt = now;
           else if (stokes < STOKE_MAX) {
             const v = spreadU(now);
             stokes++;
             spreadMs = Math.round(FIRE_SPREAD_MS * Math.pow(STOKE_STEP, stokes));
-            spreadAt = now - v * spreadMs;
+            if (spreadAt !== null) spreadAt = now - v * spreadMs;
           }
         }
       }
+      // Lit from the crown down over FIG_LIGHT_MS, then burning down (at once under reduced motion).
+      if (figBurnAt !== null) {
+        const b = (now - figBurnAt) / FIG_LIGHT_MS;
+        scene.fig.burn = reduced ? Math.max(1, b) : b;
+      }
+      // The fallen monstera lies at the fig's foot: once the fig is lit down to it, it catches too, whichever fell first.
+      if (scene.broken.vase && scene.fig.burning && scene.fig.burn >= 1 && !scene.monstera.burning && frozenAt === null) {
+        monsteraCatchAt ??= now + MONSTERA_CATCH_MS;
+        if (now >= monsteraCatchAt) {
+          scene.monstera.burning = true;
+          monsteraBurnAt = now;
+          sounds.whoosh();
+        }
+      }
+      if (monsteraBurnAt !== null) {
+        const b = (now - monsteraBurnAt) / MONSTERA_LIGHT_MS;
+        scene.monstera.burn = reduced ? Math.max(1, b) : b;
+      }
+      // The leak's clock, from the break; one still frame under reduced motion (the stain full, a bead at the top).
+      scene.tornSince = artBrokeAt === null ? 0 : reduced ? 20_000 : now - artBrokeAt;
+      // The safe's clocks (PRNTR-SAFE.md): the key pressed, the wrong code's ERR, the door, the take's flash, the magazine's
+      // turn and its hover; the keypad repainted on the art canvas when what it shows changes.
+      if (safePress !== null && now - safePress.at >= PRESS_MS) safePress = null;
+      if (safeVerdict !== null && !safeVerdict.ok && now - safeVerdict.at >= ERR_MS) {
+        safeVerdict = null;
+        safeEntry = '';
+      }
+      const doorOpen = safeOpenAt === null ? 0 : reduced ? 1 : Math.min(1, Math.max(0, (now - safeOpenAt - OPEN_DELAY_MS) / DOOR_MS));
+      scene.safe = {
+        open: doorOpen,
+        magIn: safeTakenAt === null,
+        flash: safeTakenAt !== null && now - safeTakenAt < TAKE_FLASH_MS,
+        spin: reduced ? 0 : Math.floor(((now % MAG_SPIN_MS) / MAG_SPIN_MS) * MAG_STEPS),
+        bob: reduced ? 0 : Math.round(((1 - Math.cos((now / MAG_BOB_MS) * 2 * Math.PI)) / 2) * MAG_BOB),
+      };
+      if (scene.broken.art && doorOpen === 0) {
+        const verdict = safeVerdict === null ? 'none' : safeVerdict.ok ? 'ok' : 'err';
+        const blink = now % 300 < 150;
+        const shown = `${safeEntry}|${safePress?.key ?? ''}|${verdict}|${verdict === 'err' ? blink : ''}`;
+        if (shown !== keypadDrawn) {
+          paintKeypad(ag, { entry: safeEntry, press: safePress?.key ?? null, verdict, blink });
+          keypadDrawn = shown;
+        }
+      }
+      poseFigLight(now);
       // The clock's hands spin while the machine moves: forward in the pounce, shaking as it lands, trembling mad.
       const moving = landing !== null || (scene.machine.back > 0 && scene.machine.back < 1) || scene.shake.x !== 0 || scene.shake.y !== 0;
       if (moving && !reduced && frozenAt === null) {
@@ -2896,6 +3316,7 @@ export const room: Stage = {
       // (the most risen of its jets), turned after the cross as the machine's health goes.
       const tubes = new Map<number, number>();
       for (const s of sprays) {
+        if (scene.stubs.includes(s.nx)) continue; // a shot nozzle is a stump: no head rises or sinks over it
         const from = s.at - TUBE_RISE_MS;
         const to = jetEnd(s) + TUBE_RISE_MS;
         if (now < from || now >= to) continue;
@@ -2916,11 +3337,18 @@ export const room: Stage = {
         }
       }
       drawRoom(pix, scene);
+      // The lit layer (PRNTR-GLOWS.md): the room's pixels where the tubes and the bright button show, over their glows.
+      mpix.clear();
+      drawTubes(mpix, scene, CAPS_TOP);
+      if (scene.buttonBright) mpix.rect(BUTTON.x + scene.shake.x, BUTTON.y + scene.shake.y, BUTTON.x + BUTTON.w + scene.shake.x, BUTTON.y + BUTTON.h + scene.shake.y, 'W');
+      lpix.copyMasked(pix, mpix);
       // What the machine throws goes on the front layer, over the slot's light, and the fire's
       // front flames with it: the flames on the burning machine were behind that glow too.
       fpix.clear();
+      dg.setTransform(1, 0, 0, 1, 0, 0);
+      dg.clearRect(0, 0, doc.width, doc.height);
       if (scene.windowOpen) drawWindowWreck(fpix);
-      if (scene.fire) drawFireFront(fpix, scene.fire);
+      if (scene.fire) drawFireFront(fpix, scene.fire, scene.printer === 'wreck' ? scene.pieces : null);
       // The marks on the glass, under the things in flight, the landed pages and the ink.
       drawMarks(fpix, scene.marks);
       // Out of the slot: only the top rows of the sprite so far, then the whole thing.
@@ -2941,28 +3369,52 @@ export const room: Stage = {
         const spr = rotateSprite(d.kind === 'nut' ? SPR.NUT : d.kind === 'staple' ? SPR.STAPLE : SPR.BOLT, Math.floor(a / DROP_SPIN_MS) % 4);
         fpix.blit(Math.floor(d.x - (spr.w * sc) / 2 + 8 * k), Math.floor(d.y + DROP_GRAVITY * k * k + 10 * k - (spr.h * sc) / 2), spr, sc);
       }
-      // A burning page (thrown while the machine burns) carries flames up its face, from its
-      // bottom edge, scaled with it; its paper is scorched at the edges.
-      const pageFire = (x: number, y: number, w: number, h: number, seed: number) => {
-        drawFlame(fpix, x + w / 2, w / 2 - 1, h * 0.8, y + h, seed, reduced ? 0 : now);
-      };
+      // A burning page (thrown while the machine burns) is eaten from its bottom edge (PRNTR-FIRE.md §15): a
+      // ragged front climbs it, black char on its last row with ember glints, scorch above, and the fire's
+      // three flames (a tongue up the middle, a lick at each quarter) stand on the front, dying down as the
+      // paper goes. Its paper is scorched at the edges. The flames go in one layer per pass, drawn over the
+      // pages of that pass; they follow a page in flight every frame and step, with the front, at 10 fps.
+      const tick = reduced ? 0 : Math.floor(now / FIRE_TICK_MS);
+      const flying: Emitter[] = [];
       for (const p of pages) {
         if (p.shot || now < p.at || p.landedAt !== null) continue;
         const r = pagePose(p, now);
         const spr = SPR.PAGE_PRINTED;
-        if (r.h < spr.h) fpix.blit(r.x, r.y, { w: spr.w, h: r.h, rows: spr.rows.slice(0, r.h) });
-        else fpix.blit(r.x, r.y, spr, r.w / spr.w, p.burning ? { remap: { K: 'G', w: 'r' } } : {});
-        if (p.burning && r.h >= spr.h) pageFire(r.x, r.y, r.w, r.h, 600 + p.x1);
+        if (r.h < spr.h) {
+          // rising out of the slot: the rows above the slot so far; the player's page shows its content from the first
+          fpix.blit(r.x, r.y, { w: spr.w, h: r.h, rows: spr.rows.slice(0, r.h) }, 1, p.doc ? { fine: docFine(1) } : {});
+          if (p.doc) DOC.draw(dg, docPx, r.x, r.y, 1, 'w', { rows: r.h });
+          continue;
+        }
+        if (gone(p, now)) continue;
+        const b = burnOf(p, now), burn = p.burning ? burnFine(13, r.sc, b, p.seed, tick) : undefined;
+        fpix.blit(r.x, r.y, spr, r.sc, { ...(p.burning ? { remap: { K: 'G', w: 'r' } } : {}), fine: p.doc ? docFine(r.sc, burn) : burn });
+        if (p.doc) DOC.draw(dg, docPx, r.x, r.y, r.sc, p.burning ? 'r' : 'w', { fine: burn });
+        if (p.burning) flying.push(...frontFire(r.x, r.y, r.w, r.h, r.sc, b, p.seed, tick));
       }
-      // A page on the glass: big, at a slight angle, then it slides off.
+      if (flying.length) drawFlames(fpix, 'pages', flying, reduced ? 0 : now);
+      // A page on the glass: big, at a slight angle, then it slides off; a burning one keeps charring and sheds ash.
+      const landed: Emitter[] = [];
       for (const p of pages) {
-        if (p.landedAt === null) continue;
+        if (p.landedAt === null || gone(p, now)) continue;
         const lt = now - p.landedAt;
         const slide = lt > PAGE_LANDED_MS ? ((lt - PAGE_LANDED_MS) / PAGE_SLIDE_MS) * 80 : 0;
         const lx = Math.floor(p.x1 - 20);
         const ly = Math.floor(p.y1 - 26 + slide);
-        fpix.blit(lx, ly, SPR.PAGE_PRINTED, 4, { skew: 10, ...(p.burning ? { remap: { K: 'G', w: 'r' } } : {}) });
-        if (p.burning) pageFire(lx + 3, ly, 40, 52, 700 + p.x1);
+        const b = burnOf(p, now), burn = p.burning ? burnFine(13, 4, b, p.seed + 100, tick) : undefined;
+        fpix.blit(lx, ly, SPR.PAGE_PRINTED, 4, { skew: 10, ...(p.burning ? { remap: { K: 'G', w: 'r' } } : {}), fine: p.doc ? docFine(4, burn) : burn });
+        if (p.doc) DOC.draw(dg, docPx, lx, ly, 4, p.burning ? 'r' : 'w', { skew: 10, fine: burn });
+        if (p.burning) {
+          landed.push(...frontFire(lx + 3, ly, 40, 52, 4, b, 700 + p.x1, tick));
+          ashFlecks((x, y, k) => fpix.set(x, y, k), p.landedAt, now, lx, ly, 52, p.seed + 100, (t) => burnOf(p, t));
+        }
+      }
+      if (landed.length) drawFlames(fpix, 'pagesLanded', landed, reduced ? 0 : now);
+      // The player's page burning up: from three quarters burnt, three hot flakes trail it and, once it is gone,
+      // fly on to where it would have landed and splash there (the hit).
+      for (const p of pages) {
+        if (!p.doc || !p.burning || p.shot || now < p.at || burnOf(p, now) < 0.75) continue;
+        flakes((x, y, k) => fpix.set(x, y, k), ((now - p.at) / PAGE_MS - PAGE_EJECT) / (1 - PAGE_EJECT), p.x0, SLOT.y - 6.5, p.x1, p.y1, now, tick);
       }
       // Ink: the particles on the near half of their flight (the far half is behind the machine),
       // and the splat building up on the glass, then running down.
@@ -3021,6 +3473,7 @@ export const room: Stage = {
         drawCross(Math.floor(at.x + k.x), Math.floor(at.y + k.y), Math.round(spreadNow(now)));
       } else if (pointer && phase !== 'badge') cpix.blit(Math.floor(pointer.x) - 2, Math.floor(pointer.y), SPR.POINTER);
       pix.present(g);
+      lpix.present(lg);
       fpix.present(fg);
       cpix.present(cg);
       // The slam's ripple: the pixel world bent, drawn over the 2D layers it comes from (hidden meanwhile).
@@ -3040,14 +3493,16 @@ export const room: Stage = {
       }
       canvas.classList.toggle('is-inverted', invertFrame);
       art.classList.toggle('is-inverted', invertFrame);
+      lit.classList.toggle('is-inverted', invertFrame);
       front.classList.toggle('is-inverted', invertFrame);
+      doc.classList.toggle('is-inverted', invertFrame);
       rippleBack?.canvas.classList.toggle('is-inverted', invertFrame);
       rippleFront?.canvas.classList.toggle('is-inverted', invertFrame);
       invertFrame = false;
     };
 
     // ---- loop and exit ----------------------------------------------------
-    return new Promise<Handoff>((resolve) => {
+    return new Promise<Handoff>((resolve, reject) => {
       let raf = 0;
       let done = false;
       const stop = () => {
@@ -3092,8 +3547,16 @@ export const room: Stage = {
       };
       const loop = (now: number) => {
         if (done) return;
-        update(now);
-        render(frozenAt ?? now);
+        // a throw in a frame must end the run (the host leaves as for a stage that throws), not the loop alone: with the
+        // loop dead the promise never settled, and the hum, the fire and the storm played on under a frozen frame
+        try {
+          update(now);
+          render(frozenAt ?? now);
+        } catch (err) {
+          stop();
+          reject(err);
+          return;
+        }
         raf = requestAnimationFrame(loop);
       };
       render(performance.now());

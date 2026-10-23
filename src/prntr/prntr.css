@@ -25,6 +25,8 @@
   background: #000000;
   color: #EDEDED;
   outline: none;
+  /* no pinch or double-tap zoom in any stage (the room had it; the opening did not, and a zoomed-in page could be entered) */
+  touch-action: none;
 }
 
 .prntr-stage {
@@ -195,7 +197,7 @@
   gap: 4px;
   font-family: 'Comic Sans MS', 'Comic Sans', 'Comic Neue', cursive;
   font-weight: 700;
-  font-size: min(220px, 27vw);
+  font-size: min(220px, 27vw, calc(56px * var(--s, 5)));
   line-height: 1;
   letter-spacing: -0.02em;
 }
@@ -259,6 +261,7 @@
   font-size: 28px;
   letter-spacing: 0.08em;
   text-align: center;
+  white-space: nowrap;
 }
 
 .prntr-prompt.is-blinking {
@@ -276,6 +279,7 @@
   color: #EDEDED;
   font-size: 13px;
   letter-spacing: 0.06em;
+  white-space: nowrap;
 }
 
 .prntr-credit.is-glowing {
@@ -327,9 +331,9 @@
   .prntr-card-logo path { stroke-width: 2; }
   .prntr-card-name { font-size: 18px; padding-bottom: 6px; }
   .prntr-card-presents { font-size: 11px; }
-  .prntr-title { gap: 2px; font-size: min(112px, 23.4vw); }
+  .prntr-title { gap: 2px; font-size: min(112px, 23.4vw, calc(56px * var(--s, 5))); }
   .prntr-prompt { font-size: 16px; letter-spacing: 0.06em; }
-  .prntr-footer { font-size: 9px; }
+  .prntr-footer { font-size: 8px; gap: 8px; }
   .prntr-copyright-corrupt { font-size: 11px; }
 }
 
@@ -379,7 +383,9 @@
 /* The scan's one inverted frame. */
 .prntr-room-canvas.is-inverted,
 .prntr-room-art.is-inverted,
-.prntr-room-front.is-inverted {
+.prntr-room-lit.is-inverted,
+.prntr-room-front.is-inverted,
+.prntr-room-doc.is-inverted {
   filter: invert(1);
 }
 
@@ -397,13 +403,27 @@
 }
 
 /* What the machine throws (pages, staples, ink): a transparent canvas over the slot's red
-   light and the door's, so the glow is behind the paper. */
+   light and the door's, so the glow is behind the paper. The lit layer (PRNTR-GLOWS.md): the room's own
+   pixels where a tube or the bright button shows, on a transparent canvas just over the room canvas and
+   their glows, so each glow lies under its subject. */
+.prntr-room-lit,
 .prntr-room-front {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
   image-rendering: pixelated;
+  pointer-events: none;
+}
+
+/* The player's page's content (PRNTR-FIRE.md §18): a canvas at the screen's resolution over the front
+   layer, filling the hole the front leaves inside the thrown page's frame; the page's frame, char and
+   flames are the front's. Not pixelated: the page looks as it does in the app. */
+.prntr-room-doc {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
   pointer-events: none;
 }
 
@@ -426,7 +446,9 @@
 
 .prntr-room-frame.is-rippling .prntr-room-canvas,
 .prntr-room-frame.is-rippling .prntr-room-art,
-.prntr-room-frame.is-rippling .prntr-room-front {
+.prntr-room-frame.is-rippling .prntr-room-lit,
+.prntr-room-frame.is-rippling .prntr-room-front,
+.prntr-room-frame.is-rippling .prntr-room-doc {
   opacity: 0;
 }
 
@@ -596,21 +618,48 @@
   color: #EDEDED;
 }
 
-/* The tubes and the button glow red, the door's kind of light: a transparent box the size of the
-   sprite with the glow outside it, so the pixels stay crisp (they fill their boxes, so no hollow).
-   The thrown things' glows are .prntr-room-glow-fill, under the front layer. */
-.prntr-room-glows {
+/* The red glow on what can be shot (PRNTR-GLOWS.md). The rule: a glow is a soft, filled shape of its subject's
+   whole silhouette, on a layer under the subject's pixels, with the subject crisp on a transparent canvas above
+   it. Never a box-shadow halo round an empty box: a bounding box is not a silhouette, and its inside reads as a
+   hollow (a snaking tube's did). Never a glow over the front canvas: it would lie over the ink on the glass.
+   The tubes' and the button's glows are on .prntr-room-lit-glows, between the room canvas and the lit canvas;
+   the thrown things' on .prntr-room-glow-fills, under the front canvas. */
+.prntr-room-lit-glows,
+.prntr-room-tube-glows {
   position: absolute;
   inset: 0;
   pointer-events: none;
 }
 
-.prntr-room-glow {
+/* A spraying tube's glow: its hose's path stroked wide in the glow's two reds and blurred, so the glow follows the
+   hose. The opacity is the group's, after the blur, so the two strokes do not stack. */
+.prntr-room-tube-glow {
   position: absolute;
-  border-radius: 40%;
-  box-shadow:
-    0 0 calc(2px * var(--s)) calc(0.8px * var(--s)) rgba(255, 90, 60, 0.45),
-    0 0 calc(5px * var(--s)) calc(2px * var(--s)) rgba(184, 20, 10, 0.5);
+  filter: blur(calc(2px * var(--s)));
+  opacity: 0.6;
+}
+
+.prntr-room-tube-glow svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.prntr-room-tube-glow path {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.prntr-room-tube-glow .is-outer {
+  stroke: #B8140A;
+  stroke-width: 16;
+}
+
+.prntr-room-tube-glow .is-inner {
+  stroke: #FF5A3C;
+  stroke-width: 8;
 }
 
 .prntr-room-glow-fills {
@@ -771,10 +820,14 @@
   background: #1E1433;
 }
 
+/* The fill stays full width and shrinks by a scale from its left end: a shrinking width
+   repaints the bar while the hit's blink holds the fill on a layer of its own, and Safari can
+   leave the old right end standing there as a green line. */
 .prntr-room-life-fill {
   height: 100%;
   background: #46D36E;
-  transition: width 200ms linear;
+  transform-origin: left;
+  transition: transform 200ms linear;
 }
 
 .prntr-room-life.is-hurt .prntr-room-life-fill {
@@ -1328,7 +1381,8 @@
 .prntr-room-frame.is-small .prntr-room-life { height: 10px; border-width: 2px; }
 /* small frames: CREDIT and the shots fill the bottom row, so the bar sits just above CREDIT */
 .prntr-room-frame.is-small .prntr-room-life { left: calc(8px * var(--s)); right: auto; width: calc(90px * var(--s)); bottom: calc(6px * var(--s) + 14px); }
-.prntr-room-frame.is-small .prntr-room-health-name { top: calc(14px * var(--s) - 10px); font-size: 7px; }
+/* small frames: the score row above the bar is full (SCORE, HI), so the machine's name goes under its bar */
+.prntr-room-frame.is-small .prntr-room-health-name { top: calc(14px * var(--s) + 15px); font-size: 7px; }
 /* small frames: CREDIT is right under the bar, so the name goes over it */
 .prntr-room-frame.is-small .prntr-room-life-name { left: calc(8px * var(--s)); bottom: calc(6px * var(--s) + 26px); font-size: 7px; }
 .prntr-room-frame.is-small .prntr-room-pips { gap: 6px; bottom: calc(6px * var(--s) + 24px); }

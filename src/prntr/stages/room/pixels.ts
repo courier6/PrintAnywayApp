@@ -4,6 +4,16 @@ import { PAL, type PalKey } from './palette';
 export const W = 240;
 export const H = 160;
 
+/**
+ * The scale (CSS px per virtual px) of the largest frame that fits a w × h box and whose virtual px are
+ * a whole number of device px: 1 on a 1× screen, 4/3 on a 3× phone 390 wide (a 320-wide frame; a whole CSS
+ * px there would be 1, a 240-wide frame). Never under one device px per virtual px.
+ */
+export function frameScale(w: number, h: number): number {
+  const dpr = window.devicePixelRatio || 1;
+  return Math.max(1, Math.floor(Math.min(w / W, h / H) * dpr)) / dpr;
+}
+
 export interface Sprite {
   w: number;
   h: number;
@@ -59,6 +69,8 @@ export interface BlitOptions {
   skew?: number;
   /** Lower the right end by this many output pixels, the left end fixed (the EXIT sign hanging from a corner). */
   tilt?: number;
+  /** Per output pixel (ox, oy from the sprite's top-left, after scale, before skew): null draws nothing there, a key draws that key, undefined draws as is (a burning page's front). */
+  fine?: (ox: number, oy: number, key: PalKey) => PalKey | null | undefined;
 }
 
 /**
@@ -114,9 +126,28 @@ export class Pix {
         for (let sy = 0; sy < scale; sy++) {
           const oy = dy * scale + sy;
           const shift = opts.skew ? Math.floor(oy / opts.skew) : 0;
-          for (let sx = 0; sx < scale; sx++) this.set(x + dx * scale + sx + shift, y + oy + drop, key);
+          for (let sx = 0; sx < scale; sx++) {
+            const ox = dx * scale + sx;
+            let k: PalKey = key;
+            if (opts.fine) { const f = opts.fine(ox, oy, key); if (f === null) continue; if (f) k = f; }
+            this.set(x + ox + shift, y + oy + drop, k);
+          }
         }
       }
+    }
+  }
+
+  /** This buffer cleared, then `src`'s pixels copied wherever `mask` is opaque (the lit layer: the room's own
+   * pixels where a glowing subject shows, whatever is drawn over it; PRNTR-GLOWS.md). */
+  copyMasked(src: Pix, mask: Pix): void {
+    const d = this.d, s = src.d, m = mask.d;
+    d.fill(0);
+    for (let i = 3; i < d.length; i += 4) {
+      if (!m[i]) continue;
+      d[i - 3] = s[i - 3];
+      d[i - 2] = s[i - 2];
+      d[i - 1] = s[i - 1];
+      d[i] = s[i];
     }
   }
 

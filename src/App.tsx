@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ChangeEvent, type CSSProperties } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState, type ChangeEvent, type CSSProperties } from 'react';
 import { flushSync } from 'react-dom';
 import { Header } from './components/Header';
 import { EmptyState } from './components/EmptyState';
@@ -12,7 +12,7 @@ import { t, useLocale } from './i18n';
 import { GOLD_INK, INKS } from './lib/inks';
 import { fileKind, loadDocument, prefetchPdfjs, type SourceDocument } from './lib/loadDocument';
 import { classifyError, logAppError, type ErrorCode } from './lib/errors';
-import { DocumentReplacedError, PageStore } from './lib/pageStore';
+import { DocumentReplacedError, PageStore, type PageSnapshot } from './lib/pageStore';
 import { exportFormat, exportRecolored, type ExportFormat, type ExportPage } from './lib/exportFile';
 
 type AppState = 'empty' | 'processing' | 'preview' | 'error' | 'prntr';
@@ -27,8 +27,20 @@ const KIND_BY_CODE: Record<ErrorCode, ErrorKind> = {
   'PA-106': 'memory',
 };
 
+/** The document the certificate replaced, as the vortex brings it back (PRNTR-VORTEX.md). */
+interface OriginalDocument {
+  pages: PageSnapshot;
+  pageCount: number; // the whole document's: more than pages.length when it was won while still rendering
+  file: File | null;
+  fileName: string;
+  format: ExportFormat;
+  page: number;
+}
+
 /** Print waits this long at most for the print pages to decode, then prints what has. */
 const PRINT_DECODE_MS = 5000;
+/** Under reduced motion, how long the GAME OVER card stays up before the plain cut back to the app. */
+const REDUCED_OVER_HOLD_MS = 2000;
 
 const scheduleIdle: (cb: () => void) => number =
   typeof window.requestIdleCallback === 'function'
@@ -38,6 +50,26 @@ const cancelIdle: (handle: number) => void =
   typeof window.cancelIdleCallback === 'function'
     ? (handle) => window.cancelIdleCallback(handle)
     : (handle) => window.clearTimeout(handle);
+
+// Dev only: the side panel with jumps and fight controls. A constant-false branch in builds, so the
+// import() is dropped and no chunk is made.
+const DevPanel = import.meta.env.DEV ? lazy(() => import('./components/DevPanel')) : null;
+
+// Dev only (see the ?prntr entrance below): a letter-size page of "text" lines, black for the
+// source, the ink for the recolored copy.
+function devStandIn(ink: string): HTMLCanvasElement {
+  const canvas = document.createElement('canvas');
+  canvas.width = 612;
+  canvas.height = 792;
+  const g = canvas.getContext('2d');
+  if (!g) return canvas;
+  g.fillStyle = '#ffffff';
+  g.fillRect(0, 0, 612, 792);
+  g.fillStyle = ink;
+  g.fillRect(72, 80, 300, 28);
+  for (let y = 140; y < 700; y += 24) g.fillRect(72, y, 300 + ((y * 7) % 170), 10);
+  return canvas;
+}
 
 export default function App() {
   // Re-render everything when the language picker switches locale.
@@ -68,9 +100,13 @@ export default function App() {
   const prntrPage = useRef<{ source: HTMLCanvasElement; recolored: HTMLCanvasElement } | null>(null);
   const prntrAudio = useRef<AudioContext | null>(null);
   const prntrReturn = useRef<AppState>('preview');
+  const overHold = useRef<number | null>(null); // the reduced-motion GAME OVER hold before the cut
   // Set while the app's UI falls back into place over Prntr's last frame: the sky
   // drop after the room is cleared, the Tetris drop after a game over.
   const [prntrDrop, setPrntrDrop] = useState<'sky' | 'tetris' | null>(null);
+  // The document the certificate replaced, kept so the vortex can bring it back (PRNTR-VORTEX.md):
+  // its rendered pages, name, format and the page that was open. Dropped by the next document.
+  const [vortexOriginal, setVortexOriginal] = useState<OriginalDocument | null>(null);
 
   const storeRef = useRef(new PageStore());
   const store = storeRef.current;
@@ -182,23 +218,40 @@ export default function App() {
       if (!Number.isInteger(n) || n < 0) return;
       devSkipUsed.current = true;
       console.info('prntr-dev-skip', n);
-      // A letter-size page of "text" lines: black for the source, the ink for the recolored copy.
-      const standIn = (ink: string) => {
-        const canvas = document.createElement('canvas');
-        canvas.width = 612;
-        canvas.height = 792;
-        const g = canvas.getContext('2d');
-        if (!g) return canvas;
-        g.fillStyle = '#ffffff';
-        g.fillRect(0, 0, 612, 792);
-        g.fillStyle = ink;
-        g.fillRect(72, 80, 300, 28);
-        for (let y = 140; y < 700; y += 24) g.fillRect(72, y, 300 + ((y * 7) % 170), 10);
-        return canvas;
-      };
-      enterPrntr(n, { source: standIn('#000000'), recolored: standIn(inkRef.current) });
+      enterPrntr(n, { source: devStandIn('#000000'), recolored: devStandIn(inkRef.current) });
     }
   }, [appState]);
+
+  // Dev only: the dev panel's hooks (src/components/DevPanel.tsx). loadStandIn makes the stand-in a
+  // real one-page document, so a won room has an original for the vortex to bring back; enter needs
+  // that document (appState 'preview'). Bound again every render so they never see stale state.
+  useEffect(() => {
+    if (import.meta.env.DEV) {
+      (window as unknown as { __prntrApp?: unknown }).__prntrApp = {
+        appState: () => appState,
+        loadStandIn: () => {
+          lastFile.current = null;
+          startDocument('stand-in.pdf', 'pdf');
+          store.reset(1);
+          store.setSource(0, devStandIn('#000000'), { width: 612, height: 792 });
+          store.ensureRecolored(0, inkRef.current);
+          setPageCount(1);
+          setProcessedCount(1);
+          setPagesVersion((v) => v + 1);
+          setAppState('preview');
+        },
+        enter: (stage: number) => enterPrntr(stage),
+      };
+    }
+  });
+  useEffect(() => {
+    if (import.meta.env.DEV) {
+      console.info('prntr-dev-app');
+      return () => {
+        delete (window as unknown as { __prntrApp?: unknown }).__prntrApp;
+      };
+    }
+  }, []);
 
   function openPicker() {
     prefetchPdfjs();
@@ -215,6 +268,7 @@ export default function App() {
   // for the old one (the token tells it to stop), its parsed file, its print pages.
   function startDocument(name: string, exportAs: ExportFormat | null): number {
     const token = ++runToken.current;
+    clearOverHold();
     if (idleHandle.current !== null) {
       cancelIdle(idleHandle.current);
       idleHandle.current = null;
@@ -225,6 +279,7 @@ export default function App() {
     setHolding(false);
     setBusy(null);
     setExportError(null);
+    setVortexOriginal(null);
     setFileName(name);
     if (exportAs) setFormat(exportAs);
     setCurrentPage(0);
@@ -247,18 +302,7 @@ export default function App() {
       docRef.current = doc;
       store.reset(doc.pageCount);
       setPageCount(doc.pageCount);
-      for (let i = 0; i < doc.pageCount; i++) {
-        const { canvas, sizePt } = await doc.renderPage(i);
-        if (token !== runToken.current) return;
-        store.setSource(i, canvas, sizePt);
-        store.ensureRecolored(i, inkRef.current);
-        setProcessedCount(i + 1);
-        setPagesVersion((v) => v + 1);
-        if (i === 0) setAppState('preview');
-        // Yield to the UI between pages so progress and preview stay live.
-        await new Promise((r) => setTimeout(r, 0));
-        if (token !== runToken.current) return;
-      }
+      await renderPages(doc, 0, token);
     } catch (err) {
       if (token !== runToken.current) return;
       // A print or download waiting on the pages that will never come gives up.
@@ -267,6 +311,43 @@ export default function App() {
       logAppError(code, err, lastFile.current);
       setErrorInfo({ code, kind: KIND_BY_CODE[code] });
       setAppState('error');
+    }
+  }
+
+  // Pages `from` to the end, in order, into the store; the first one shows the preview. Stops when a newer document starts.
+  async function renderPages(doc: SourceDocument, from: number, token: number) {
+    for (let i = from; i < doc.pageCount; i++) {
+      const { canvas, sizePt } = await doc.renderPage(i);
+      if (token !== runToken.current) return;
+      store.setSource(i, canvas, sizePt);
+      store.ensureRecolored(i, inkRef.current);
+      setProcessedCount(i + 1);
+      setPagesVersion((v) => v + 1);
+      if (i === 0) setAppState('preview');
+      // Yield to the UI between pages so progress and preview stay live.
+      await new Promise((r) => setTimeout(r, 0));
+      if (token !== runToken.current) return;
+    }
+  }
+
+  // The vortex brought back a document that was won while still rendering: its file is parsed again and the pages after
+  // the snapshot render behind the preview as on an upload. If that fails, the document is the pages that came back.
+  async function resumeDocument(original: OriginalDocument, token: number) {
+    if (!original.file) return;
+    try {
+      const doc = await loadDocument(original.file);
+      if (token !== runToken.current) {
+        doc.destroy();
+        return;
+      }
+      docRef.current = doc;
+      await renderPages(doc, original.pages.length, token);
+    } catch (err) {
+      if (token !== runToken.current) return;
+      logAppError(classifyError(err), err, original.file);
+      store.restore(original.pages);
+      setPageCount(original.pages.length);
+      setPagesVersion((v) => v + 1);
     }
   }
 
@@ -309,16 +390,17 @@ export default function App() {
     setCurrentPage(clamped);
   }
 
-  // Prntr takes over the viewport with the page shown now (or a page it is handed,
-  // which only the dev entrance does); see PRNTR-ARCHITECTURE.md.
+  // Prntr takes over the viewport with the document's first page, whatever page is shown (or a page it is
+  // handed, which only the dev entrance does); see PRNTR-ARCHITECTURE.md. The room prints it (PRNTR-FIRE.md §14).
   function enterPrntr(stage: number, page?: { source: HTMLCanvasElement; recolored: HTMLCanvasElement }) {
     if (!page) {
       if (appState !== 'preview') return;
-      const recolored = store.ensureRecolored(currentPage, inkRef.current);
-      const source = store.getSource(currentPage);
+      const recolored = store.ensureRecolored(0, inkRef.current);
+      const source = store.getSource(0);
       if (!recolored || !source) return;
       page = { source, recolored };
     }
+    clearOverHold();
     prntrReturn.current = appState;
     prntrAudio.current = prntrAudioContext();
     setHolding(false);
@@ -328,8 +410,15 @@ export default function App() {
   }
 
   function exitPrntr() {
+    clearOverHold();
     prntrPage.current = null; // the page it was handed goes with it
     setAppState(prntrReturn.current);
+  }
+
+  function clearOverHold() {
+    if (overHold.current === null) return;
+    window.clearTimeout(overHold.current);
+    overHold.current = null;
   }
 
   // The drop has landed (or its safety net fired): Prntr unmounts, and its page goes.
@@ -359,6 +448,16 @@ export default function App() {
       }
     }
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      if (outcome === 'over') {
+        // a plain cut, but not on the very frame the card went up: the GAME OVER card is held for a moment first (an Esc
+        // in that moment, a new document or a new run clears the hold, so it never cuts away from what came after)
+        overHold.current = window.setTimeout(() => {
+          overHold.current = null;
+          prntrPage.current = null;
+          setAppState((s) => (s === 'prntr' ? prntrReturn.current : s));
+        }, REDUCED_OVER_HOLD_MS);
+        return;
+      }
       exitPrntr();
       return;
     }
@@ -367,8 +466,16 @@ export default function App() {
   }
 
   // The certificate becomes the loaded document: one page, a PDF to download, recoloured
-  // in the chosen ink like any other. A document still processing is dropped.
+  // in the chosen ink like any other. A document still processing is dropped (only its
+  // rendered pages are kept for the vortex); one entered from nothing (the dev entrance) has
+  // nothing to keep. A win from a certificate keeps the document the first win replaced, so the
+  // vortex never brings back a certificate.
   function loadCertificate({ id, page }: Certificate) {
+    const original: OriginalDocument | null =
+      vortexOriginal ??
+      (store.hasSource(currentPage)
+        ? { pages: store.snapshot(), pageCount, file: lastFile.current, fileName, format, page: currentPage }
+        : null);
     lastFile.current = null;
     startDocument(`prntr-certificate-${id.slice(-9).replace('-', '')}.pdf`, 'pdf');
     // the certificate comes up in gold, the secret ink, which stays on offer from here on
@@ -381,7 +488,30 @@ export default function App() {
     setPageCount(1);
     setProcessedCount(1);
     setPagesVersion((v) => v + 1);
+    setVortexOriginal(original);
     prntrReturn.current = 'preview';
+  }
+
+  // The vortex has swallowed the certificate: the original document comes back in its place, the
+  // hold still on (startDocument clears it), so it shows in its own colours until the button is let
+  // go; the chosen ink, gold, stays. The pages that had rendered come back at once; a document won while still rendering
+  // renders the rest from its file (one entered without a file, the dev stand-in, is only those pages).
+  function restoreOriginal() {
+    const original = vortexOriginal;
+    if (!original) return;
+    lastFile.current = original.file;
+    const token = startDocument(original.fileName, original.format);
+    setHolding(true);
+    const whole = original.file ? original.pageCount : original.pages.length;
+    store.restore(original.pages, whole);
+    setPageCount(whole);
+    setProcessedCount(original.pages.length);
+    const page = Math.min(original.page, original.pages.length - 1);
+    setCurrentPage(page);
+    store.ensureRecolored(page, inkRef.current);
+    setPagesVersion((v) => v + 1);
+    queueBackgroundRecolor(inkRef.current);
+    if (whole > original.pages.length) void resumeDocument(original, token);
   }
 
   // Safety net: Prntr never stays mounted if the drop's animationend does not arrive.
@@ -499,6 +629,8 @@ export default function App() {
             recoloredCanvas={recoloredCanvas}
             holding={holding}
             onHoldChange={setHolding}
+            originalPage={vortexOriginal ? (vortexOriginal.pages[vortexOriginal.page]?.source ?? null) : null}
+            onVortexDone={restoreOriginal}
             onPrint={() => void handlePrint()}
             onDownload={() => void handleDownload()}
             busy={busy}
@@ -541,6 +673,11 @@ export default function App() {
           onExit={exitPrntr}
           onDone={finishPrntr}
         />
+      )}
+      {import.meta.env.DEV && DevPanel && (
+        <Suspense fallback={null}>
+          <DevPanel />
+        </Suspense>
       )}
       <input
         ref={fileInput}

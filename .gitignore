@@ -17,5 +17,8 @@ PRNTR-*.md
 design_handoff_printanything-new/
 .claude/
 
+# Dev panel screenshots (the vite dev server writes them)
+/screenshots/
+
 # Local DNS zone files for manual import
 dns/
