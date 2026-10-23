@@ -75,5 +75,7 @@ export interface Certificate {
 
 export interface Stage {
   name: string;
+  /** Runs after a game over too; otherwise `over` ends the chain before this stage (runner.ts). */
+  afterOver?: boolean;
   run(ctx: StageContext, input: Handoff): Promise<Handoff>;
 }
