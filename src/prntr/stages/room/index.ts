@@ -3554,7 +3554,7 @@ export const room: Stage = {
           staples: staplesShot,
           seconds: fightAt === null ? 0 : Math.max(0, Math.round((burstAt - fightAt) / 1000)),
         };
-        resolve(outcome === 'over' ? { kind: 'over', score } : { kind: 'cleared', score, player: playerName, stats });
+        resolve(outcome === 'over' ? { kind: 'over', score, player: playerName } : { kind: 'cleared', score, player: playerName, stats });
       };
       const loop = (now: number) => {
         if (done) return;
