@@ -192,6 +192,7 @@
 
 .prntr-title {
   margin: 0;
+  position: relative;
   display: flex;
   align-items: baseline;
   gap: 4px;
@@ -211,6 +212,48 @@
   display: inline-block; /* …and the pop animation here, so neither overwrites the other */
   opacity: 0;
 }
+
+/* The version under the last letter (PRNTR-VERSION.md): a box in the title's em, so it follows the
+   word at every width, holding the line in Arial. On the 1200×800 frame (title 220 px): top 204 px
+   of the h1, left 81 px short of its right edge (right of the t's crossbar, under the r), 20 px type.
+   The spans are blocks with their own line height, else they would sit on the box's 220 px line. */
+.prntr-version-box {
+  position: absolute;
+  top: 0.927em;
+  right: 0;
+  width: 0.368em;
+  text-align: left;
+  white-space: nowrap;
+  animation: prntr-fade 250ms linear both;
+}
+
+.prntr-version {
+  display: block;
+  line-height: 1;
+  font-family: Arial, Helvetica, sans-serif;
+  font-weight: 400;
+  font-size: max(12px, 0.0909em);
+  letter-spacing: 0;
+  color: #EDEDED;
+}
+
+/* In the corrupted frame the line reads v0.19.51 in the corrupt copyright's red Comic Sans. */
+.prntr-version-corrupt {
+  display: none;
+  line-height: 1;
+  font-family: 'Comic Sans MS', 'Comic Sans', 'Comic Neue', cursive;
+  font-weight: 700;
+  font-size: max(12px, 0.0909em);
+  color: #E8102A;
+  transform: rotate(-2deg) skewX(-8deg);
+}
+
+.is-corrupt .prntr-version { display: none; }
+.is-corrupt .prntr-version-corrupt { display: block; }
+
+/* Struck by the storm (storm.ts ignite, PRNTR-VERSION.md §9): from here on the storm canvas draws the line, then
+   its char, embers and ash. Hidden, not display: none, so the box keeps its size. */
+.prntr-version-box.is-burnt .prntr-version { visibility: hidden; }
 
 /* The room's frame (240×160 virtual px at --s, set by the stage), centred: the prompt and the
    footer are placed in it as the room's caption and CREDIT are, so CREDIT stays put at the cut
@@ -832,6 +875,13 @@
 
 .prntr-room-life.is-hurt .prntr-room-life-fill {
   animation: prntr-hurt 250ms steps(1, end) 2;
+}
+
+/* The slam's tear (PRNTR-SLAM.md §4.6): the wrong length snaps in and out. The fill's 200 ms
+   transition is for a hit; left on, the tear's random length glided up and back over 300 ms and
+   read as the bar healing. */
+.prntr-room-life:is(.is-torn, .is-dropped) .prntr-room-life-fill {
+  transition: none;
 }
 
 /* The player's name under the left end of their bar, NEW PLAYER until there
