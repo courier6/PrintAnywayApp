@@ -873,6 +873,13 @@
   animation: prntr-hurt 250ms steps(1, end) 2;
 }
 
+/* The slam's tear (PRNTR-SLAM.md §4.6): the wrong length snaps in and out. The fill's 200 ms
+   transition is for a hit; left on, the tear's random length glided up and back over 300 ms and
+   read as the bar healing. */
+.prntr-room-life:is(.is-torn, .is-dropped) .prntr-room-life-fill {
+  transition: none;
+}
+
 /* The player's name under the left end of their bar, NEW PLAYER until there
    is a login. Worn (half the health or less) it shivers now and then; rough (a quarter or less,
    the end of this life near) it jitters, flickers and splits into red and cyan, while the stage
