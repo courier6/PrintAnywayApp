@@ -1670,3 +1670,41 @@
   line-height: 1.6;
   color: #BDBDBD;
 }
+
+/* The board over the app (PRNTR-BOARD.md §15.2, the board-frame sheet's #5): fixed over the page once the app has
+   dropped in, no dim (the certificate and the gold swatch stay in sight), the card on the plum mat inside a gilded
+   pixel frame 12 cells deep (3 px a cell, 2 under 600 px wide) drawn on a canvas behind it. The rows shrink to leave
+   the frame room on a phone. */
+.prntr-board.is-app {
+  position: fixed;
+  z-index: 120;
+  padding: var(--band) 0;
+  box-sizing: border-box;
+  background: none;
+  --band: 36px;
+  --prntr-board-row: clamp(7px, calc((100vw - 64px - 2 * var(--band)) / 35), 13px);
+}
+
+@media (max-width: 599px) {
+  .prntr-board.is-app {
+    --band: 24px;
+  }
+}
+
+.prntr-board.is-app .prntr-board-card {
+  position: relative;
+  z-index: 0;
+  width: min(100% - 32px - 2 * var(--band), calc(34.5 * var(--prntr-board-row) + 32px));
+  background: #1E1433;
+}
+
+.prntr-board.is-app .prntr-board-title {
+  font-size: min(24px, calc(var(--prntr-board-row) * 34.5 / 19.44), calc((100vw - 64px - 2 * var(--band)) / 19.44));
+}
+
+.prntr-board-frame {
+  position: absolute;
+  z-index: -1;
+  image-rendering: pixelated;
+  pointer-events: none;
+}
