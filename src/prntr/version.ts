@@ -5,7 +5,7 @@
  * every feature or fix branch; nothing derives it. Counted back over develop's merges: thirty
  * features before this one, so the version line itself is the thirty-first.
  */
-export const PRNTR_VERSION = 'v1.33.0';
+export const PRNTR_VERSION = 'v1.33.1';
 
 /** What the version reads in the opening's corrupted frame, beside © 1951. */
 export const PRNTR_VERSION_CORRUPT = 'v0.19.51';
