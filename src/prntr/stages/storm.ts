@@ -15,8 +15,8 @@
  * The storm sounds like one, in the room's style: rain, a gusting wind, thunder after each
  * strike. Between the near strikes, lightning flickers far off behind the
  * clouds, seen only below them and its thunder comes half a second to a second later, a distant roll.
- * Each near strike's flash lights a place: a corporate building off a lonely
- * road with a vast parking lot, old forest around it, all of it dark silhouettes under the flash,
+ * Each near strike's flash lights a place: a corporate building in the woods, a parking lot's
+ * clearing before it and a lonely road in, the trees in three ranks, all of it dark silhouettes under the flash,
  * bright around the building and gone into the dark towards the edges of the screen, seen only
  * while the flash lasts.
  */
@@ -284,6 +284,17 @@ const BOLT_EDGE = '#9FD8FF';
 const SIL_BUILDING = '#0B0D16';
 const SIL_WINDOW = '#181C2C';
 const SIL_TREE = '#070910';
+/** The woods' far rank, hazed by the rain, and the middle one. */
+const SIL_FAR = '#1B2236';
+const SIL_MID = '#10141F';
+/** The woods: the far rank's height over the old forest's, the middle rank's count, the big trees in front
+ * and the band (of the width, from each side) they stand in, the clearing's half-width at the horizon (of
+ * the building's width) and at the bottom (of the screen's). */
+const PLACE_FAR = 2.1;
+const PLACE_MID = 22;
+const PLACE_FRONT = 10;
+const PLACE_BAND = 0.18;
+const PLACE_LOT = [0.55, 0.36] as const;
 const SIL_LOT = 'rgba(0, 0, 0, 0.55)';
 const SIL_ROAD = 'rgba(0, 0, 0, 0.72)';
 const LOT_LINE = 'rgba(255, 255, 255, 0.35)';
@@ -386,6 +397,8 @@ export function startStorm(root: HTMLElement, h1: HTMLElement, slots: StormSlot[
   let H = 0;
   /** The "pixel". */
   let P = 4;
+  /** The place's cell under the flash, finer than P (drawPlace). */
+  let Q = 2;
   /** Per screen column: the word's top and bottom edge (−1 = no letter) and which letter. */
   let top = new Int16Array(0);
   let bottom = new Int16Array(0);
@@ -410,19 +423,23 @@ export function startStorm(root: HTMLElement, h1: HTMLElement, slots: StormSlot[
   const place: Record<'white' | 'blue', HTMLCanvasElement> = { white: document.createElement('canvas'), blue: document.createElement('canvas') };
 
   /**
-   * The place the lightning lights, in cells of P: the flash colour for the
-   * sky and the ground, and on it the silhouettes: a flat-roofed office block with floors of
-   * windows, rooftop units and a sign on a pole, standing under the word on a horizon low on
-   * the screen, past the far edge of a parking lot that widens to the bottom of the screen, its
-   * stalls marked in rows, light poles along it, a road coming in from the lower right to the
-   * building's side, and the forest, conifers and round old crowns, along the horizon either
-   * side of it and taller at the sides in front. The whole thing fades out to nothing towards
-   * the edges of the screen, the building the brightest, so the forest and the lot go into the
-   * dark before they reach the frame.
+   * The place the lightning lights, in cells of Q (finer than the rain's P: the title's font size / 54,
+   * 4 px at the 220 px title): the flash colour for the sky and the ground, and on it the silhouettes.
+   * A flat-roofed office block with floors of windows in two panes, a lit lobby with a door under a
+   * canopy, a parapet, rooftop units with ledges, an antenna, and its sign on a pole off to the right,
+   * standing under the word on a horizon low on the screen; before it a parking lot narrowed to a
+   * clearing, its stalls marked in rows, three light poles, a road coming in from the lower right to the
+   * building's side; and the woods around it in three ranks: the forest along the horizon, tall, dense
+   * and hazed a shade lighter; a middle rank of trees on the ground either side of the clearing, trunks
+   * under their crowns; big old trees at the far sides in front, trunks too, so the lit ground shows
+   * between them. Crowns are ragged at the edge, conifers in tiers. Every dimension is in title cells (P)
+   * so the place keeps its size whatever the cell (s = P / Q); the whole thing fades out to nothing
+   * towards the edges of the screen, the building the brightest. (The woods sheet of 2026-10-28, #6.)
    */
   const drawPlace = (lit: string, into: HTMLCanvasElement) => {
-    const cw = Math.ceil(W / P);
-    const ch = Math.ceil(H / P);
+    const s = P / Q;
+    const cw = Math.ceil(W / Q);
+    const ch = Math.ceil(H / Q);
     const b = document.createElement('canvas');
     b.width = cw;
     b.height = ch;
@@ -432,108 +449,150 @@ export function startStorm(root: HTMLElement, h1: HTMLElement, slots: StormSlot[
       c.fillStyle = color;
       c.fillRect(Math.round(x), Math.round(y), Math.max(1, Math.round(w)), Math.max(1, Math.round(h)));
     };
-    const rnd = (n: number) => hash(n * 7919 + cw * 31 + ch);
+    // seeded on the title's grid, so the cell size does not change the composition
+    const cw0 = Math.ceil(W / P);
+    const ch0 = Math.ceil(H / P);
+    const rnd = (n: number) => hash(n * 7919 + cw0 * 31 + ch0);
     c.fillStyle = lit;
     c.fillRect(0, 0, cw, ch);
     // the horizon low on the screen; the building stands on it, its roof just under the word
     const hy = Math.round(ch * 0.9);
-    const by = Math.min(hy - 12, Math.round((wordBottom + 0.025 * H) / P));
-    const bh = hy - 2 - by;
-    const bw = Math.max(26, Math.round(Math.min(cw * 0.34, bh * 2.4)));
+    const by = Math.min(hy - Math.round(12 * s), Math.round((wordBottom + 0.025 * H) / Q));
+    const bh = hy - Math.round(2 * s) - by;
+    const bw = Math.max(Math.round(26 * s), Math.round(Math.min(cw * 0.34, bh * 2.4)));
     const bx = Math.round(cw / 2 - bw / 2);
-    // the forest along the horizon, behind the lot: round crowns and conifers, overlapping
-    for (let i = 0, x = -6; x < cw + 6; i++) {
-      const conifer = rnd(i) < 0.45;
-      const w = conifer ? 3 + Math.round(rnd(i + 100) * 4) : 6 + Math.round(rnd(i + 200) * 7);
-      const h = conifer ? 7 + Math.round(rnd(i + 300) * 8) : 5 + Math.round(rnd(i + 400) * 5);
-      const base = hy - 1;
-      if (conifer) {
-        for (let r = 0; r < h; r++) cell(x + (w / 2) * (1 - r / h) - 0.5, base - h + r, Math.max(1, (w * r) / h), 1, SIL_TREE);
-      } else {
-        for (let r = 0; r < h; r++) {
-          const k = r / h;
-          const ww = w * Math.sqrt(1 - (2 * k - 1) ** 2 * 0.9);
-          cell(x + (w - ww) / 2, base - h + r, ww, 1, SIL_TREE);
-        }
-        cell(x + w / 2 - 0.5, base - 2, 1, 2, SIL_TREE);
+    /** A round crown standing on `base`, `w` wide and `h` tall with its trunk (the lower `trunk` of the
+     * height), its edge ragged by a slow wave and a little noise. */
+    const crown = (x: number, base: number, w: number, h: number, color: string, seed: number, trunk = 0) => {
+      const crownH = h * (1 - trunk);
+      const j = Math.max(1, s * 1.1);
+      for (let r = 0; r < crownH; r++) {
+        const k = r / crownH;
+        let ww = w * Math.sqrt(Math.max(0, 1 - (2 * k - 1) ** 2 * 0.9));
+        if (ww > 0) ww = Math.max(1, ww + j * (0.7 * Math.sin(r / (1.6 * s) + seed) + 1.2 * (hash(seed * 977 + r * 13) - 0.5)));
+        const dx = j * 0.5 * Math.sin(r / (2.2 * s) + seed * 1.7);
+        cell(x + (w - ww) / 2 + dx, base - h + r, ww, 1, color);
       }
-      x += Math.max(2, Math.round(w * (0.55 + rnd(i + 500) * 0.3)));
+      if (trunk > 0) {
+        const tw = Math.max(s, w * 0.14);
+        cell(x + w / 2 - tw / 2, base - h + crownH - 1, tw, h - crownH + 1, color);
+      }
+    };
+    /** A conifer standing on `base`: a triangle in tiers, a stub of trunk. */
+    const conifer = (x: number, base: number, w: number, h: number, color: string) => {
+      const tier = Math.max(2, Math.round(2.5 * s));
+      for (let r = 0; r < h; r++) {
+        const ww = ((w * r) / h) * (1 - 0.35 * ((tier - 1 - (r % tier)) / tier));
+        cell(x + (w - ww) / 2, base - h + r, Math.max(1, ww), 1, color);
+      }
+      cell(x + w / 2 - 0.5 * s, base - Math.round(2 * s), Math.max(1, s), Math.round(2 * s), color);
+    };
+    // the far rank: the forest along the horizon, behind the clearing, tall and dense
+    for (let i = 0, x = -6 * s; x < cw + 6 * s; i++) {
+      const isConifer = rnd(i) < 0.45;
+      const w = (isConifer ? 3 + Math.round(rnd(i + 100) * 4) : 6 + Math.round(rnd(i + 200) * 7)) * s * 1.15;
+      const h = (isConifer ? 7 + Math.round(rnd(i + 300) * 8) : 5 + Math.round(rnd(i + 400) * 5)) * s * (isConifer ? 1 + (PLACE_FAR - 1) * 0.5 : PLACE_FAR);
+      const base = hy - 1 * s;
+      if (isConifer) conifer(x, base, w, h, SIL_FAR);
+      else {
+        crown(x, base, w, h, SIL_FAR, i);
+        cell(x + w / 2 - 0.5 * s, base - 2 * s, s, 2 * s, SIL_FAR);
+      }
+      x += Math.max(2 * s, Math.round(w * 0.45));
     }
-    // the parking lot: from a little wider than the building at the horizon to past both edges below
+    // the parking lot, a clearing: from the building's width at the horizon to a third of the screen below
     const lotTop = hy;
     const lotBottom = ch;
-    const halfTop = bw * 0.9;
-    const halfBottom = cw * 0.75;
-    for (let y = lotTop; y < lotBottom; y++) {
-      const k = (y - lotTop) / (lotBottom - lotTop);
-      const half = halfTop + (halfBottom - halfTop) * k;
-      cell(cw / 2 - half, y, 2 * half, 1, SIL_LOT);
-    }
+    const halfTop = bw * PLACE_LOT[0];
+    const halfBottom = cw * PLACE_LOT[1];
+    const halfAt = (y: number) => halfTop + (halfBottom - halfTop) * ((y - lotTop) / (lotBottom - lotTop));
+    for (let y = lotTop; y < lotBottom; y++) cell(cw / 2 - halfAt(y), y, 2 * halfAt(y), 1, SIL_LOT);
     // the stalls: rows of lines across the lot, closer together far off
+    const thin = Math.max(1, Math.round(s * 0.6));
     for (const k of [0.12, 0.3, 0.52, 0.78]) {
       const y = Math.round(lotTop + (lotBottom - lotTop) * k);
-      const half = halfTop + (halfBottom - halfTop) * k;
-      const n = 14;
-      for (let i = -n; i <= n; i++) {
-        const x = cw / 2 + (i / n) * half * 0.92;
-        cell(x, y, 1, Math.max(1, Math.round(2 + 5 * k)), LOT_LINE);
-      }
-      cell(cw / 2 - half * 0.95, y, half * 1.9, 1, LOT_LINE);
+      const half = halfAt(y);
+      const n = 9;
+      for (let i = -n; i <= n; i++) cell(cw / 2 + (i / n) * half * 0.92, y, thin, Math.max(1, Math.round((2 + 5 * k) * s)), LOT_LINE);
+      cell(cw / 2 - half * 0.95, y, half * 1.9, thin, LOT_LINE);
     }
     // the light poles along the lot, taller nearer
     for (const [kx, ky] of [
-      [-0.55, 0.22],
-      [0.5, 0.2],
-      [-0.7, 0.55],
-      [0.62, 0.52],
+      [-0.5, 0.22],
+      [0.45, 0.2],
       [-0.4, 0.88],
     ]) {
       const y = lotTop + (lotBottom - lotTop) * ky;
-      const half = halfTop + (halfBottom - halfTop) * ky;
-      const h = 6 + Math.round(16 * ky);
-      const x = cw / 2 + kx * half;
-      cell(x, y - h, 1, h, SIL_TREE);
-      cell(x - 1, y - h, 3, 1, SIL_TREE);
+      const h = (6 + Math.round(16 * ky)) * s;
+      const x = cw / 2 + kx * halfAt(y);
+      cell(x, y - h, Math.max(1, Math.round(s * 0.7)), h, SIL_TREE);
+      cell(x - s, y - h, 3 * s, Math.max(1, Math.round(s * 0.8)), SIL_TREE);
     }
     // the road: from the bottom right in to the building's right side, a dashed line down its middle
     const roadBottomX = cw * 0.68;
-    const roadTopX = bx + bw + 3;
+    const roadTopX = bx + bw + 3 * s;
     for (let y = lotTop - 1; y < ch; y++) {
       const k = (y - lotTop) / (ch - lotTop);
       const x = roadTopX + (roadBottomX - roadTopX) * k;
-      const w = 2 + 9 * k;
+      const w = (2 + 9 * k) * s;
       cell(x - w / 2, y, w, 1, SIL_ROAD);
-      if (Math.floor(y / 3) % 2 === 0 && k > 0.08) cell(x - 0.5, y, 1, 1, LOT_LINE);
+      if (Math.floor(y / (3 * s)) % 2 === 0 && k > 0.08) cell(x - 0.5 * s, y, Math.max(1, Math.round(s * 0.7)), 1, LOT_LINE);
     }
-    // the building: the body, its floors of windows, a parapet, rooftop units, an antenna, the
-    // entrance, and its sign on a pole off to the right
-    cell(bx, by, bw, bh, SIL_BUILDING);
-    cell(bx, by, bw, 1, SIL_WINDOW);
-    for (let fy = by + 3; fy < by + bh - 3; fy += 3) {
-      for (let fx = bx + 2; fx < bx + bw - 2; fx += 3) cell(fx, fy, 2, 1, SIL_WINDOW);
-    }
-    cell(bx + bw / 2 - 4, by + bh - 2, 8, 2, SIL_TREE);
-    cell(bx + bw / 2 - 6, by + bh - 3, 12, 1, SIL_BUILDING);
-    cell(bx + 3, by - 2, 4, 2, SIL_BUILDING);
-    cell(bx + bw - 9, by - 3, 5, 3, SIL_BUILDING);
-    cell(bx + bw * 0.4, by - 6, 1, 6, SIL_BUILDING);
-    cell(bx + bw + 6, hy - 10, 1, 9, SIL_BUILDING);
-    cell(bx + bw + 4, hy - 13, 6, 3, SIL_BUILDING);
-    // the forest in front, at the far sides: big old trees, going off the edges into the dark
-    for (let i = 0; i < 6; i++) {
+    // the middle rank: trees on the ground either side of the clearing, out past the edges
+    for (let i = 0; i < PLACE_MID; i++) {
       const left = i % 2 === 0;
-      const d = 0.02 + rnd(i + 600) * 0.14;
-      const x = left ? cw * d : cw * (1 - d);
-      const h = Math.round(ch * (0.3 + rnd(i + 700) * 0.15));
-      const w = Math.round(h * (0.4 + rnd(i + 800) * 0.2));
-      const base = hy + 1 + Math.round(rnd(i + 900) * (ch - hy) * 0.5);
-      for (let r = 0; r < h; r++) {
-        const k = r / h;
-        const ww = w * Math.sqrt(Math.max(0, 1 - (2 * k - 1) ** 2 * 0.85));
-        cell(x - ww / 2, base - h + r, ww, 1, SIL_TREE);
-      }
-      cell(x - 1, base - 4, 2, 4, SIL_TREE);
+      const base = hy + Math.round(hash(i * 59 + 3) * (ch - hy) * 0.28);
+      const out = halfAt(base) + 2 * s + hash(i * 53 + 11) * cw * 0.28;
+      const x = left ? cw / 2 - out : cw / 2 + out;
+      const h = Math.round(ch * (0.16 + hash(i * 61 + 5) * 0.12));
+      const w = Math.round(h * (0.55 + hash(i * 67 + 7) * 0.3));
+      if (hash(i * 71) < 0.35) conifer(x - w * 0.35, base, w * 0.7, h * 1.4, SIL_MID);
+      else crown(x - w / 2, base, w, h, SIL_MID, 300 + i, 0.3);
     }
+    // the big old trees in front, at the far sides, the nearest biggest and drawn last
+    const front: { x: number; base: number; h: number; w: number; i: number }[] = [];
+    for (let i = 0; i < PLACE_FRONT; i++) {
+      const left = i % 2 === 0;
+      const d = 0.02 + hash(i * 83 + 600) * PLACE_BAND;
+      const x = left ? cw * d : cw * (1 - d);
+      const base = hy + 1 * s + Math.round(rnd(i + 900) * (ch - hy) * 0.5);
+      const near = (base - hy) / (ch - hy);
+      const h = Math.round(ch * (0.3 + rnd(i + 700) * 0.15) * (0.8 + near * 0.6));
+      const w = Math.round(h * (0.4 + rnd(i + 800) * 0.2));
+      front.push({ x, base, h, w, i });
+    }
+    front.sort((a, b2) => a.base - b2.base);
+    for (const t of front) crown(t.x - t.w / 2, t.base, t.w, t.h, SIL_TREE, t.i, 0.3);
+    // the building, over the trees behind it: the body, a line at the parapet, the floors of windows in
+    // two panes, the lobby with its door under a canopy on two posts, the parapet, the rooftop units
+    // with their ledges, the antenna
+    cell(bx, by, bw, bh, SIL_BUILDING);
+    cell(bx, by, bw, thin, SIL_WINDOW);
+    const pitch = Math.round(3 * s);
+    const wh = Math.max(1, Math.round(1.5 * s));
+    const wwid = Math.round(2.4 * s);
+    const mull = Math.max(1, Math.round(s * 0.35));
+    for (let fy = by + Math.round(2.2 * s); fy < by + bh - 3 * s; fy += pitch) {
+      for (let fx = bx + Math.round(2 * s); fx < bx + bw - 2 * s; fx += pitch) {
+        cell(fx, fy, wwid, wh, SIL_WINDOW);
+        cell(fx + wwid / 2 - mull / 2, fy, mull, wh, SIL_BUILDING);
+      }
+    }
+    cell(bx + bw / 2 - 5 * s, by + bh - 3 * s, 10 * s, 3 * s, SIL_WINDOW);
+    cell(bx + bw / 2 - 1.2 * s, by + bh - 2.6 * s, 2.4 * s, 2.6 * s, SIL_TREE);
+    cell(bx + bw / 2 - 6.5 * s, by + bh - 3.4 * s, 13 * s, Math.max(1, Math.round(s * 0.7)), SIL_TREE);
+    for (const dx of [-6, 6]) cell(bx + bw / 2 + dx * s, by + bh - 3.4 * s, Math.max(1, Math.round(s * 0.5)), 3.4 * s, SIL_TREE);
+    cell(bx - 0.5 * s, by - 0.6 * s, bw + 1 * s, Math.max(1, Math.round(s * 0.7)), SIL_BUILDING);
+    cell(bx + 3 * s, by - 2 * s, 4 * s, 2 * s, SIL_BUILDING);
+    cell(bx + 3.5 * s, by - 2.6 * s, 3 * s, 0.6 * s, SIL_BUILDING);
+    cell(bx + bw - 9 * s, by - 3 * s, 5 * s, 3 * s, SIL_BUILDING);
+    cell(bx + bw - 8 * s, by - 3.8 * s, 1.5 * s, 0.8 * s, SIL_BUILDING);
+    cell(bx + bw - 5.5 * s, by - 3.8 * s, 1.5 * s, 0.8 * s, SIL_BUILDING);
+    cell(bx + bw * 0.4, by - 6 * s, Math.max(1, Math.round(s * 0.5)), 6 * s, SIL_BUILDING);
+    cell(bx + bw * 0.4 - 0.6 * s, by - 4 * s, 1.7 * s, Math.max(1, Math.round(s * 0.4)), SIL_BUILDING);
+    // the sign on its pole, off to the right
+    cell(bx + bw + 6 * s, hy - 10 * s, Math.max(1, Math.round(s * 0.8)), 9 * s, SIL_BUILDING);
+    cell(bx + bw + 4 * s, hy - 13 * s, 6 * s, 3 * s, SIL_BUILDING);
     // fade it all out towards the edges: brightest at the building, nothing at the frame. The
     // fall-off is an ellipse on the building's centre that reaches the side edges exactly, so
     // the sides and the corners are dark whatever the screen's shape
@@ -555,7 +614,7 @@ export function startStorm(root: HTMLElement, h1: HTMLElement, slots: StormSlot[
     const ig = into.getContext('2d');
     if (!ig) return;
     ig.imageSmoothingEnabled = false;
-    ig.drawImage(b, 0, 0, cw * P, ch * P);
+    ig.drawImage(b, 0, 0, cw * Q, ch * Q);
   };
 
   const measure = () => {
@@ -568,6 +627,7 @@ export function startStorm(root: HTMLElement, h1: HTMLElement, slots: StormSlot[
     const style = getComputedStyle(h1);
     const F = parseFloat(style.fontSize) || 100;
     P = Math.max(2, Math.round(F / 24));
+    Q = Math.max(1, Math.round(F / 54));
     U = Math.max(2, Math.round(P / 2));
     // the mask: each letter drawn as the page draws it (same face, size, place and wobble)
     const m = document.createElement('canvas');
