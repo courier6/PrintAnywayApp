@@ -44,7 +44,7 @@ function isRow(x: unknown): x is BoardRow {
   );
 }
 
-/** Best first; equal scores keep the order they were stored in (sort is stable). Ten at most. */
+/** Best first; equal scores keep the order they were stored in, newest first (sort is stable; rankOf puts a tie above). Ten at most. */
 function sorted(rows: BoardRow[]): BoardRow[] {
   return rows.slice().sort((a, b) => b.score - a.score).slice(0, BOARD_MAX);
 }
@@ -64,9 +64,10 @@ export function readBoard(): BoardRow[] {
   }
 }
 
-/** Where `score` would go on `rows` (0-based; a tie goes below the rows it ties), or -1 when it would not make the board. */
+/** Where `score` would go on `rows` (0-based; a tie goes above the rows it ties: newest first), or -1 when it would not
+ * make the board. */
 export function rankOf(rows: BoardRow[], score: number): number {
-  const i = rows.findIndex((r) => r.score < score);
+  const i = rows.findIndex((r) => r.score <= score);
   const at = i === -1 ? rows.length : i;
   return at < BOARD_MAX ? at : -1;
 }

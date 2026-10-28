@@ -24,9 +24,9 @@ function button(className: string, text: string): HTMLButtonElement {
 }
 
 /**
- * Stage 2, the board (PRNTR-BOARD.md §14): over the room's last frame, the local leader board with
- * the run already on it when it ranks (written the moment the card comes up), its row in the HUD's
- * yellow; a run that does not rank is a grey line under the rows. CONTINUE hands the room's handoff
+ * Stage 2, the board (PRNTR-BOARD.md §14, §15): over the room's last frame, the local leader board with
+ * a cleared run already on it when it ranks (written the moment the card comes up), its row in the HUD's
+ * yellow; a run that does not rank, or a game over (never written), is a grey line under the rows. CONTINUE hands the room's handoff
  * on unchanged. Runs after a game over too (afterOver). Started by the dev entrance (`start`) it
  * shows the board with no run.
  */
@@ -105,7 +105,8 @@ export const board: Stage = {
     const rows = readBoard();
     // what the board shows, kept so CANCEL can show it again
     let shown = { rank: -1, out: '' };
-    if (run && rankOf(rows, run.score) !== -1) {
+    // only a cleared run gets on the board (PRNTR-BOARD.md §15)
+    if (run && run.won && rankOf(rows, run.score) !== -1) {
       const kept = pinRow(run);
       if (kept) {
         shown = { rank: kept.rank, out: '' };
@@ -116,7 +117,7 @@ export const board: Stage = {
       }
     } else if (run) {
       shown = { rank: -1, out: outLine(run, 'NOT ON IT.') };
-      showBoard(rows, -1, shown.out, '', `Local leader board. ${run.name}, ${run.score}, not on it.`);
+      showBoard(rows, -1, shown.out, '', `Local leader board. ${run.name}, ${run.score}${run.won ? '' : ', game over'}, not on it.`);
     } else {
       showBoard(rows, -1, '', '', rowsWord(rows.length));
     }
