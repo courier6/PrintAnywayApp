@@ -354,7 +354,7 @@ export default function DevPanel() {
       <Section title="Keys">
         <p className="dev-keys">
           <kbd>`</kbd> this panel · <kbd>Esc</kbd> leave Prntr<br />
-          <code>/?prntr=0</code> opening · <code>/?prntr=1</code> room
+          <code>/?prntr=0</code> opening · <code>/?prntr=1</code> room · <code>&amp;motion=reduced</code> the reduced mode
         </p>
       </Section>
 

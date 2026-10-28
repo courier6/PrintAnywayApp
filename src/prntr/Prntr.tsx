@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import './prntr.css';
 import { keepPrntrAudio, releasePrntrAudio } from '../components/prntrAudio';
+import { reducedMotion } from './anim';
 import { createPrntrAudio, type PrntrAudio } from './audio';
 import { makeCertificate } from './certificate';
 import { capturePage } from './page';
@@ -154,7 +155,7 @@ export default function Prntr({ source, recolored, inkHex, stage, audioContext, 
   }, [stage, audioContext]);
 
   return (
-    <div className="prntr" ref={rootRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="Prntr">
+    <div className={reducedMotion() ? 'prntr is-motion-reduced' : 'prntr'} ref={rootRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="Prntr">
       <div className="prntr-stage" ref={stageRef} />
       {/* Provisional: the exit's place is not designed (handoff §5.2). Gone once the chain has finished. */}
       {!done && (
