@@ -11,6 +11,10 @@ export const BOARD_MAX = 10;
 export const BOARD_NAME_MAX = 12;
 export const BOARD_SCORE_MAX = 9999;
 
+/** A name as the badge and the board take it: upper case, A–Z, 0–9 and single spaces, trimmed, BOARD_NAME_MAX at most. */
+export const cleanName = (s: string) =>
+  s.toUpperCase().replace(/[^A-Z0-9 ]/g, '').replace(/ +/g, ' ').trim().slice(0, BOARD_NAME_MAX);
+
 export interface BoardRow {
   name: string;
   score: number;
@@ -77,6 +81,12 @@ export function today(now = new Date()): string {
   const p = (n: number) => String(n).padStart(2, '0');
   return `${now.getFullYear()}-${p(now.getMonth() + 1)}-${p(now.getDate())}`;
 }
+
+/**
+ * What the board stage did with a cleared run, carried to the app side's board in the handoff: written at `rank`,
+ * refused by the browser, not ranking, or still unnamed (NULL: the app side asks the name and writes the row itself).
+ */
+export type BoardWrite = { kind: 'kept'; rank: number } | { kind: 'refused' } | { kind: 'unranked' } | { kind: 'unnamed' };
 
 /**
  * Keeps `row` on the board. Resolves the board as kept and the row's rank on it; null when the row

@@ -1671,6 +1671,53 @@
   color: #BDBDBD;
 }
 
+/* The name asked for a cleared run the badge left NULL (PRNTR-BOARD.md §15.3): a row-shaped line in the out line's
+   place, three blanks for the rank, the field twelve glyphs wide in the rows' type, the score after it; OK as CONTINUE. */
+.prntr-board-run.is-name {
+  margin-top: -0.4em;
+  padding-left: 1.2em;
+  font-size: var(--prntr-board-row);
+  text-align: left;
+}
+
+.prntr-board-name {
+  box-sizing: content-box;
+  width: calc(12 * (1ch + 0.06em));
+  margin: 0;
+  padding: 0 0 2px;
+  border: 0;
+  border-bottom: 2px solid #FFFFFF;
+  border-radius: 0;
+  background: #000000;
+  color: #FFD91A;
+  caret-color: #FFD91A;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: uppercase;
+  text-shadow: inherit;
+  cursor: text;
+  /* the board is user-select: none; a field under it must still take a caret and a selection */
+  user-select: text;
+  -webkit-user-select: text;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.prntr-board-name::placeholder {
+  color: #5E5A52;
+  opacity: 1;
+}
+
+.prntr-board-name:focus-visible {
+  outline: 2px solid #19B8F0;
+  outline-offset: 2px;
+}
+
+.prntr-board-ok {
+  border-color: #FFD91A !important;
+  color: #FFD91A !important;
+}
+
 /* The board over the app (PRNTR-BOARD.md §15.2, the board-frame sheet's #5): fixed over the page once the app has
    dropped in, no dim (the certificate and the gold swatch stay in sight), the card on the plum mat inside a gilded
    pixel frame 12 cells deep (3 px a cell, 2 under 600 px wide) drawn on a canvas behind it. The rows shrink to leave

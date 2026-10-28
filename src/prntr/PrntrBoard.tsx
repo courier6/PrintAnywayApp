@@ -1,14 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
 import { reducedMotion } from './anim';
-import { clearBoard, pinRow, rankOf, readBoard, today, type BoardRow } from './board';
+import { cleanName, clearBoard, pinRow, rankOf, readBoard, today, type BoardRow, type BoardWrite } from './board';
 import { NOTE_NOT_CLEARED, NOTE_REFUSED, buildBoardCard, outLine } from './boardCard';
 import { BOARD_FRAME_BAND, paintBoardFrame } from './boardFrame';
 
-/** A finished run as the app side gets it: won or lost, its score, the badge's name (NULL when none was given). */
+/** A finished run as the app side gets it: won or lost, its score, the badge's name (NULL when none was given), and for
+ * a win what the board stage did with it (`board`; absent when the run did not pass through the stage). */
 export interface BoardRun {
   won: boolean;
   score: number;
   player: string;
+  board?: BoardWrite;
 }
 
 /** A frame cell is this many CSS px on a desktop, and on a narrow viewport (under NARROW_PX wide). */
@@ -27,8 +29,9 @@ interface Props {
 /**
  * The board over the app (PRNTR-BOARD.md §15.2), after the app has dropped in under the jingle: the card the room's
  * glimpse showed, now with its buttons, in a gilded pixel frame in the ink (the board-frame sheet's #5), no dim, so
- * the certificate and the gold swatch stay in sight around it. A cleared run the room has not written yet (no name:
- * NULL) is written here. CONTINUE, a press outside the card or Esc closes it; CLEAR THE BOARD asks YOU SURE?, YES
+ * the certificate and the gold swatch stay in sight around it. A cleared run the room has not written (the badge left
+ * it NULL) asks for the name first (§15.3): OK or Enter writes it, with NULL for an empty field. CONTINUE, a press
+ * outside the card or Esc closes it (unanswered, the name's run is not written); CLEAR THE BOARD asks YOU SURE?, YES
  * clears and closes, CANCEL is the board again. Silent: the run's audio has gone with Prntr.
  */
 export function PrntrBoard({ run, inkHex, onClose }: Props) {
@@ -36,9 +39,9 @@ export function PrntrBoard({ run, inkHex, onClose }: Props) {
   const [live, setLive] = useState('');
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
-  // what the first paint shows, kept so CANCEL can show it again
-  const first = useRef<Paint | null>(null);
-  if (first.current === null) first.current = firstPaint(run);
+  // what the board shows, kept so CANCEL can show it again: the first paint, then the board once the name is in
+  const shownRef = useRef<Paint | null>(null);
+  if (shownRef.current === null) shownRef.current = firstPaint(run);
 
   useEffect(() => {
     const dim = dimRef.current;
@@ -56,33 +59,64 @@ export function PrntrBoard({ run, inkHex, onClose }: Props) {
     card.addEventListener('click', (e) => e.stopPropagation(), { signal });
     dim.prepend(card);
 
-    const shown = first.current!;
-    const show = (rows: BoardRow[], rank: number, out: string, note: string, say: string) => {
+    const show = ({ rows, rank, out, note, say }: Paint) => {
       c.asking(false);
+      c.naming(null);
       c.showRows(rows, rank);
       c.showOut(out, note);
       c.goBtn.focus();
       setLive(say);
     };
-    show(shown.rows, shown.rank, shown.out, shown.note, shown.say);
+    const first = shownRef.current!;
+    if (first.ask && run) {
+      c.showRows(first.rows, -1);
+      c.showOut('', '');
+      c.naming(run.score);
+      c.nameInput.focus();
+      setLive(first.say);
+    } else {
+      show(first);
+    }
+
+    // the name: written once, with the rank it gets; then the board as after any write
+    const answer = () => {
+      if (!run || !shownRef.current?.ask) return;
+      const row: BoardRow = { name: cleanName(c.nameInput.value) || 'NULL', score: run.score, at: today(), won: true };
+      const kept = pinRow(row);
+      shownRef.current = kept
+        ? { rows: kept.rows, rank: kept.rank, out: '', note: '', say: `${row.name}, ${row.score}, number ${kept.rank + 1}.`, ask: false }
+        : { rows: readBoard(), rank: -1, out: outLine(row, 'NOT KEPT.'), note: NOTE_REFUSED, say: `${row.name}, ${row.score}. ${NOTE_REFUSED}`, ask: false };
+      show(shownRef.current);
+    };
+    c.okBtn.addEventListener('click', answer, { signal });
+    c.nameInput.addEventListener(
+      'keydown',
+      (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          answer();
+        }
+      },
+      { signal },
+    );
 
     c.goBtn.addEventListener('click', () => onCloseRef.current(), { signal });
     c.clearBtn.addEventListener(
       'click',
       () => {
-        c.showOut(shown.out, '');
+        c.showOut(shownRef.current!.out, '');
         c.asking(true);
         c.cancelBtn.focus();
         setLive('Clear the board? Yes or cancel.');
       },
       { signal },
     );
-    c.cancelBtn.addEventListener('click', () => show(readBoard(), shown.rank, shown.out, '', 'The board.'), { signal });
+    c.cancelBtn.addEventListener('click', () => show({ ...shownRef.current!, rows: readBoard(), note: '', say: 'The board.' }), { signal });
     c.yesBtn.addEventListener(
       'click',
       () => {
         if (clearBoard()) onCloseRef.current();
-        else show(readBoard(), shown.rank, shown.out, NOTE_NOT_CLEARED, NOTE_NOT_CLEARED);
+        else show({ ...shownRef.current!, rows: readBoard(), note: NOTE_NOT_CLEARED, say: NOTE_NOT_CLEARED });
       },
       { signal },
     );
@@ -112,7 +146,7 @@ export function PrntrBoard({ run, inkHex, onClose }: Props) {
       ro.disconnect();
       card.remove();
     };
-  }, [inkHex]);
+  }, [inkHex, run]);
 
   return (
     <div
@@ -138,34 +172,35 @@ interface Paint {
   out: string;
   note: string;
   say: string;
+  /** A cleared run the room left unwritten (NULL) that ranks: the name is asked before it is written. */
+  ask: boolean;
 }
 
-/** Each run's first paint, so its write happens once however often React renders the board for it. */
-const painted = new WeakMap<BoardRun, Paint>();
-
-/** The board as it first comes up over the app, writing a cleared run the room left unwritten (no name). */
+/** The board as it first comes up over the app. It writes nothing: the room wrote a named run, and a NULL one waits for
+ * its name. */
 function firstPaint(run: BoardRun | null): Paint {
-  if (!run) return paint(null);
-  let p = painted.get(run);
-  if (!p) painted.set(run, (p = paint(run)));
-  return p;
+  const rows = readBoard();
+  const said = (s: string) => `Local leader board. ${s}`;
+  if (!run) return { rows, rank: -1, out: '', note: '', say: rows.length === 0 ? 'The board is empty.' : `The board: ${rows.length} row${rows.length === 1 ? '' : 's'}.`, ask: false };
+  const row: BoardRow = { name: run.player, score: run.score, at: today(), won: run.won };
+  if (!run.won) return { rows, rank: -1, out: outLine(row, 'NOT ON IT.'), note: '', say: said(`${row.name}, ${row.score}, game over, not on it.`), ask: false };
+  if (run.player === 'NULL') {
+    const rank = rankOf(rows, run.score);
+    if (rank === -1) return { rows, rank: -1, out: outLine(row, 'NOT ON IT.'), note: '', say: said(`${row.score}, not on it.`), ask: false };
+    return { rows, rank: -1, out: '', note: '', say: said(`${row.score}, number ${rank + 1}. Your name?`), ask: true };
+  }
+  // the room's board stage wrote it, or not, and says which (the row is not looked up again: its date stamp could differ
+  // from today's across midnight); without word from the stage, the newest row of that name and score
+  const write = run.board ?? wroteOf(rows, row);
+  if (write.kind === 'kept') return { rows, rank: write.rank, out: '', note: '', say: said(`${row.name}, ${row.score}, number ${write.rank + 1}.`), ask: false };
+  if (write.kind === 'refused') return { rows, rank: -1, out: outLine(row, 'NOT KEPT.'), note: NOTE_REFUSED, say: said(`${row.name}, ${row.score}. ${NOTE_REFUSED}`), ask: false };
+  return { rows, rank: -1, out: outLine(row, 'NOT ON IT.'), note: '', say: said(`${row.name}, ${row.score}, not on it.`), ask: false };
 }
 
-function paint(run: BoardRun | null): Paint {
-  const rows = readBoard();
-  if (!run) return { rows, rank: -1, out: '', note: '', say: rows.length === 0 ? 'The board is empty.' : `The board: ${rows.length} row${rows.length === 1 ? '' : 's'}.` };
-  const row: BoardRow = { name: run.player, score: run.score, at: today(), won: run.won };
-  if (!run.won) return { rows, rank: -1, out: outLine(row, 'NOT ON IT.'), note: '', say: `Local leader board. ${row.name}, ${row.score}, game over, not on it.` };
-  if (rankOf(rows, run.score) === -1 && !rows.some((r) => r.name === row.name && r.score === row.score && r.at === row.at)) {
-    return { rows, rank: -1, out: outLine(row, 'NOT ON IT.'), note: '', say: `Local leader board. ${row.name}, ${row.score}, not on it.` };
-  }
-  if (run.player !== 'NULL') {
-    // the room wrote it: the newest of its equals, so the first row that matches
-    const rank = rows.findIndex((r) => r.name === row.name && r.score === row.score && r.at === row.at && r.won);
-    if (rank !== -1) return { rows, rank, out: '', note: '', say: `Local leader board. ${row.name}, ${row.score}, number ${rank + 1}.` };
-    return { rows, rank: -1, out: outLine(row, 'NOT KEPT.'), note: NOTE_REFUSED, say: `Local leader board. ${row.name}, ${row.score}. ${NOTE_REFUSED}` };
-  }
-  const kept = pinRow(row);
-  if (kept) return { rows: kept.rows, rank: kept.rank, out: '', note: '', say: `Local leader board. ${row.name}, ${row.score}, number ${kept.rank + 1}.` };
-  return { rows, rank: -1, out: outLine(row, 'NOT KEPT.'), note: NOTE_REFUSED, say: `Local leader board. ${row.name}, ${row.score}. ${NOTE_REFUSED}` };
+/** What a named win not carried through the board stage must have become: the first (newest) row of its name and score
+ * is it; none, and the score did not rank or the write was refused. */
+function wroteOf(rows: BoardRow[], row: BoardRow): BoardWrite {
+  const rank = rows.findIndex((r) => r.name === row.name && r.score === row.score && r.won);
+  if (rank !== -1) return { kind: 'kept', rank };
+  return rankOf(rows, row.score) === -1 ? { kind: 'unranked' } : { kind: 'refused' };
 }

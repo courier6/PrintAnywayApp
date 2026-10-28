@@ -152,7 +152,9 @@ export default function Prntr({ source, recolored, inkHex, stage, audioContext, 
         // Made before ✕ goes: if it throws, the way out must still be there.
         const certificate = handoff.kind === 'cleared' ? makeCertificate(handoff.player, handoff.score, Math.max(readBoard()[0]?.score ?? 0, handoff.score), handoff.stats) : undefined;
         const run: BoardRun | null =
-          handoff.kind === 'start' ? null : { won: handoff.kind === 'cleared', score: handoff.score, player: handoff.player };
+          handoff.kind === 'start'
+            ? null
+            : { won: handoff.kind === 'cleared', score: handoff.score, player: handoff.player, board: handoff.kind === 'cleared' ? handoff.board : undefined };
         setDone(true);
         if (certificate) onDoneRef.current('cleared', certificate, run);
         else onDoneRef.current('over', undefined, run);

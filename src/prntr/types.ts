@@ -1,4 +1,5 @@
 import type { PrntrAudio } from './audio';
+import type { BoardWrite } from './board';
 
 /** Downscaled copies of the page as it was when Prntr started (long side ≤ 960px). */
 export interface PageBitmaps {
@@ -32,11 +33,12 @@ export interface StageContext {
  * `?prntr=N` begin at any stage), plus the kind its predecessor emits. New kinds
  * are added here as stages land: the room (stage 1) ends with `cleared` (and who
  * cleared it), or with `over` (a game over, and who lost), which ends the chain
- * unless the next stage runs `afterOver` (the board, PRNTR-BOARD.md).
+ * unless the next stage runs `afterOver` (the board, PRNTR-BOARD.md). The board
+ * stage passes `cleared` on with `board`: what became of the run on the board.
  */
 export type Handoff =
   | { kind: 'start' }
-  | { kind: 'cleared'; score: number; player: string; stats: RunStats }
+  | { kind: 'cleared'; score: number; player: string; stats: RunStats; board?: BoardWrite }
   | { kind: 'over'; score: number; player: string };
 
 /** What the room counted while it was won; the certificate turns it into honours. */

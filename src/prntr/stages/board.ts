@@ -1,5 +1,5 @@
 import { reducedMotion, wait } from '../anim';
-import { BOARD_MAX, pinRow, rankOf, readBoard, today, type BoardRow } from '../board';
+import { BOARD_MAX, pinRow, rankOf, readBoard, today, type BoardRow, type BoardWrite } from '../board';
 import { NOTE_REFUSED, buildBoardCard, outLine } from '../boardCard';
 import type { Handoff, Stage } from '../types';
 
@@ -40,20 +40,25 @@ export const board: Stage = {
     const rows = readBoard();
     const rank = run ? rankOf(rows, run.score) : -1;
     let say: string;
+    // what became of a cleared run, for the board over the app (it does not look the row up again)
+    let write: BoardWrite = { kind: 'unranked' };
     if (run && run.won && rank !== -1 && run.name !== 'NULL') {
       // only a cleared run gets on the board; with a name it is written now
       const kept = pinRow(run);
       if (kept) {
+        write = { kind: 'kept', rank: kept.rank };
         showRows(kept.rows, kept.rank);
         showOut('', '');
         say = `Local leader board. ${run.name}, ${run.score}, number ${kept.rank + 1}.`;
       } else {
+        write = { kind: 'refused' };
         showRows(rows, -1);
         showOut(outLine(run, 'NOT KEPT.'), NOTE_REFUSED);
         say = `Local leader board. ${run.name}, ${run.score}. ${NOTE_REFUSED}`;
       }
     } else if (run && run.won && rank !== -1) {
       // no name yet: the row where it would go, written on the app side once the name is answered
+      write = { kind: 'unnamed' };
       showRows([...rows.slice(0, rank), run, ...rows.slice(rank)].slice(0, BOARD_MAX), rank);
       showOut('', '');
       say = `Local leader board. ${run.score}, number ${rank + 1}.`;
@@ -70,6 +75,6 @@ export const board: Stage = {
 
     await wait(BOARD_HOLD_MS, signal);
     if (signal.aborted) return { kind: 'start' };
-    return input as Handoff;
+    return input.kind === 'cleared' ? { ...input, board: write } : (input as Handoff);
   },
 };

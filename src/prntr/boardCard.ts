@@ -27,18 +27,24 @@ export interface BoardCard {
   clearBtn: HTMLButtonElement;
   yesBtn: HTMLButtonElement;
   cancelBtn: HTMLButtonElement;
+  /** The name asked for (§15.3): the field in the run's row, and OK. */
+  nameInput: HTMLInputElement;
+  okBtn: HTMLButtonElement;
   /** The rows, the run's yellow row at newRank (-1: none). */
   showRows: (rows: BoardRow[], newRank: number) => void;
   /** The grey line under the rows ('' hides it) and the note. */
   showOut: (text: string, note: string) => void;
   /** The clear's question in the buttons' place, or the buttons back. */
   asking: (on: boolean) => void;
+  /** The name's row (`   [name] 1341`) in the out line's place and OK alone in the buttons' (a score), or the board's
+   * buttons back (null). */
+  naming: (score: number | null) => void;
 }
 
 /**
  * The board's card (PRNTR-BOARD.md §14, §15): LOCAL LEADER BOARD, the rows (or NOBODY YET.), the run's out line, and,
- * unless it is the room's glimpse, CONTINUE, CLEAR THE BOARD and the clear's question (YOU SURE?, YES, CANCEL), then
- * the note. Built by the room's board stage (the glimpse) and by the app-side board.
+ * unless it is the room's glimpse, the name's row with OK, CONTINUE, CLEAR THE BOARD and the clear's question (YOU SURE?,
+ * YES, CANCEL), then the note. Built by the room's board stage (the glimpse) and by the app-side board.
  */
 export function buildBoardCard({ buttons }: { buttons: boolean }): BoardCard {
   const card = el('div', 'prntr-board-card');
@@ -54,12 +60,27 @@ export function buildBoardCard({ buttons }: { buttons: boolean }): BoardCard {
   const sureEl = el('div', 'prntr-board-sure', 'YOU SURE?');
   const yesBtn = button('prntr-board-yes', 'YES');
   const cancelBtn = button('prntr-board-cancel', 'CANCEL');
+  // the name asked for a cleared run the badge left NULL: a field in a row's place, the score after it, and OK
+  const nameEl = el('div', 'prntr-board-run is-name');
+  const nameInput = document.createElement('input');
+  nameInput.className = 'prntr-board-name';
+  nameInput.type = 'text';
+  nameInput.maxLength = BOARD_NAME_MAX;
+  nameInput.autocomplete = 'off';
+  nameInput.spellcheck = false;
+  nameInput.setAttribute('autocapitalize', 'characters');
+  nameInput.enterKeyHint = 'done';
+  nameInput.placeholder = 'NULL';
+  nameInput.setAttribute('aria-label', 'Your name');
+  const nameScore = el('span', '');
+  nameEl.append('   ', nameInput, nameScore);
+  const okBtn = button('prntr-board-ok', 'OK');
   const note = el('div', 'prntr-board-note');
-  buttonsEl.append(goBtn, clearBtn, yesBtn, cancelBtn);
+  buttonsEl.append(okBtn, goBtn, clearBtn, yesBtn, cancelBtn);
   card.append(title, rowsEl, emptyEl, outEl);
-  if (buttons) card.append(sureEl, buttonsEl);
+  if (buttons) card.append(nameEl, sureEl, buttonsEl);
   card.append(note);
-  sureEl.hidden = yesBtn.hidden = cancelBtn.hidden = true;
+  sureEl.hidden = yesBtn.hidden = cancelBtn.hidden = nameEl.hidden = okBtn.hidden = true;
 
   const showRows = (rows: BoardRow[], newRank: number) => {
     rowsEl.replaceChildren();
@@ -85,5 +106,17 @@ export function buildBoardCard({ buttons }: { buttons: boolean }): BoardCard {
     goBtn.hidden = on;
     if (on) clearBtn.hidden = true;
   };
-  return { card, goBtn, clearBtn, yesBtn, cancelBtn, showRows, showOut, asking };
+  const naming = (score: number | null) => {
+    const on = score !== null;
+    nameEl.hidden = !on;
+    okBtn.hidden = !on;
+    goBtn.hidden = on;
+    if (on) {
+      // blanks where a row has its date, so the line is a row's width and centres into the rows' column
+      nameScore.textContent = ` ${String(score).padStart(4, '0')}${' '.repeat(11)}`;
+      outEl.hidden = true;
+      clearBtn.hidden = true;
+    }
+  };
+  return { card, goBtn, clearBtn, yesBtn, cancelBtn, nameInput, okBtn, showRows, showOut, asking, naming };
 }

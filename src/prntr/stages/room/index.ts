@@ -10,7 +10,7 @@ import { PAL, type PalKey } from './palette';
 import { createRoomSounds, type FireSound, type Hum } from './sounds';
 import { RIPPLE_MS, RIPPLE_SPEED, RippleView, rippleAt } from './ripple';
 import { startStormSound } from '../storm';
-import { BOARD_SCORE_MAX, readBoard } from '../../board';
+import { BOARD_NAME_MAX, BOARD_SCORE_MAX, cleanName, readBoard } from '../../board';
 
 // ---------------------------------------------------------------------------
 // Tunables. The attack cycle is "tune freely" (handoff §2.7), slowed down and made
@@ -52,7 +52,6 @@ const POP_MS = 450;
  * breaking up every NAME_GLITCH_MS or so. */
 /** The name on the fight's tag and the certificate: the badge's (PRNTR-BADGE.md) or, unset, NULL. */
 const DEFAULT_NAME = 'NULL';
-const NAME_MAX = 12;
 const WORN_HEALTH = 50;
 const ROUGH_HEALTH = 25;
 const NAME_FLIP_MS = 700;
@@ -457,7 +456,6 @@ const USB_HIT_PX = 44;
 const BADGE_HIT = { x0: 5, y0: 116, x1: 32, y1: 134 };
 /** `pad`: virtual px more on every side (the touch form, so a finger need not be exact). */
 const inBadge = (x: number, y: number, pad = 0) => x >= BADGE_HIT.x0 - pad && x < BADGE_HIT.x1 + pad && y >= BADGE_HIT.y0 - pad && y < BADGE_HIT.y1 + pad;
-const cleanName = (s: string) => s.toUpperCase().replace(/[^A-Z0-9 ]/g, '').replace(/ +/g, ' ').trim().slice(0, NAME_MAX);
 /** The radius of the badge's pulse, virtual px. */
 const BADGE_GLOW_R = 16;
 /** The badge's barcode, one bar a virtual px, 1 = ink. */
@@ -775,7 +773,7 @@ export const room: Stage = {
     const badgeInput = document.createElement('input');
     badgeInput.className = 'prntr-room-badge-input';
     badgeInput.type = 'text';
-    badgeInput.maxLength = NAME_MAX;
+    badgeInput.maxLength = BOARD_NAME_MAX;
     badgeInput.autocomplete = 'off';
     badgeInput.spellcheck = false;
     badgeInput.setAttribute('autocapitalize', 'characters');
