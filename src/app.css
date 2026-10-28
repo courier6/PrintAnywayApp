@@ -638,7 +638,7 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
 }
 
 .compare-caption {
-  font: 700 10.5px ui-monospace, Menlo, monospace;
+  font: 700 10.5px ui-monospace, Menlo, Consolas, 'Cascadia Mono', monospace;
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--ink-75);
@@ -756,7 +756,7 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
 }
 
 .side-label {
-  font: 700 11px ui-monospace, Menlo, monospace;
+  font: 700 11px ui-monospace, Menlo, Consolas, 'Cascadia Mono', monospace;
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--ink-70);
