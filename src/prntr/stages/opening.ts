@@ -3,6 +3,7 @@ import type { Stage } from '../types';
 import { playBeep, playCardJingle } from './jingle';
 import { frameScale } from './room/pixels';
 import { startGlitchPulse, startStorm, type StormSlot } from './storm';
+import { PRNTR_VERSION, PRNTR_VERSION_CORRUPT } from '../version';
 
 /** 0 = every letter on the baseline, 1 = approved, 2 = twice as messy. */
 const WOBBLE = 1;
@@ -205,6 +206,13 @@ export const opening: Stage = {
     footer.append(credit, el('div', 'prntr-copyright', COPYRIGHT), corruptLine);
     arcade.append(promptRow, footer);
     root.append(arcade);
+    // The version, under the last letter, in with INSERT COIN (PRNTR-VERSION.md). A child of the
+    // title so it follows the word's size; sixth child, so the corrupted frame's slot rules skip it.
+    const versionBox = el('div', 'prntr-version-box');
+    const versionCorrupt = el('span', 'prntr-version-corrupt', PRNTR_VERSION_CORRUPT);
+    versionCorrupt.setAttribute('aria-hidden', 'true');
+    versionBox.append(el('span', 'prntr-version', PRNTR_VERSION), versionCorrupt);
+    h1.append(versionBox);
     ctx.announce('Insert coin');
 
     // Beat 5: the credit event, two seconds after the title is fully in: 1.5s of
