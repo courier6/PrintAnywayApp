@@ -7,7 +7,6 @@ import { createRoomSounds } from './room/sounds';
 const BOARD_AFTER_MS = 1200;
 /** CLEAR THE BOARD reads SURE? this long; unpressed, it disarms. */
 const CLEAR_ARM_MS = 3000;
-const NOTE_KEPT = "KEPT IN THIS BROWSER'S LOCALSTORAGE. NOTHING IS SENT.";
 const NOTE_REFUSED = "COULDN'T KEEP IT HERE. THE BROWSER SAID NO.";
 const NOTE_NOT_CLEARED = "COULDN'T CLEAR IT. THE BROWSER SAID NO.";
 
@@ -49,7 +48,7 @@ export const board: Stage = {
     dim.setAttribute('aria-label', 'The board');
     const card = el('div', 'prntr-board-card');
     if (reducedMotion()) card.classList.add('is-still');
-    const title = el('div', 'prntr-board-title', 'THE BOARD');
+    const title = el('div', 'prntr-board-title', 'LOCAL LEADER BOARD');
     const runEl = el('div', 'prntr-board-run');
     const rowsEl = el('ol', 'prntr-board-rows');
     const emptyEl = el('div', 'prntr-board-empty', 'NOBODY YET.');
@@ -90,7 +89,7 @@ export const board: Stage = {
       leaveBtn.hidden = false;
       goBtn.hidden = true;
       clearBtn.hidden = true;
-      note.textContent = NOTE_KEPT;
+      note.textContent = '';
       pinBtn.focus();
       ctx.announce(`The board. ${run.name}, ${run.score}, ${run.won ? 'cleared' : 'game over'}. Pin it to this browser's board?`);
     };
