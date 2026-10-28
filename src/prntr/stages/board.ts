@@ -5,8 +5,6 @@ import { createRoomSounds } from './room/sounds';
 
 /** The card waits for the burst's pieces to land under the tune, or for GAME OVER to be seen. */
 const BOARD_AFTER_MS = 1200;
-/** CLEAR THE BOARD reads SURE? this long; unpressed, it disarms. */
-const CLEAR_ARM_MS = 3000;
 const NOTE_REFUSED = "COULDN'T KEEP IT HERE. THE BROWSER SAID NO.";
 const NOTE_NOT_CLEARED = "COULDN'T CLEAR IT. THE BROWSER SAID NO.";
 
@@ -57,9 +55,13 @@ export const board: Stage = {
     const buttons = el('div', 'prntr-board-buttons');
     const goBtn = button('prntr-board-go', 'CONTINUE');
     const clearBtn = button('prntr-board-clear', 'CLEAR THE BOARD');
+    // the clear's question, in the buttons' place: YES clears and leaves, CANCEL is the board again
+    const sureEl = el('div', 'prntr-board-sure', 'YOU SURE?');
+    const yesBtn = button('prntr-board-yes', 'YES');
+    const cancelBtn = button('prntr-board-cancel', 'CANCEL');
     const note = el('div', 'prntr-board-note');
-    buttons.append(goBtn, clearBtn);
-    card.append(title, rowsEl, emptyEl, outEl, buttons, note);
+    buttons.append(goBtn, clearBtn, yesBtn, cancelBtn);
+    card.append(title, rowsEl, emptyEl, outEl, sureEl, buttons, note);
     dim.append(card);
     // a press on the dim or the card is nothing: never the room's reload
     dim.addEventListener('pointerdown', (e) => e.stopPropagation(), { signal });
@@ -80,7 +82,16 @@ export const board: Stage = {
     };
     /** The run's line under the rows: three blanks for the rank column, then the name and the score as a row has them. */
     const outLine = (r: BoardRow, word: string) => `   ${r.name.padEnd(BOARD_NAME_MAX)} ${String(r.score).padStart(4, '0')} ${word}`;
+    /** The board's buttons, or the clear's question in their place. */
+    const asking = (on: boolean) => {
+      sureEl.hidden = !on;
+      yesBtn.hidden = !on;
+      cancelBtn.hidden = !on;
+      goBtn.hidden = on;
+      if (on) clearBtn.hidden = true;
+    };
     const showBoard = (rows: BoardRow[], newRank: number, outText: string, noteText: string, say: string) => {
+      asking(false);
       showRows(rows, newRank);
       outEl.textContent = outText;
       outEl.hidden = outText === '';
@@ -90,44 +101,22 @@ export const board: Stage = {
     };
     const rowsWord = (n: number) => (n === 0 ? 'The board is empty.' : `The board: ${n} row${n === 1 ? '' : 's'}.`);
 
-    // ---- the clear's two presses ----------------------------------------
-    let armed = 0;
-    const disarm = () => {
-      window.clearTimeout(armed);
-      armed = 0;
-      clearBtn.textContent = 'CLEAR THE BOARD';
-    };
-    clearBtn.addEventListener(
-      'click',
-      () => {
-        sounds.uiClick();
-        if (!armed) {
-          clearBtn.textContent = 'SURE?';
-          armed = window.setTimeout(disarm, CLEAR_ARM_MS);
-          return;
-        }
-        disarm();
-        if (clearBoard()) {
-          showRows([], -1);
-          note.textContent = '';
-          goBtn.focus();
-          ctx.announce('The board is cleared.');
-        } else {
-          note.textContent = NOTE_NOT_CLEARED;
-        }
-      },
-      { signal },
-    );
-    signal.addEventListener('abort', disarm, { once: true });
-
     // ---- the first paint: the run written first, when it ranks -------------
     const rows = readBoard();
+    // what the board shows, kept so CANCEL can show it again
+    let shown = { rank: -1, out: '' };
     if (run && rankOf(rows, run.score) !== -1) {
       const kept = pinRow(run);
-      if (kept) showBoard(kept.rows, kept.rank, '', '', `Local leader board. ${run.name}, ${run.score}, number ${kept.rank + 1}.`);
-      else showBoard(rows, -1, outLine(run, 'NOT KEPT.'), NOTE_REFUSED, `Local leader board. ${run.name}, ${run.score}. ${NOTE_REFUSED}`);
+      if (kept) {
+        shown = { rank: kept.rank, out: '' };
+        showBoard(kept.rows, kept.rank, '', '', `Local leader board. ${run.name}, ${run.score}, number ${kept.rank + 1}.`);
+      } else {
+        shown = { rank: -1, out: outLine(run, 'NOT KEPT.') };
+        showBoard(rows, -1, shown.out, NOTE_REFUSED, `Local leader board. ${run.name}, ${run.score}. ${NOTE_REFUSED}`);
+      }
     } else if (run) {
-      showBoard(rows, -1, outLine(run, 'NOT ON IT.'), '', `Local leader board. ${run.name}, ${run.score}, not on it.`);
+      shown = { rank: -1, out: outLine(run, 'NOT ON IT.') };
+      showBoard(rows, -1, shown.out, '', `Local leader board. ${run.name}, ${run.score}, not on it.`);
     } else {
       showBoard(rows, -1, '', '', rowsWord(rows.length));
     }
@@ -136,6 +125,37 @@ export const board: Stage = {
     return new Promise<Handoff>((resolve) => {
       signal.addEventListener('abort', () => resolve({ kind: 'start' }), { once: true });
       goBtn.addEventListener('click', () => { sounds.uiClick(); resolve(input); }, { signal });
+      clearBtn.addEventListener(
+        'click',
+        () => {
+          sounds.uiClick();
+          note.textContent = '';
+          asking(true);
+          cancelBtn.focus();
+          ctx.announce('Clear the board? Yes or cancel.');
+        },
+        { signal },
+      );
+      // CANCEL: the board again, as it was
+      cancelBtn.addEventListener(
+        'click',
+        () => { sounds.uiClick(); showBoard(readBoard(), shown.rank, shown.out, '', 'The board.'); },
+        { signal },
+      );
+      // YES: the board cleared and the stage left, as CONTINUE leaves it; a refused clear stays on the board and says so
+      yesBtn.addEventListener(
+        'click',
+        () => {
+          sounds.uiClick();
+          if (clearBoard()) {
+            ctx.announce('The board is cleared.');
+            resolve(input);
+          } else {
+            showBoard(readBoard(), shown.rank, shown.out, NOTE_NOT_CLEARED, NOTE_NOT_CLEARED);
+          }
+        },
+        { signal },
+      );
     });
   },
 };

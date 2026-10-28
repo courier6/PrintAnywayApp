@@ -1642,10 +1642,21 @@
   appearance: none;
 }
 
-.prntr-board-pin,
 .prntr-board-go {
   border-color: #FFD91A !important;
   color: #FFD91A !important;
+}
+
+/* The clear's question: YOU SURE? in the title's yellow over YES (red: it takes everything down
+   and leaves) and CANCEL (white). */
+.prntr-board-sure {
+  font-size: 13px;
+  color: #FFD91A;
+}
+
+.prntr-board-yes {
+  border-color: #FF4A3A !important;
+  color: #FF4A3A !important;
 }
 
 .prntr-board-buttons button:focus-visible {
