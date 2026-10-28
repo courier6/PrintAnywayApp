@@ -291,6 +291,26 @@ const LOT_LINE = 'rgba(255, 255, 255, 0.35)';
 const FAR_BOLT = '#6A7A9C';
 const FAR_GLOW = 'rgba(150, 170, 220, 0.18)';
 const FAR_FLASH = 'rgba(150, 170, 220, 0.1)';
+/** The version line, struck (PRNTR-VERSION.md §9): its own white, then the room's fire and ash keys
+ * (palette.ts y, o, R, i, g, G). */
+const VERSION_INK = '#EDEDED';
+const BURN_RAMP = ['#FFFFFF', '#FFD91A', '#FF6A2B'] as const;
+const EMBER = '#FF6A2B';
+const EMBER_COOL = '#B8140A';
+const CHAR = '#2B2B2B';
+const ASH = '#8C877C';
+const ASH_DARK = '#5E5A52';
+/** The burn (the sheet's #2, "paper"): the front's speed out from the bolt's foot and each cell's jitter, the
+ * ramp's length, the char's hold and how many cells stand as char, the share that fly as embers and for how
+ * long, how long the ash drifts before it is gone. */
+const BURN_SPREAD_PX_MS = 0.18;
+const BURN_JITTER_MS = 120;
+const BURN_MS = 180;
+const CHAR_HOLD_MS = 500;
+const CHAR_SHARE = 0.8;
+const EMBER_SHARE = 0.2;
+const EMBER_MS: readonly [number, number] = [500, 900];
+const ASH_MS: readonly [number, number] = [700, 1200];
 
 /** A cloud as a union of round puffs on a flat base with rounded ends (`baseH` rows deep):
  * `cols` wide and `rows` high in cells of U. Where two puffs meet the cloud thins to a saddle,
@@ -776,13 +796,158 @@ export function startStorm(root: HTMLElement, h1: HTMLElement, slots: StormSlot[
     g.shadowBlur = 0;
   };
 
+  // ---- the version line, struck (PRNTR-VERSION.md §9) --------------------
+  /** One cell of the line: where it stands, when it catches, and its fate once burnt. */
+  interface Cinder {
+    x: number;
+    y: number;
+    lit: number;
+    charred: boolean;
+    ember: boolean;
+    vx: number;
+    vy: number;
+    emberMs: number;
+    ashMs: number;
+    ashVx: number;
+    seed: number;
+  }
+  let cinders: Cinder[] = [];
+  /** The cell: a tenth of the line's type size (2 px at the 220 px title). */
+  let V = 2;
+  /** When the line caught (0 = not yet). */
+  let burnAt = 0;
+  /** Near strikes so far (the finale not counted): the second is aimed at the last letter. */
+  let nearCount = 0;
+  /** The line's pixels, as `measure()` takes the letters': the span drawn on a canvas as the page draws it
+   * (face, weight, size, place, baseline), read in cells of V, a cell inked when any pixel of it is. */
+  const rasterVersion = (span: HTMLElement): Cinder[] => {
+    const r = span.getBoundingClientRect();
+    const style = getComputedStyle(span);
+    const F = parseFloat(style.fontSize) || 20;
+    V = Math.max(1, Math.round(F / 10));
+    const w = Math.ceil(r.width) + 2 * V;
+    const h = Math.ceil(r.height) + 2 * V;
+    const m = document.createElement('canvas');
+    m.width = w;
+    m.height = h;
+    const mg = m.getContext('2d');
+    if (!mg || w <= 2 * V || h <= 2 * V) return [];
+    mg.font = `${style.fontWeight} ${F}px ${style.fontFamily}`;
+    mg.textBaseline = 'alphabetic';
+    mg.fillStyle = '#fff';
+    const met = mg.measureText(span.textContent ?? '');
+    const A = met.fontBoundingBoxAscent ?? F * 0.8;
+    const D = met.fontBoundingBoxDescent ?? F * 0.2;
+    mg.fillText(span.textContent ?? '', V, V + (r.height - (A + D)) / 2 + A);
+    const d = mg.getImageData(0, 0, w, h).data;
+    const out: Cinder[] = [];
+    const x0 = Math.round(r.left) - V;
+    const y0 = Math.round(r.top) - V;
+    for (let cy = 0; cy + V <= h; cy += V) {
+      for (let cx = 0; cx + V <= w; cx += V) {
+        let inked = false;
+        for (let yy = 0; yy < V && !inked; yy++) for (let xx = 0; xx < V; xx++) if (d[((cy + yy) * w + cx + xx) * 4 + 3] > 128) { inked = true; break; }
+        if (!inked) continue;
+        const seed = out.length * 31 + 7;
+        const rnd = (k: number) => hash(seed + k);
+        out.push({
+          x: x0 + cx,
+          y: y0 + cy,
+          lit: Infinity,
+          charred: rnd(1) < CHAR_SHARE,
+          ember: rnd(2) < EMBER_SHARE,
+          vx: (rnd(3) - 0.5) * 50,
+          vy: -(30 + rnd(4) * 50),
+          emberMs: EMBER_MS[0] + rnd(5) * (EMBER_MS[1] - EMBER_MS[0]),
+          ashMs: ASH_MS[0] + rnd(6) * (ASH_MS[1] - ASH_MS[0]),
+          ashVx: (rnd(7) - 0.5) * 20,
+          seed,
+        });
+      }
+    }
+    return out;
+  };
+  /** A strike's foot on the last letter: the line under it catches, from the column nearest the foot outward.
+   * The span goes hidden (`.is-burnt`, prntr.css) the same frame the canvas starts drawing its copy. */
+  const ignite = (now: number, footX: number) => {
+    const box = h1.querySelector<HTMLElement>('.prntr-version-box');
+    const span = box?.querySelector<HTMLElement>('.prntr-version');
+    if (!box || !span) return;
+    cinders = rasterVersion(span);
+    if (!cinders.length) return;
+    burnAt = now;
+    box.classList.add('is-burnt');
+    for (const c of cinders) c.lit = now + Math.abs(c.x - footX) / BURN_SPREAD_PX_MS + hash(c.seed) * BURN_JITTER_MS;
+  };
+  /** Each cell by its age since it caught: solid, then the ramp with a lick above every other tick, then char
+   * (or nothing, for the cells already gone) for the hold, then, for the few embers, a flight up and to the
+   * side cooling orange to dark red and flickering, then grey paper ash rising and drifting, fading out over
+   * its last part. A cell whose ash is gone leaves the list; an empty list ends the burn. */
+  const drawBurn = (now: number) => {
+    const tick = Math.floor(now / 60);
+    const cell = (x: number, y: number, color: string, alpha = 1) => {
+      g.globalAlpha = alpha;
+      g.fillStyle = color;
+      g.fillRect(Math.floor(x / V) * V, Math.floor(y / V) * V, V, V);
+      g.globalAlpha = 1;
+    };
+    for (let i = cinders.length - 1; i >= 0; i--) {
+      const c = cinders[i];
+      const a = now - c.lit;
+      if (a < 0) {
+        cell(c.x, c.y, VERSION_INK);
+        continue;
+      }
+      if (a < BURN_MS) {
+        cell(c.x, c.y, BURN_RAMP[Math.min(2, Math.floor((a / BURN_MS) * 3))]);
+        if ((tick + c.seed) & 1) cell(c.x, c.y - V, BURN_RAMP[2]);
+        continue;
+      }
+      let b = a - BURN_MS;
+      if (b < CHAR_HOLD_MS) {
+        if (c.charred) cell(c.x, c.y, CHAR);
+        continue;
+      }
+      b -= CHAR_HOLD_MS;
+      let x = c.x;
+      let y = c.y;
+      if (c.ember) {
+        if (b < c.emberMs) {
+          const s = b / 1000;
+          if (((tick * 7 + c.seed) & 3) !== 0 || b < 120) cell(c.x + c.vx * s, c.y + c.vy * s, b < c.emberMs * 0.4 ? EMBER : EMBER_COOL);
+          continue;
+        }
+        const s = c.emberMs / 1000;
+        x += c.vx * s;
+        y += c.vy * s;
+        b -= c.emberMs;
+      }
+      if (b < c.ashMs) {
+        const s = b / 1000;
+        const k = b / c.ashMs;
+        cell(x + c.ashVx * s + 6 * Math.sin(s * 6 + c.seed), y - 30 * s - 10 * Math.sin(s * 5 + c.seed), (tick + c.seed) & 1 ? ASH : ASH_DARK, k < 0.6 ? 1 : 1 - (k - 0.6) / 0.4);
+        continue;
+      }
+      cinders.splice(i, 1);
+    }
+  };
+
   const strike = (now: number, quiet = false) => {
-    // from a random point on the cloud's underside down to the word (or past it)
-    const x0 = snap(cloudX + U + Math.random() * (cloud[0].length - 2) * U);
+    // from a random point on the cloud's underside down to the word (or past it); the second near strike is
+    // aimed at the last letter, so the version line under it catches (PRNTR-VERSION.md §9)
+    const last = slots.length - 1;
+    const col = (x: number) => Math.min(W - 1, Math.max(0, x));
+    if (!quiet) nearCount++;
+    let x0 = snap(cloudX + U + Math.random() * (cloud[0].length - 2) * U);
+    if (!quiet && nearCount === 2 && burnAt === 0) {
+      const aim: number[] = [];
+      for (let x = snap(cloudX + U); x < cloudX + (cloud[0].length - 1) * U; x += P) if (letter[col(x)] === last) aim.push(x);
+      if (aim.length) x0 = aim[Math.floor(Math.random() * aim.length)];
+    }
     const pts: [number, number][] = [];
     let x = x0;
     let y = cloudY + cloud.length * U;
-    const target = top[Math.min(W - 1, Math.max(0, x0))] >= 0 ? top[x0] : wordBottom;
+    const target = top[col(x0)] >= 0 ? top[x0] : wordBottom;
     while (y < target) {
       pts.push([x, y]);
       y += 2 * P;
@@ -790,6 +955,8 @@ export function startStorm(root: HTMLElement, h1: HTMLElement, slots: StormSlot[
     }
     pts.push([x, target]);
     bolt = { pts, until: now + 60, again: now + 130 };
+    // the line under the last letter catches when the bolt's foot is on it
+    if (!quiet && burnAt === 0 && letter[col(x0)] === last) ignite(now, x);
     // the thunder: right behind the flash
     if (!quiet) sound?.thunder(0.15, true);
     lastNear = now;
@@ -920,6 +1087,8 @@ export function startStorm(root: HTMLElement, h1: HTMLElement, slots: StormSlot[
       const h = age < 600 ? P + Math.round(((age / 600) * P) / P) * P : 2 * P;
       px(d.x, snap(d.y), WATER, P, h);
     }
+    // the version line, once struck
+    if (burnAt) drawBurn(now);
     // the bolt
     if (bolt && lit) {
       for (const [x, y] of bolt.pts) {
@@ -963,6 +1132,8 @@ export function startStorm(root: HTMLElement, h1: HTMLElement, slots: StormSlot[
     wet = new Uint8Array(W);
     drops.length = 0;
     drips.length = 0;
+    // a burn in progress ends with the size; the line stays gone
+    if (burnAt) cinders.length = 0;
   };
   onResize();
   window.addEventListener('resize', onResize);

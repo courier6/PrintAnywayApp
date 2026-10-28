@@ -251,6 +251,10 @@
 .is-corrupt .prntr-version { display: none; }
 .is-corrupt .prntr-version-corrupt { display: block; }
 
+/* Struck by the storm (storm.ts ignite, PRNTR-VERSION.md §9): from here on the storm canvas draws the line, then
+   its char, embers and ash. Hidden, not display: none, so the box keeps its size. */
+.prntr-version-box.is-burnt .prntr-version { visibility: hidden; }
+
 /* The room's frame (240×160 virtual px at --s, set by the stage), centred: the prompt and the
    footer are placed in it as the room's caption and CREDIT are, so CREDIT stays put at the cut
    (the handoff had the footer 48 px in and 40 px up from the viewport). */
