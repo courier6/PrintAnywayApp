@@ -7,6 +7,7 @@ import { PreviewState } from './components/PreviewState';
 import { PrntrHost, prefetchPrntr } from './components/PrntrHost';
 import { prntrAudioContext } from './components/prntrAudio';
 import type { Certificate } from './prntr/types';
+import { reducedMotion } from './prntr/anim';
 import { ErrorState, type ErrorKind } from './components/ErrorState';
 import { t, useLocale } from './i18n';
 import { GOLD_INK, INKS } from './lib/inks';
@@ -447,7 +448,7 @@ export default function App() {
         return;
       }
     }
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    if (reducedMotion()) {
       if (outcome === 'over') {
         // a plain cut, but not on the very frame the card went up: the GAME OVER card is held for a moment first (an Esc
         // in that moment, a new document or a new run clears the hold, so it never cuts away from what came after)

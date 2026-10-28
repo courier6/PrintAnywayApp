@@ -9,6 +9,7 @@ import { PageCanvas } from './PageCanvas';
 import type { ErrorKind } from './ErrorState';
 import { PrintReminder } from './PrintReminder';
 import { PUFF_MS, THIN_MS, VORTEX_MS, VortexCanvas } from './VortexCanvas';
+import { reducedMotion } from '../prntr/anim';
 
 interface Props {
   fileName: string;
@@ -125,7 +126,7 @@ export function PreviewState({
       return;
     }
     if (holding) {
-      if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      if (reducedMotion()) {
         onVortexDoneRef.current();
         return;
       }
