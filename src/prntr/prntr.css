@@ -1569,6 +1569,14 @@
   white-space: pre;
 }
 
+/* The run that is not on the board: a grey line under the rows, in the rows' type and column. */
+.prntr-board-run.is-out {
+  margin-top: -0.4em;
+  font-size: var(--prntr-board-row);
+  color: #BDBDBD;
+  text-align: left;
+}
+
 .prntr-board-rows {
   margin: 0;
   padding: 0;

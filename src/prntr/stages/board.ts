@@ -1,5 +1,5 @@
 import { reducedMotion, wait } from '../anim';
-import { clearBoard, pinRow, rankOf, readBoard, rowLine, today, type BoardRow } from '../board';
+import { BOARD_NAME_MAX, clearBoard, pinRow, rankOf, readBoard, rowLine, today, type BoardRow } from '../board';
 import type { Handoff, Stage } from '../types';
 import { createRoomSounds } from './room/sounds';
 
@@ -26,10 +26,11 @@ function button(className: string, text: string): HTMLButtonElement {
 }
 
 /**
- * Stage 2, the board (PRNTR-BOARD.md): over the room's last frame, the question (PIN IT / LEAVE IT)
- * when the run ranks, else the board itself; then CONTINUE hands the room's handoff on unchanged.
- * Runs after a game over too (afterOver). Started by the dev entrance (`start`) it shows the board
- * with nothing to pin.
+ * Stage 2, the board (PRNTR-BOARD.md §14): over the room's last frame, the local leader board with
+ * the run already on it when it ranks (written the moment the card comes up), its row in the HUD's
+ * yellow; a run that does not rank is a grey line under the rows. CONTINUE hands the room's handoff
+ * on unchanged. Runs after a game over too (afterOver). Started by the dev entrance (`start`) it
+ * shows the board with no run.
  */
 export const board: Stage = {
   name: 'board',
@@ -45,27 +46,26 @@ export const board: Stage = {
     // ---- DOM -------------------------------------------------------------
     const dim = el('div', 'prntr-board');
     dim.setAttribute('role', 'dialog');
-    dim.setAttribute('aria-label', 'The board');
+    dim.setAttribute('aria-label', 'Local leader board');
     const card = el('div', 'prntr-board-card');
     if (reducedMotion()) card.classList.add('is-still');
     const title = el('div', 'prntr-board-title', 'LOCAL LEADER BOARD');
-    const runEl = el('div', 'prntr-board-run');
     const rowsEl = el('ol', 'prntr-board-rows');
     const emptyEl = el('div', 'prntr-board-empty', 'NOBODY YET.');
+    // the run's line when it is not on the board: under the rows, in the rows' column
+    const outEl = el('div', 'prntr-board-run is-out');
     const buttons = el('div', 'prntr-board-buttons');
-    const pinBtn = button('prntr-board-pin', 'PIN IT');
-    const leaveBtn = button('prntr-board-leave', 'LEAVE IT');
     const goBtn = button('prntr-board-go', 'CONTINUE');
     const clearBtn = button('prntr-board-clear', 'CLEAR THE BOARD');
     const note = el('div', 'prntr-board-note');
-    buttons.append(pinBtn, leaveBtn, goBtn, clearBtn);
-    card.append(title, runEl, rowsEl, emptyEl, buttons, note);
+    buttons.append(goBtn, clearBtn);
+    card.append(title, rowsEl, emptyEl, outEl, buttons, note);
     dim.append(card);
     // a press on the dim or the card is nothing: never the room's reload
     dim.addEventListener('pointerdown', (e) => e.stopPropagation(), { signal });
     root.append(dim);
 
-    // ---- modes -----------------------------------------------------------
+    // ---- the board ---------------------------------------------------------
     const showRows = (rows: BoardRow[], newRank: number) => {
       rowsEl.replaceChildren();
       rows.forEach((r, i) => {
@@ -78,26 +78,12 @@ export const board: Stage = {
       emptyEl.hidden = rows.length > 0;
       clearBtn.hidden = rows.length === 0;
     };
-    const runLine = (r: BoardRow) => `${r.name}  ${String(r.score).padStart(4, '0')}  ${r.won ? 'CLEARED' : 'GAME OVER'}`;
-    const ask = () => {
-      if (!run) return;
-      runEl.textContent = runLine(run);
-      runEl.hidden = false;
-      rowsEl.hidden = true;
-      emptyEl.hidden = true;
-      pinBtn.hidden = false;
-      leaveBtn.hidden = false;
-      goBtn.hidden = true;
-      clearBtn.hidden = true;
-      note.textContent = '';
-      pinBtn.focus();
-      ctx.announce(`The board. ${run.name}, ${run.score}, ${run.won ? 'cleared' : 'game over'}. Pin it to this browser's board?`);
-    };
-    const showBoard = (rows: BoardRow[], newRank: number, noteText: string, say: string) => {
-      pinBtn.hidden = true;
-      leaveBtn.hidden = true;
-      goBtn.hidden = false;
+    /** The run's line under the rows: three blanks for the rank column, then the name and the score as a row has them. */
+    const outLine = (r: BoardRow, word: string) => `   ${r.name.padEnd(BOARD_NAME_MAX)} ${String(r.score).padStart(4, '0')} ${word}`;
+    const showBoard = (rows: BoardRow[], newRank: number, outText: string, noteText: string, say: string) => {
       showRows(rows, newRank);
+      outEl.textContent = outText;
+      outEl.hidden = outText === '';
       note.textContent = noteText;
       goBtn.focus();
       ctx.announce(say);
@@ -134,35 +120,22 @@ export const board: Stage = {
     );
     signal.addEventListener('abort', disarm, { once: true });
 
-    // ---- the first mode ---------------------------------------------------
+    // ---- the first paint: the run written first, when it ranks -------------
     const rows = readBoard();
-    if (run && rankOf(rows, run.score) !== -1) ask();
-    else if (run) {
-      runEl.textContent = `${runLine(run)}. NOT ON IT.`;
-      runEl.hidden = false;
-      showBoard(rows, -1, '', `${rowsWord(rows.length)} This run, ${run.name}, ${run.score}, is not on it.`);
+    if (run && rankOf(rows, run.score) !== -1) {
+      const kept = pinRow(run);
+      if (kept) showBoard(kept.rows, kept.rank, '', '', `Local leader board. ${run.name}, ${run.score}, number ${kept.rank + 1}.`);
+      else showBoard(rows, -1, outLine(run, 'NOT KEPT.'), NOTE_REFUSED, `Local leader board. ${run.name}, ${run.score}. ${NOTE_REFUSED}`);
+    } else if (run) {
+      showBoard(rows, -1, outLine(run, 'NOT ON IT.'), '', `Local leader board. ${run.name}, ${run.score}, not on it.`);
     } else {
-      runEl.hidden = true;
-      showBoard(rows, -1, '', rowsWord(rows.length));
+      showBoard(rows, -1, '', '', rowsWord(rows.length));
     }
 
     // ---- the answer -------------------------------------------------------
     return new Promise<Handoff>((resolve) => {
-      const finish = () => resolve(input);
       signal.addEventListener('abort', () => resolve({ kind: 'start' }), { once: true });
-      pinBtn.addEventListener(
-        'click',
-        () => {
-          sounds.uiClick();
-          if (!run) return;
-          const kept = pinRow(run);
-          if (kept) showBoard(kept.rows, kept.rank, '', `Pinned at number ${kept.rank + 1}.`);
-          else showBoard(readBoard(), -1, NOTE_REFUSED, NOTE_REFUSED);
-        },
-        { signal },
-      );
-      leaveBtn.addEventListener('click', () => { sounds.uiClick(); finish(); }, { signal });
-      goBtn.addEventListener('click', () => { sounds.uiClick(); finish(); }, { signal });
+      goBtn.addEventListener('click', () => { sounds.uiClick(); resolve(input); }, { signal });
     });
   },
 };
