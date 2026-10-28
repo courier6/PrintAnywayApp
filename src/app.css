@@ -638,18 +638,34 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
 }
 
 .compare-caption {
-  font: 700 10.5px ui-monospace, Menlo, monospace;
+  font: 700 10.5px ui-monospace, Menlo, Consolas, 'Cascadia Mono', monospace;
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--ink-75);
 }
 
-.page-stack {
-  position: relative;
+/* Fit the window's height: the page is as wide as the height left under the chrome (header,
+   toolbar, the stage's caption, button, gaps and padding; the pager and the progress line on a
+   multi-page document) times the page's aspect ratio, never narrower than the design's 380 px
+   (kept on laptops) and never wider than the stage. The canvas inside is width: 100% and height
+   auto, so the stack's height follows the page and the layers inset to it keep fitting. The
+   plain 380px line is the fallback for browsers without min() or dvh. */
+.page-stack,
+.page-placeholder {
+  --page-aspect: 17 / 22;
+  --stage-chrome: 290px;
   width: 380px;
-  max-width: 100%;
+  width: min(100%, max(380px, calc((100dvh - var(--stage-chrome)) * var(--page-aspect))));
   background: #ffffff;
   box-shadow: 0 12px 36px rgba(20, 30, 50, 0.15);
+}
+
+.preview-stage.is-paged :is(.page-stack, .page-placeholder) {
+  --stage-chrome: 355px;
+}
+
+.page-stack {
+  position: relative;
 }
 
 .page-layer canvas {
@@ -714,11 +730,7 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
 }
 
 .page-placeholder {
-  width: 380px;
-  max-width: 100%;
   aspect-ratio: 17 / 22;
-  background: #ffffff;
-  box-shadow: 0 12px 36px rgba(20, 30, 50, 0.15);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -756,7 +768,7 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
 }
 
 .side-label {
-  font: 700 11px ui-monospace, Menlo, monospace;
+  font: 700 11px ui-monospace, Menlo, Consolas, 'Cascadia Mono', monospace;
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--ink-70);

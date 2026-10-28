@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
 import { t, tPlural, useLocale } from '../i18n';
 import type { ErrorCode } from '../lib/errors';
 import type { ExportFormat } from '../lib/exportFile';
@@ -217,7 +217,7 @@ export function PreviewState({
       </div>
 
       <div className="preview-grid">
-        <div className="preview-stage">
+        <div className={'preview-stage' + (pageCount > 1 ? ' is-paged' : '')}>
           {showReminder && <PrintReminder onDismiss={onDismissReminder} />}
           {exportError && (
             <div className="print-reminder export-error" role="alert">
@@ -273,7 +273,10 @@ export function PreviewState({
             </div>
           )}
           {pageReady ? (
-            <div className="page-stack">
+            <div
+              className="page-stack"
+              style={{ '--page-aspect': recoloredCanvas.width / recoloredCanvas.height } as CSSProperties}
+            >
               <PageCanvas canvas={recoloredCanvas} className={'page-layer' + (vortex && !vortex.thinned ? ' is-swallowed' : '')} />
               {/* While the vortex swirls this layer is the original underneath, in its own colours, fitted
                   to the certificate's frame; restored, the same canvas is the document's own original. */}
