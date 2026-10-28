@@ -874,15 +874,14 @@
   100% { transform: translate(0, -1px); opacity: 1; }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .prntr-room-life-name.is-worn,
-  .prntr-room-life-name.is-rough {
-    animation: none;
-  }
+/* The reduced mode (PRNTR-BROWSERS.md §4.1): the game's own setting, `.is-motion-reduced` on the root, not the OS flag. */
+.prntr.is-motion-reduced .prntr-room-life-name.is-worn,
+.prntr.is-motion-reduced .prntr-room-life-name.is-rough {
+  animation: none;
+}
 
-  .prntr-room-life-name.is-worn {
-    opacity: 0.7;
-  }
+.prntr.is-motion-reduced .prntr-room-life-name.is-worn {
+  opacity: 0.7;
 }
 
 /* The slam's tear (PRNTR-SLAM.md §4.4): a HUD element the ripple's crest is passing under splits red and
@@ -896,10 +895,8 @@
   visibility: hidden;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .prntr-room-hud .is-torn {
-    animation: none;
-  }
+.prntr.is-motion-reduced .prntr-room-hud .is-torn {
+  animation: none;
 }
 
 /* A hit that leaves health: a short red flash over the room. */
@@ -1135,10 +1132,8 @@
   transform: rotate(-3deg);
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .prntr-room-over-text {
-    animation: none;
-  }
+.prntr.is-motion-reduced .prntr-room-over-text {
+  animation: none;
 }
 
 .prntr-room-continue-label {
@@ -1357,16 +1352,14 @@
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .prntr-room-badge-glow {
-    animation: none;
-    opacity: 0.7;
-  }
-  .prntr-room-badge-card,
-  .prntr-room-badge-lanyard,
-  .prntr-room-badge-clip {
-    animation: none;
-  }
+.prntr.is-motion-reduced .prntr-room-badge-glow {
+  animation: none;
+  opacity: 0.7;
+}
+.prntr.is-motion-reduced .prntr-room-badge-card,
+.prntr.is-motion-reduced .prntr-room-badge-lanyard,
+.prntr.is-motion-reduced .prntr-room-badge-clip {
+  animation: none;
 }
 
 .prntr-room-frame.is-small .prntr-room-score,

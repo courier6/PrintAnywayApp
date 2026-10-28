@@ -1,5 +1,22 @@
+/** The game's motion setting: everything moves (`full`), or the cuts and still frames of the reduced mode (`reduced`). */
+export type Motion = 'full' | 'reduced';
+
+let motion: Motion | null = null;
+
+/**
+ * The game's motion setting, read once per page load from the URL: `?motion=reduced` turns the reduced mode on,
+ * anything else (and no parameter) is the full game. The operating system's `prefers-reduced-motion` flag is not
+ * consulted (PRNTR-BROWSERS.md §3): Windows machines commonly report it without anyone having chosen it, and the game is
+ * opened on purpose and is nothing but motion. The app around the game keeps honouring the flag for its own UI.
+ */
+export function prntrMotion(): Motion {
+  if (motion === null) motion = new URLSearchParams(window.location.search).get('motion') === 'reduced' ? 'reduced' : 'full';
+  return motion;
+}
+
+/** True in the reduced mode (`prntrMotion() === 'reduced'`): the stages' cuts and still frames. */
 export function reducedMotion(): boolean {
-  return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  return prntrMotion() === 'reduced';
 }
 
 /** Resolves after `ms`, or at once when `signal` aborts. */
@@ -18,7 +35,7 @@ export function wait(ms: number, signal: AbortSignal): Promise<void> {
 
 /**
  * Calls draw(t) once per frame for `ms`, t going 0 → 1, always ending with
- * draw(1) unless aborted. Under prefers-reduced-motion it draws t = 1 at once.
+ * draw(1) unless aborted. In the reduced mode it draws t = 1 at once.
  */
 export function frames(ms: number, signal: AbortSignal, draw: (t: number) => void): Promise<void> {
   return new Promise((resolve) => {

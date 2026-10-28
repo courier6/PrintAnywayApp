@@ -1064,10 +1064,6 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
     animation: none;
   }
 
-  .vortex {
-    display: none;
-  }
-
   .btn-shimmer::after {
     content: none;
   }
