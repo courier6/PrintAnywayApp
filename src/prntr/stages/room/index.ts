@@ -2224,24 +2224,35 @@ export const room: Stage = {
     };
     const tearOn = (t: Tear) => {
       t.on = true;
-      t.el.classList.add(!reduced && Math.random() < TEAR_DROP ? 'is-dropped' : 'is-torn');
-      if (t.el === healthEl) healthFill.style.width = `${Math.random() * 100}%`;
-      else if (t.el === lifeEl) lifeFill.style.transform = `scaleX(${Math.random()})`;
-      else {
-        const n = t.el === captionEl ? captionText : t.el;
-        if (n.childElementCount === 0 && n.textContent) {
-          t.text = n;
-          t.was = n.textContent;
-          t.shown = brokenName(1 + Math.floor(Math.random() * 3), t.was);
-          n.textContent = t.shown;
-        }
+      const dropped = !reduced && Math.random() < TEAR_DROP;
+      t.el.classList.add(dropped ? 'is-dropped' : 'is-torn');
+      if (t.el === healthEl || t.el === lifeEl) {
+        // The bars: a wrong length, snapped in (the life fill's transition is off while it is torn, PRNTR-SLAM.md
+        // §4.6). A dropped bar is hidden and its fill left alone: a wrong length would show gliding back as it came
+        // into view.
+        if (dropped) return;
+        if (t.el === healthEl) healthFill.style.width = `${Math.random() * 100}%`;
+        else lifeFill.style.transform = `scaleX(${Math.random()})`;
+        return;
+      }
+      const n = t.el === captionEl ? captionText : t.el;
+      if (n.childElementCount === 0 && n.textContent) {
+        t.text = n;
+        t.was = n.textContent;
+        t.shown = brokenName(1 + Math.floor(Math.random() * 3), t.was);
+        n.textContent = t.shown;
       }
     };
     const tearOff = (t: Tear) => {
       t.on = false;
+      // The life bar's truth goes back while the tear's class still holds its transition off, and is laid out before
+      // the class goes, so the way back snaps too: the fill's 200 ms transition is a hit's, not the tear's.
+      if (t.el === lifeEl) {
+        drawHealth();
+        void lifeFill.offsetWidth;
+      }
       t.el.classList.remove('is-torn', 'is-dropped');
       if (t.el === healthEl) drawScore();
-      else if (t.el === lifeEl) drawHealth();
       else if (t.text && t.text.textContent === t.shown) t.text.textContent = t.was;
     };
     const poseTears = (now: number) => {
