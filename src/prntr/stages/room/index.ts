@@ -10,6 +10,7 @@ import { PAL, type PalKey } from './palette';
 import { createRoomSounds, type FireSound, type Hum } from './sounds';
 import { RIPPLE_MS, RIPPLE_SPEED, RippleView, rippleAt } from './ripple';
 import { startStormSound } from '../storm';
+import { BOARD_SCORE_MAX, readBoard } from '../../board';
 
 // ---------------------------------------------------------------------------
 // Tunables. The attack cycle is "tune freely" (handoff §2.7), slowed down and made
@@ -17,7 +18,8 @@ import { startStormSound } from '../storm';
 // rest is designed.
 // ---------------------------------------------------------------------------
 
-/** The high score that already exists, and the machine's life. */
+/** The machine's life: the fight ends when its damage reaches this. (No longer the HUD's label: that is the local
+ * board's best, PRNTR-SCORE.md.) */
 const HI = 1337;
 /** The machine's model number, on its health bar. Invented (Simple Products; 1337 backwards). */
 const MODEL = 'SP-7331';
@@ -348,7 +350,7 @@ const WINDOW_BREAK_SHOTS = 9;
 /** Beaten, the machine bursts apart: engulfed by the fire, or at 1337 by the
  * gun. Its eight pieces fly out and up and fall under PIECE_GRAVITY px/s² to the floor, each a
  * little nearer than the last; if there is a fire it rages on, its flames on the machine growing
- * by RAGE_MORE over the second after the score runs out instead of dying down; without one the
+ * by RAGE_MORE over the second after its life runs out instead of dying down; without one the
  * machine just falls apart in the dark room. A triumphant tune starts FANFARE_AFTER_MS after the
  * bang (the stage is won: there is no stage after this one), and the stage ends as the tune
  * starts, so the host's sky drop plays over it. */
@@ -714,7 +716,11 @@ export const room: Stage = {
     for (const n of [light, spill, fireLight, figLight, machineLight, slotLight, holeLights, windowLight, stormWash, wash, litGlows, glowFills]) n.setAttribute('aria-hidden', 'true');
     const hud = el('div', 'prntr-room-hud');
     const scoreEl = el('div', 'prntr-room-score', 'SCORE 0000');
-    const hiEl = el('div', 'prntr-room-hi', 'HI 1337');
+    const hiEl = el('div', 'prntr-room-hi', '');
+    // HI: the best on this device's board (PRNTR-SCORE.md §1.6), read once per run; none yet, no label
+    const best = readBoard()[0]?.score;
+    hiEl.textContent = best === undefined ? '' : 'HI ' + String(best).padStart(4, '0');
+    hiEl.hidden = best === undefined;
     const creditEl = el('div', 'prntr-room-credit', 'CREDIT 01');
     // Read out through ctx.announce instead, so it is not read twice.
     const captionEl = el('div', 'prntr-room-caption');
@@ -912,7 +918,9 @@ export const room: Stage = {
     let phaseAt = performance.now();
     /** While CONTINUE? shows, the pixel layer is drawn at this moment. */
     let frozenAt: number | null = null;
+    /** The player's points (0…BOARD_SCORE_MAX) and the machine's life spent (0…HI): PRNTR-SCORE.md. */
     let score = 0;
+    let damage = 0;
     let lives = LIVES_START;
     let health = PLAYER_HEALTH;
     /** The hurt flash shows until this moment (0 = none). */
@@ -1032,7 +1040,7 @@ export const room: Stage = {
     let fireSound: FireSound | null = null;
     /** The fire's growth, 0 (just lit) to 1 (full), from when it was lit (or last snuffed back). */
     const fireU = (now: number) => (fireAt === null ? 0 : Math.min(1, (now - fireAt) / FIRE_GROW_MS));
-    /** When the fire began spreading onto the machine, and when its health began to run out (from this score). */
+    /** When the fire began spreading onto the machine, and when its health began to run out (from this damage). */
     let spreadAt: number | null = null;
     let depleteAt: number | null = null;
     let depleteFrom = 0;
@@ -1066,7 +1074,7 @@ export const room: Stage = {
     let farAt = -Infinity;
     let lastNear = -Infinity;
     /** The fight's phase now, 1–3, by the machine's life left. */
-    const fightPhase = () => (HI - score <= PHASE_3_LIFE ? 3 : HI - score <= PHASE_2_LIFE ? 2 : 1);
+    const fightPhase = () => (HI - damage <= PHASE_3_LIFE ? 3 : HI - damage <= PHASE_2_LIFE ? 2 : 1);
     const attackGap = () => Math.round((fightPhase() === 3 ? ATTACK_GAP_LATE_MS : ATTACK_GAP_MS) * Math.pow(RAGE_STEP, rage));
     const scheduleBlink = (from: number, delay: number) => {
       nextBlinkAt = from + delay + Math.random() * (BLINK_MAX_MS - BLINK_MIN_MS);
@@ -1097,8 +1105,8 @@ export const room: Stage = {
     };
     const drawScore = () => {
       scoreEl.textContent = 'SCORE ' + String(score).padStart(4, '0');
-      // The health bar is the score, inverted: HI 1337 was its life all along.
-      healthFill.style.width = `${(1 - score / HI) * 100}%`;
+      // The health bar: the machine's life left.
+      healthFill.style.width = `${(1 - damage / HI) * 100}%`;
     };
     const drawHealth = () => {
       lifeFill.style.transform = `scaleX(${health / PLAYER_HEALTH})`;
@@ -1452,11 +1460,18 @@ export const room: Stage = {
       hurtUntil = now + HURT_MS;
       ctx.announce(`Hit. Health ${health}.`);
     };
-    const addScore = (n: number, now: number) => {
-      // The counter never passes 1337, whatever the last hit was worth.
-      score = Math.min(HI, score + n);
+    /** A shot on the machine: its points come off the machine's life and go on the score. */
+    const hit = (n: number, now: number) => {
+      // The life never passes 1337; the score takes the whole hit, the last one too.
+      damage = Math.min(HI, damage + n);
+      score = Math.min(BOARD_SCORE_MAX, score + n);
       drawScore();
-      if (score >= HI) startEnd(now);
+      if (damage >= HI) startEnd(now);
+    };
+    /** A projectile shot down or a thing broken: points, and nothing off the machine (PRNTR-SCORE.md). */
+    const bonus = (n: number) => {
+      score = Math.min(BOARD_SCORE_MAX, score + n);
+      drawScore();
     };
 
     // ---- the gun ----------------------------------------------------------
@@ -1649,7 +1664,7 @@ export const room: Stage = {
           while (shotsBtn.children.length < MG_SHOTS) shotsBtn.append(el('span', ''));
           drawShots();
           sounds.magIn();
-          addScore(BREAK_POINTS, now);
+          bonus(BREAK_POINTS);
           ctx.announce('A rifle magazine. The gun fires while the button is held: twelve rounds.');
           return true;
         }
@@ -1666,7 +1681,7 @@ export const room: Stage = {
             if (ok) {
               safeOpenAt = now;
               sounds.safeThunk();
-              addScore(BREAK_POINTS, now);
+              bonus(BREAK_POINTS);
               ctx.announce('The safe opens. A rifle magazine inside.');
             } else {
               sounds.keyErr();
@@ -1723,7 +1738,7 @@ export const room: Stage = {
       if (page) {
         page.shot = true;
         pagesShot++;
-        addScore(page.burning ? FIRE_PAGE_POINTS : PAGE_POINTS, now);
+        bonus(page.burning ? FIRE_PAGE_POINTS : PAGE_POINTS);
         return;
       }
       // Shootable (the handoff had them unshootable).
@@ -1735,7 +1750,7 @@ export const room: Stage = {
       if (staple) {
         staple.shot = true;
         if (staple.kind === 'staple') staplesShot++;
-        addScore(staple.kind === 'staple' ? STAPLE_POINTS : BOLT_POINTS, now);
+        bonus(staple.kind === 'staple' ? STAPLE_POINTS : BOLT_POINTS);
         return;
       }
       // On the glass, on the player's side of it: a landed page slides off at once; a staple or a bolt
@@ -1773,7 +1788,7 @@ export const room: Stage = {
       });
       if (jet) {
         explodeTube(jet, now);
-        addScore(TUBE_POINTS, now);
+        hit(TUBE_POINTS, now);
         return;
       }
       // The lamp during the sweep: the bulb pops, the sweep stops where it is, and there is no flash.
@@ -1785,7 +1800,7 @@ export const room: Stage = {
           lampStop = m.lamp;
           popBulb(hx, now);
           flashFrames = HIT_FLASH_FRAMES;
-          addScore(LAMP_POINTS, now);
+          hit(LAMP_POINTS, now);
           return;
         }
       }
@@ -1795,7 +1810,7 @@ export const room: Stage = {
         if (x >= GLASS.x0 - GLASS_HIT_PAD + sx && x < GLASS.x1 + GLASS_HIT_PAD + sx && y >= GLASS.y0 - GLASS_HIT_PAD + sy && y < GLASS.y1 + GLASS_HIT_PAD + sy) {
           flashFrames = HIT_FLASH_FRAMES;
           stoke(x, y, now);
-          addScore(SLAM_GLASS_POINTS, now);
+          hit(SLAM_GLASS_POINTS, now);
           return;
         }
       }
@@ -1807,13 +1822,13 @@ export const room: Stage = {
         rage = Math.min(RAGE_MAX, rage + 1);
         blinkAt = -Infinity;
         scheduleBlink(now, BLINK_MIN_MS);
-        addScore(BUTTON_POINTS, now);
+        hit(BUTTON_POINTS, now);
         return;
       }
       if (scene.printer !== 'wreck' && x >= MACHINE.x0 && x < MACHINE.x1 && y >= MACHINE.y0 && y < MACHINE.y1) {
         flashFrames = HIT_FLASH_FRAMES;
         stoke(x, y, now);
-        addScore(HIT_POINTS, now);
+        hit(HIT_POINTS, now);
         return;
       }
       // The door's knob, while the door is shut or ajar: it swings open. On touch its hit area is the
@@ -1823,7 +1838,7 @@ export const room: Stage = {
       if (!scene.doorBroken && doorOpenAt === null && scene.doorGap < DOOR_OPEN && x >= kx - knobPad && x < kx + KNOB.w + knobPad && y >= KNOB.y - knobPad && y < KNOB.y + KNOB.h + knobPad) {
         sounds.knobHit();
         swingDoor(now);
-        addScore(BREAK_POINTS, now);
+        bonus(BREAK_POINTS);
         return;
       }
       // The EXIT sign: the first hit knocks it loose, the second brings it down.
@@ -1837,7 +1852,7 @@ export const room: Stage = {
           sign.state = 'falling';
           sounds.signSnap();
         }
-        addScore(BREAK_POINTS, now);
+        bonus(BREAK_POINTS);
         return;
       }
       // The first aid kit: shot open, it is the player's full health, once; no points for it.
@@ -1853,7 +1868,7 @@ export const room: Stage = {
       if (scene.badge === 'floor' && inBadge(x, y)) {
         scene.badge = 'shot';
         sounds.shatter();
-        addScore(BREAK_POINTS, now);
+        bonus(BREAK_POINTS);
         return;
       }
       const thing = BREAKABLES.find((b) => !scene.broken[b.id] && !(b.id === 'fig' && (scene.broken.figPot || !figLeaf(x, y))) && x >= b.x0 && x < b.x1 && y >= b.y0 && y < b.y1);
@@ -1864,7 +1879,7 @@ export const room: Stage = {
         // the fig's planter: the tree goes over toward the machine
         if (thing.id === 'figPot') figFallAt = now;
         sounds[thing.sound]();
-        addScore(BREAK_POINTS, now);
+        bonus(BREAK_POINTS);
         if (thing.id === 'tank') startShort(now);
         if (thing.id === 'clock') {
           scene.clock.state = 'falling';
@@ -1889,13 +1904,13 @@ export const room: Stage = {
           scene.broken.art = true;
           artBrokeAt = now;
           sounds.tear();
-          addScore(BREAK_POINTS, now);
+          bonus(BREAK_POINTS);
           ctx.announce('The print tears open. The wall behind it is dripping, and a safe with a keypad is set in it.');
           return;
         }
       }
-      if (x >= DOOR.x0 && x < DOOR.x1 && y >= DOOR.y0 && y < DOOR.y1) addHole('door', x, y, now);
-      else if (x >= WINDOW.x0 && x < WINDOW.x1 && y >= WINDOW.y0 && y < WINDOW.y1) windowShot(x, y, now);
+      if (x >= DOOR.x0 && x < DOOR.x1 && y >= DOOR.y0 && y < DOOR.y1) addHole('door', x, y);
+      else if (x >= WINDOW.x0 && x < WINDOW.x1 && y >= WINDOW.y0 && y < WINDOW.y1) windowShot(x, y);
       else {
         misses++;
         if (y < FLOOR_Y) addHole('wall', x, y);
@@ -1906,7 +1921,7 @@ export const room: Stage = {
     const holeHidden = (h: Hole) => inDoorway(h, scene.doorGap) || (h.kind === 'door' && scene.doorBroken) || (h.kind === 'window' && scene.windowOpen);
     // A hole where the shot landed; through the door or the blind, the storm's light in it. Every hole in
     // the door counts toward its breaking.
-    const addHole = (kind: Hole['kind'], x: number, y: number, now = 0) => {
+    const addHole = (kind: Hole['kind'], x: number, y: number) => {
       const hole: Hole = { x: Math.floor(x), y: Math.floor(y), kind }; // the pixel under the shot
       scene.holes.push(hole);
       if (scene.holes.length > HOLES_MAX) {
@@ -1935,7 +1950,7 @@ export const room: Stage = {
       holeLights.append(box);
       if (kind === 'door') {
         doorShots++;
-        if (doorShots === DOOR_BREAK_SHOTS) breakDoor(now);
+        if (doorShots === DOOR_BREAK_SHOTS) breakDoor();
       }
     };
     // The knob shot, or the sign down: the door swings in to DOOR_OPEN from where it is, with the creak.
@@ -1947,14 +1962,14 @@ export const room: Stage = {
       frame.classList.add('is-open');
     };
     // The twelfth hole: the door breaks apart; its holes go with it; the doorway is the storm.
-    const breakDoor = (now: number) => {
+    const breakDoor = () => {
       scene.doorBroken = true;
       doorOpenAt = null;
       scene.doorGap = DOOR_OPEN;
       for (const [hole, box] of holeLightOf) box.hidden = holeHidden(hole);
       frame.classList.add('is-open');
       sounds.doorBreak();
-      addScore(BREAK_POINTS, now);
+      bonus(BREAK_POINTS);
     };
     // A mark on the glass where a thrown thing landed; the oldest go past the cap. (Cover, when it
     // comes: a thing that lands while the player is covered clanks off and leaves nothing.)
@@ -1963,15 +1978,15 @@ export const room: Stage = {
       if (scene.marks.length > GLASS_MARKS_MAX) scene.marks.shift();
     };
     // Shot open, the window takes no more holes: the shots go into the red (a miss).
-    const windowShot = (x: number, y: number, now: number) => {
+    const windowShot = (x: number, y: number) => {
       if (scene.windowOpen) {
         misses++;
         return;
       }
       addHole('window', x, y);
-      if (++windowShots >= WINDOW_BREAK_SHOTS) breakWindow(now);
+      if (++windowShots >= WINDOW_BREAK_SHOTS) breakWindow();
     };
-    const breakWindow = (now: number) => {
+    const breakWindow = () => {
       scene.windowOpen = true;
       frame.classList.add('is-window-open');
       for (const [hole, box] of holeLightOf) box.hidden = holeHidden(hole);
@@ -1980,7 +1995,7 @@ export const room: Stage = {
       window.setTimeout(() => {
         if (!signal.aborted) sounds.signCrash();
       }, 120);
-      addScore(BREAK_POINTS, now);
+      bonus(BREAK_POINTS);
     };
     // A hit on the machine inside its flames: the flame at its foot (the main flame's footprint)
     // or, once it spreads, the flames on it (drawFire's front layer in scene.ts).
@@ -2282,14 +2297,14 @@ export const room: Stage = {
     const rotation = (): AttackKind[] => {
       // the bulb shot, the scan is over for good: nothing to sweep with, nothing to flash
       const kinds: AttackKind[] = bulbOut ? ['staples', 'pages'] : ['scan', 'staples', 'pages'];
-      const low = 1 - score / HI <= INK_HEALTH;
+      const low = 1 - damage / HI <= INK_HEALTH;
       if ((fireAt !== null || mad || low) && NOZZLES_X.some((x) => !scene.stubs.includes(x))) {
         kinds.push('ink');
         // low, a second ink early in the rotation, never right after the first
         if (low) kinds.splice(1, 0, 'ink');
       }
-      if (score >= HI * BOLT_HEALTH || scene.fig.burning) kinds.push('bolts');
-      if (HI - score <= SLAM_LIFE) kinds.push('slam');
+      if (damage >= HI * BOLT_HEALTH || scene.fig.burning) kinds.push('bolts');
+      if (HI - damage <= SLAM_LIFE) kinds.push('slam');
       return kinds;
     };
     const launchAttack = (now: number) => {
@@ -2560,10 +2575,13 @@ export const room: Stage = {
           drawHealth();
         },
         stats: () => ({ shotsFired, misses, pagesShot, staplesShot, deaths, fireEver, wonBy, fightAt }),
+        /** Both counters at n (the life spent stops short of HI). */
         setScore: (n: number) => {
-          score = Math.min(HI - 1, Math.max(0, n));
+          damage = Math.min(HI - 1, Math.max(0, n));
+          score = damage;
           drawScore();
         },
+        damage: () => damage,
         health: () => health,
         setHealth: (n: number) => {
           health = Math.max(1, Math.min(PLAYER_HEALTH, Math.round(n)));
@@ -2655,8 +2673,12 @@ export const room: Stage = {
         /** The pages on the glass: where each landed, and whether it is sliding off yet. */
         landed: () => pages.filter((p) => p.landedAt !== null).map((p) => ({ x: p.x1, y: p.y1, sliding: performance.now() - p.landedAt! >= PAGE_LANDED_MS })),
         thrown: () => staples.map((s) => ({ kind: s.kind, x: s.x, y: s.y, at: s.at, shot: s.shot, hit: s.hit })),
-        /** The pages in the air or on the glass: each one's origin, lane, start and whether it is the player's. */
-        pages: () => pages.map((p) => ({ x0: p.x0, x1: p.x1, at: p.at, doc: p.doc })),
+        /** The pages in the air or on the glass: each one's origin, lane, start, whether it is the player's and its pose now. */
+        pages: () => {
+          const now = performance.now();
+          // pose: where a page in flight is now (null on the glass or not yet out)
+          return pages.map((p) => ({ x0: p.x0, x1: p.x1, at: p.at, doc: p.doc, pose: p.shot || p.landedAt !== null || now < p.at ? null : pagePose(p, now) }));
+        },
         /** The fight's phase now (1–3, PRNTR-PRESSURE.md). */
         fightPhase: () => fightPhase(),
         /** How many things in flight have been shot down (staples, nuts, bolts, pages): a shot one of them took. */
@@ -2869,20 +2891,23 @@ export const room: Stage = {
         if (fireAt !== null && spreadAt === null && fightPhase() >= 2) spreadAt = now;
         if (spreadAt !== null && depleteAt === null && now - spreadAt >= spreadMs) {
           depleteAt = now;
-          depleteFrom = score;
+          depleteFrom = damage;
           burst(now);
         }
         if (depleteAt !== null) {
           const k = Math.min(1, (now - depleteAt) / DEPLETE_MS);
-          score = Math.max(score, Math.round(depleteFrom + (HI - depleteFrom) * k));
+          // the drain banks the life it takes: the same points go on the score (PRNTR-SCORE.md §1.5)
+          const next = Math.max(damage, Math.round(depleteFrom + (HI - depleteFrom) * k));
+          score = Math.min(BOARD_SCORE_MAX, score + next - damage);
+          damage = next;
           drawScore();
           if (k >= 1) {
-            addScore(0, now);
+            hit(0, now);
             return;
           }
         }
         // the first fall to SLAM_LIFE: the slam is the machine's next attack
-        if (!slamSeen && HI - score <= SLAM_LIFE) {
+        if (!slamSeen && HI - damage <= SLAM_LIFE) {
           slamSeen = true;
           slamNow = true;
         }
@@ -3094,7 +3119,7 @@ export const room: Stage = {
       }
     };
     /** The spread onto the machine, 0..1; once the machine has burst it rages on, up to 1 + RAGE_MORE
-     * over the second after its score has run out. */
+     * over the second after its life has run out. */
     const spreadU = (now: number) => {
       if (spreadAt === null) return 0;
       const v = Math.min(1, (now - spreadAt) / spreadMs);
@@ -3183,7 +3208,7 @@ export const room: Stage = {
       if (scene.printer === 'wreck') posePieces(now);
       poseFire(now);
       scene.flashWhite = flashFrames > 0;
-      scene.damage = score / HI;
+      scene.damage = damage / HI;
       // the black cartridge's error on the display, from the cough until a while after
       const dud = sprays.find((s) => s.dud && now >= s.at && now < jetEnd(s) + DUD_ERROR_TAIL_MS);
       scene.machine.error = dud ? now - dud.at : null;

@@ -5,6 +5,7 @@ import { reducedMotion } from './anim';
 import { createPrntrAudio, type PrntrAudio } from './audio';
 import { playPop, playWrongAnswer, POP_DELAY_MS, POP_MS, REFUSE_MS, touchOnly } from './refusal';
 import { makeCertificate } from './certificate';
+import { readBoard } from './board';
 import { capturePage } from './page';
 import { runChain } from './runner';
 import { STAGES } from './stages';
@@ -146,7 +147,7 @@ export default function Prntr({ source, recolored, inkHex, stage, audioContext, 
         if (!handoff) return;
         finished = true;
         // Made before ✕ goes: if it throws, the way out must still be there.
-        const certificate = handoff.kind === 'cleared' ? makeCertificate(handoff.player, handoff.score, 1337, handoff.stats) : undefined;
+        const certificate = handoff.kind === 'cleared' ? makeCertificate(handoff.player, handoff.score, Math.max(readBoard()[0]?.score ?? 0, handoff.score), handoff.stats) : undefined;
         setDone(true);
         if (certificate) onDoneRef.current('cleared', certificate);
         else onDoneRef.current('over');
