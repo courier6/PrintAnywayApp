@@ -885,7 +885,9 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
 /* The way into Prntr looks like plain text until it has the pointer or the focus; then glyphs rise above it
    and sink below it (RisingGlyphs): superscripts, subscripts and ASCII in the ink colour, absolutely placed so
    the words never move, each fading in and out over its own life. Some are split red and cyan, as Prntr's own
-   glitches are. The wrapper is an inline block so the two words stay on one line and the glyphs have a box. */
+   glitches are. The wrapper is an inline block so the two words stay on one line and the glyphs have a box.
+   The glyphs rise and sink under the OS reduced-motion flag too, as the game ignores it (PRNTR-BROWSERS.md):
+   Windows sets the flag by preset, and held still above and below the words they read as a layout fault. */
 .help-omen {
   position: relative;
   display: inline-block;
@@ -926,13 +928,6 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
   0% { transform: translate(-50%, 0); opacity: 0; }
   20% { opacity: 1; }
   100% { transform: translate(-50%, 22px); opacity: 0; }
-}
-
-/* Reduced motion: the glyphs still come and go, a little above and below the words, but hold still. */
-@keyframes omen-still {
-  0% { opacity: 0; }
-  30% { opacity: 1; }
-  100% { opacity: 0; }
 }
 
 /* ---------- Print reminder overlay ---------- */
@@ -1078,16 +1073,6 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
 
   .btn-shimmer::after {
     content: none;
-  }
-
-  .omen-glyph {
-    animation-name: omen-still;
-    transform: translate(-50%, -10px);
-  }
-
-  .omen-glyph.is-down {
-    animation-name: omen-still;
-    transform: translate(-50%, 10px);
   }
 }
 

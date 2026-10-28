@@ -394,6 +394,6 @@ export function makeCertificate(player: string, score: number, hi: number, stats
   rect(550, 704, 2, 26, INK);
   text(id.replace(/-/g, '  '), 306, 743, 6, INK, 'center', 2);
   // the footer, under the frame
-  text('© 2026 SIMPLE PRODUCTS. WE PRINT. PRINTED IN BLACK.', 306, 775, 5.5, DIM, 'center', 0.3);
+  text('© 2026 SIMPLE PRODUCTS.', 306, 775, 5.5, DIM, 'center', 0.3);
   return { id, page: canvas };
 }
