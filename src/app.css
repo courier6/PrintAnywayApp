@@ -365,6 +365,11 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
   background: var(--ink-8);
 }
 
+/* The darker drag-over background takes the muted text under 4.5:1; a step darker keeps it over. */
+.drop-zone.drag-over :is(.hero-subline, .hero-formats) {
+  color: var(--ink-75);
+}
+
 .hero-headline {
   margin: 0;
   font-size: 38px;
