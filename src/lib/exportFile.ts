@@ -1,6 +1,9 @@
+import { canvasBlob } from './canvasBlob';
 import type { FileKind, PageSize } from './loadDocument';
 
 const PHOTO_WIDTH_PT = 612; // a photo has no page size: US Letter wide, height by its aspect
+/** File systems cap a name at 255 bytes; the source's stem is cut so the download's name stays well under. */
+const MAX_STEM_CHARS = 120;
 
 /** What a download is saved as: PDFs stay PDFs, photos stay photos. */
 export type ExportFormat = 'pdf' | 'png' | 'jpg';
@@ -29,7 +32,7 @@ export async function exportRecolored(
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
-  link.download = `${sourceName.replace(/\.[^.]+$/, '')}-recolored.${format}`;
+  link.download = `${sourceName.replace(/\.[^.]+$/, '').slice(0, MAX_STEM_CHARS)}-recolored.${format}`;
   link.click();
   setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }
@@ -50,11 +53,4 @@ async function buildPdf(pages: ExportPage[]): Promise<Blob> {
   // Copy into a fresh ArrayBuffer-backed view: pdf-lib types its output as
   // Uint8Array<ArrayBufferLike>, which BlobPart no longer accepts.
   return new Blob([new Uint8Array(pdfBytes)], { type: 'application/pdf' });
-}
-
-/** JPEG at quality 0.92; PNG is lossless. */
-function canvasBlob(canvas: HTMLCanvasElement, type: 'image/png' | 'image/jpeg'): Promise<Blob> {
-  return new Promise((resolve, reject) =>
-    canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('canvas.toBlob failed'))), type, 0.92),
-  );
 }

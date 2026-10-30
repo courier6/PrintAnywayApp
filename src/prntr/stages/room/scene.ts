@@ -392,6 +392,8 @@ export interface Emitter {
   w: number;
   h: number;
   seed: number;
+  /** Standing on the machine: its foot rides the machine's shake, its tip lags (none of it). */
+  ride?: boolean;
 }
 
 /** The fire's frame rate: each frame is held this long, the next is a step. The glows flicker in step. */
@@ -423,10 +425,13 @@ const noise2 = (x: number, y: number) => 0.65 * vnoise(x, y) + 0.35 * vnoise(x *
 
 /** The scratch field one layer's flames are summed into (max), room-sized; `cells` are its banded result. */
 const field = new Float32Array(W * H);
+/** Per cell, how much of the machine's shake it rides, 0..255: 255 at a riding flame's foot, 0 at its tip and for every other flame. */
+const rideField = new Uint8Array(W * H);
 interface FlameCache {
   tick: number;
   key: string;
   cells: Uint8Array;
+  ride: Uint8Array;
   x0: number;
   y0: number;
   x1: number;
@@ -463,7 +468,10 @@ function emitInto(e: Emitter, tq: number): void {
       let v = across * (1.05 - 0.7 * q) * (0.3 + 1.05 * n) - 0.08 - 0.22 * q;
       if (q > 1) v -= (q - 1) * 1.5; // what is above the nominal tip dies quickly
       const i = y * W + x;
-      if (v > field[i]) field[i] = v;
+      if (v > field[i]) {
+        field[i] = v;
+        rideField[i] = e.ride ? Math.round(255 * Math.max(0, 1 - q)) : 0;
+      }
     }
   }
 }
@@ -474,22 +482,26 @@ function emitInto(e: Emitter, tq: number): void {
  * a cream core; the yellow/orange edge shifting every other tick like a cycled palette) and put on `p`.
  * The banded cells are cached per layer and rebuilt only when the tick changes or the emitters' rounded
  * sizes and places do, so the fire steps at 10 fps whatever the frame rate, and is still under reduced
- * motion (t = 0) but still grows.
+ * motion (t = 0) but still grows. On the blit a riding cell (a flame on the machine) moves with the machine by
+ * its share of `shake`: all of it at the foot, none at the tip, so the flames ride the trembling machine
+ * at their feet and lag at their tips rather than hanging in the air or jittering with it.
  */
-export function drawFlames(p: Pix, layer: string, emitters: Emitter[], t: number): void {
+export function drawFlames(p: Pix, layer: string, emitters: Emitter[], t: number, shake: { x: number; y: number } = { x: 0, y: 0 }): void {
   const tick = Math.floor(t / FIRE_TICK_MS);
   let key = '';
   for (const e of emitters) key += `${Math.round(e.x)},${Math.round(e.floor)},${Math.round(e.w)},${Math.round(e.h)};`;
   let c = flameCaches.get(layer);
   if (!c) {
-    c = { tick: -1, key: '', cells: new Uint8Array(W * H), x0: 0, y0: 0, x1: -1, y1: -1 };
+    c = { tick: -1, key: '', cells: new Uint8Array(W * H), ride: new Uint8Array(W * H), x0: 0, y0: 0, x1: -1, y1: -1 };
     flameCaches.set(layer, c);
   }
   if (c.tick !== tick || c.key !== key) {
     c.tick = tick;
     c.key = key;
     field.fill(0);
+    rideField.fill(0);
     c.cells.fill(0);
+    c.ride.fill(0);
     const tq = tick * FIRE_TICK_MS;
     for (const e of emitters) emitInto(e, tq);
     const shift = tick & 1 ? 0.05 : -0.05;
@@ -501,6 +513,7 @@ export function drawFlames(p: Pix, layer: string, emitters: Emitter[], t: number
         const rim = x === 0 || x === W - 1 || y === 0 || field[i - 1] < 0.2 || field[i + 1] < 0.2 || field[i - W] < 0.2;
         const u = v + shift;
         c.cells[i] = rim ? 1 : u > 0.92 ? 4 : u > 0.5 ? 3 : 2;
+        c.ride[i] = rideField[i];
         if (x < x0) x0 = x;
         if (x > x1) x1 = x;
         if (y < y0) y0 = y;
@@ -512,10 +525,13 @@ export function drawFlames(p: Pix, layer: string, emitters: Emitter[], t: number
     c.x1 = x1;
     c.y1 = y1;
   }
+  const { x: sx, y: sy } = shake;
   for (let y = c.y0; y <= c.y1; y++) {
     for (let x = c.x0; x <= c.x1; x++) {
-      const k = c.cells[y * W + x];
-      if (k) p.set(x, y, FLAME_KEYS[k - 1]);
+      const i = y * W + x, k = c.cells[i];
+      if (!k) continue;
+      const r = c.ride[i] / 255;
+      p.set(x + Math.round(sx * r), y + Math.round(sy * r), FLAME_KEYS[k - 1]);
     }
   }
 }
@@ -544,16 +560,16 @@ export function fireEmitters(f: Fire, pieces: Piece[] | null = null): { back: Em
   const machine: Emitter[] = [];
   if (f.v > 0) {
     const v = Math.min(1, f.v);
-    if (pieces === null) machine.push({ x: 73, floor: 146, w: 4 + 3 * v, h: 20 + 46 * v, seed: 400 });
+    if (pieces === null) machine.push({ x: 73, floor: 146, w: 4 + 3 * v, h: 20 + 46 * v, seed: 400, ride: true });
     const reach = 72 + 96 * v;
     for (let x = 84; x < reach; x += 13) {
       const age = Math.min(1, (reach - x) / 40), rr = hash(x * 3);
-      machine.push({ x: x + 4 * Math.sin(x), floor: 146, w: (6 + 4 * age) * (0.8 + 0.4 * rr), h: (12 + 40 * age) * (0.6 + 0.8 * hash(x * 5)), seed: 500 + x });
+      machine.push({ x: x + 4 * Math.sin(x), floor: 146, w: (6 + 4 * age) * (0.8 + 0.4 * rr), h: (12 + 40 * age) * (0.6 + 0.8 * hash(x * 5)), seed: 500 + x, ride: pieces === null });
     }
     if (pieces === null && v > 0.45) {
       const top = (v - 0.45) / 0.55, reachTop = 72 + 96 * top;
       for (let x = 74; x < reachTop; x += 12) {
-        machine.push({ x: x + 3 * hash(x), floor: 80, w: 4 + 2 * hash(x + 1), h: (7 + 11 * Math.min(1, (reachTop - x) / 30)) * (0.6 + 0.8 * hash(x * 7)), seed: 700 + x });
+        machine.push({ x: x + 3 * hash(x), floor: 80, w: 4 + 2 * hash(x + 1), h: (7 + 11 * Math.min(1, (reachTop - x) / 30)) * (0.6 + 0.8 * hash(x * 7)), seed: 700 + x, ride: true });
       }
     }
     // the burst machine: a flame on every piece, standing two rows into its top edge (so its foot sits on the
@@ -693,9 +709,9 @@ function drawFire(p: Pix, f: Fire, layer: 'back' | 'mid'): void {
  * spreads. Drawn on the front canvas, so they are in front of the slot's red light like the pages, under
  * the things the machine throws; once it has burst, on its pieces (`pieces`).
  */
-export function drawFireFront(p: Pix, f: Fire, pieces: Piece[] | null): void {
+export function drawFireFront(p: Pix, f: Fire, pieces: Piece[] | null, shake = { x: 0, y: 0 }): void {
   const e = fireEmitters(f, pieces);
-  drawFlames(p, 'front', e.front.concat(e.machine), f.t);
+  drawFlames(p, 'front', e.front.concat(e.machine), f.t, shake);
 }
 
 /** The storm this frame: the rain's time (0 = still), the near flash 0..1, the far flicker 0..1, the bolt. */
@@ -999,7 +1015,8 @@ function drawScreen(set: (x: number, y: number, k: PalKey) => void, rect: (x0: n
  * the power light and the button, the output opening, two drawers, three ink caps on the back
  * ledge. The lid stands up for a scan; the lamp sweeps the glass and lights the lid's
  * underside; the flash whites the top and throws light over the lid. Shifted by `shake`; all
- * white for the hit flash.
+ * white for the hit flash. Its shadow is drawMachineShadow's, drawn before it (the pieces' buffer
+ * must not carry it).
  */
 export function drawMachine(p: Painter, s: MachineScene): void {
   const { x: ox, y: oy } = s.shake;
@@ -1020,8 +1037,7 @@ export function drawMachine(p: Painter, s: MachineScene): void {
   const dither = (x0: number, y0: number, x1: number, y1: number, k: PalKey, phase: number) => {
     for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) if (((x + y + phase) & 1) === 0) set(x, y, k);
   };
-  // the shadow on the carpet (the window is the light), the feet
-  p.rect(84 + ox - m.lift, 146 + oy + m.lift, 176 + ox + m.lift, 152 + oy + m.lift, 'X');
+  // the feet
   rect(74, 143, 82, 146, 'K');
   rect(158, 143, 166, 146, 'K');
   // the front face, and the top surface we look slightly down on
@@ -1134,7 +1150,56 @@ class LetterPix implements Painter {
   }
 }
 
-/** The machine drawn full size here (its shadow and standing lid included), to be sampled smaller when it stands back. */
+/** A shadow on the carpet (half-open rect): the carpet's light pixels darkened to X, its dark ones left, so it
+ * reads as a shadow on the fabric rather than a slab. Only groundShadow draws with it. */
+function shade(p: Painter, x0: number, y0: number, x1: number, y1: number): void {
+  for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) if (((x + y) & 1) === 0) p.set(x, y, 'X');
+}
+
+/** Where a thing stands on the carpet: its columns x0..x1-1 and y1, the first row under it. */
+export type Footprint = { x0: number; x1: number; y1: number };
+
+/** The footprint of a sprite blitted at (x, y) whose bottom row is its base on the carpet (the cooler's, a
+ * planter's): the base's opaque columns and the row under it. Not for a sprite with something lying beside its
+ * base in a lower row; that one declares its footprint by hand. */
+function footOf(x: number, y: number, spr: Sprite): Footprint {
+  const base = spr.rows[spr.h - 1];
+  let x0 = spr.w, x1 = 0;
+  for (let i = 0; i < spr.w; i++) if (base[i] !== '.') { x0 = Math.min(x0, i); x1 = i + 1; }
+  return { x0: x + x0, x1: x + x1, y1: y + spr.h };
+}
+
+/** Rows of a standing object's shadow. */
+const SHADOW_ROWS = 2;
+
+/** The one shadow every object standing on the carpet casts. The ceiling lights are the room's light, straight
+ * above, so a shadow hugs its object's base: a dithered band on the SHADOW_ROWS rows under the footprint, a
+ * pixel in from each side (the USB stick's, a row inside its sprite, is the model). A new object on the carpet
+ * declares its Footprint and calls this before it is drawn; an object on its side or in shards casts none.
+ * `rows` is for a shadow taller than the standard (the machine's, which fills the rows between its feet). */
+function groundShadow(p: Painter, f: Footprint, rows = SHADOW_ROWS): void {
+  shade(p, f.x0 + 1, f.y1, f.x1 - 1, f.y1 + rows);
+}
+
+/** The footprints of the room's standing furniture: the cooler (shot or whole, the same base), the fig's
+ * planter and the monstera's pot (whole or bare, the same pot; the bare sprite's lowest row is a dropped leaf,
+ * so its footprint comes from the whole one). */
+const COOLER_FOOT = footOf(COOLER_AT.x, COOLER_AT.y, SPR.COOLER);
+const FIG_FOOT = footOf(FIG_AT.pot.x, FIG_AT.pot.y, SPR.FIG_POT);
+const MONSTERA_FOOT = footOf(MONSTERA_AT.whole.x, MONSTERA_AT.whole.y, SPR.MONSTERA);
+
+/** The machine's body ends on row 142; its feet stand on rows 143–145. */
+const MACHINE_FOOT_Y1 = 143;
+
+/** The machine's shadow: the standard groundShadow under its body, deep enough to fill the rows between its
+ * feet and the row under them (4 rows), swelling and dropping by `lift` under the slam's lifted body (the body
+ * goes up with `shake`, the shadow stays on the carpet). Drawn before the machine, which covers its middle. */
+export function drawMachineShadow(p: Painter, s: Pick<SceneState, 'machine' | 'shake'>): void {
+  const { x: ox, y: oy } = s.shake, lift = s.machine.lift;
+  groundShadow(p, { x0: MACHINE_AT.x0 + ox - lift, x1: MACHINE_AT.x1 + ox + lift, y1: MACHINE_FOOT_Y1 + oy }, 4 + lift);
+}
+
+/** The machine drawn full size here (its standing lid included), to be sampled smaller when it stands back. */
 const BACK_PIX = new LetterPix(MACHINE_AT.x0, 40, 104, 112);
 
 /**
@@ -1150,6 +1215,9 @@ function drawMachineBack(p: Pix, s: MachineScene): void {
   drawMachine(BACK_PIX, { ...s, shake: { x: 0, y: 0 } });
   const cx = 120;
   const { x: ox, y: oy } = s.shake;
+  // its shadow at the same scale, on the carpet under its foot line; the body goes over its middle
+  const shadowTop = Math.round(foot - 3 * sc) + oy;
+  groundShadow(p, { x0: Math.round(cx + (MACHINE_AT.x0 - cx) * sc) + ox, x1: Math.round(cx + (MACHINE_AT.x1 - cx) * sc) + ox, y1: shadowTop }, foot + 1 + oy - shadowTop);
   // which cells this machine has put down so far, and whether with plum (2) or anything else (1)
   const mine = new Uint8Array(W * H);
   for (let y = 0; y < BACK_PIX.h; y++) {
@@ -1494,11 +1562,11 @@ export function drawRoom(p: Pix, s: SceneState): void {
       // the door's leading edge
       p.rect(13 + s.doorGap, 43, 14 + s.doorGap, 108, 'E');
     }
-    // the knob: brass, lit from the upper left, its shadow down and to the right
+    // the knob: brass, lit from the ceiling like the room, its highlight on top, its shadow straight under it
     const kx = knobX(s.doorGap);
-    p.rect(kx + 1, KNOB.y + 1, kx + KNOB.w + 1, KNOB.y + KNOB.h + 1, 'K');
+    p.rect(kx, KNOB.y + 1, kx + KNOB.w, KNOB.y + KNOB.h + 1, 'K');
     p.rect(kx, KNOB.y, kx + KNOB.w, KNOB.y + KNOB.h, 'y');
-    p.set(kx, KNOB.y, 'W');
+    p.set(kx + 1, KNOB.y, 'W');
   }
   // the EXIT sign: on the wall, hanging loose, falling, or on the floor in front of the door
   const sign = s.exit;
@@ -1555,8 +1623,9 @@ export function drawRoom(p: Pix, s: SceneState): void {
   p.blit(KIT_AT.x, KIT_AT.y, s.broken.kit ? SPR.KIT_OPEN : SPR.KIT);
   // the bullet holes, under the cooler, the plant and the machine, which stand in front of the wall
   drawHoles(p, s);
-  // cooler and plant, their shadows to the left (the window is the light)
-  p.rect(42, 128, 56, 131, 'X');
+  // cooler and plants, each with the standard groundShadow under its footprint; a plant on the carpet (the pot
+  // in shards, the monstera down) casts none
+  groundShadow(p, COOLER_FOOT);
   if (s.fire) drawFire(p, s.fire, 'back');
   if (s.broken.tank) {
     // the water on the carpet, the stump of the bottle, the cooler itself
@@ -1576,10 +1645,10 @@ export function drawRoom(p: Pix, s: SceneState): void {
     if (ck.state === 'burning') drawFlames(p, 'clock', [{ x: x + spr.w / 2, floor: y + spr.h, w: spr.w / 2 - 1, h: 14, seed: 500 }], s.fire?.t ?? s.storm.t);
   }
   if (s.fire) drawFire(p, s.fire, 'mid');
-  p.rect(190, 132, 206, 135, 'X');
+  if (!s.broken.vase) groundShadow(p, MONSTERA_FOOT);
   // the weeping fig behind the monstera: standing in its planter, or falling (then leaning) toward the machine
   // with the planter in shards; burning once it has caught from the fire
-  p.rect(170, 127, 184, 130, 'X');
+  if (!s.broken.figPot) groundShadow(p, FIG_FOOT);
   const figTree = s.broken.fig ? SPR.FIG_BARE : SPR.FIG;
   const figAt = s.broken.fig ? FIG_AT.bare : FIG_AT.tree;
   if (s.fig.fall <= 0) p.blit(figAt.x, figAt.y, figTree);
@@ -1611,7 +1680,7 @@ export function drawRoom(p: Pix, s: SceneState): void {
   }
   // the ink sprayed from behind the machine, where it is still behind it: it has not left yet
   for (const d of s.inkBehind) p.rect(d.x + sx, d.y + sy, d.x + d.size + sx, d.y + d.size + sy, d.color);
-  // the printer; its shadow falls the other way. Nothing points it out.
+  // the printer, on its shadow
   if (s.printer === 'wreck') {
     // the burst machine: its pieces in the air and on the floor, the fire raging where it stood
     for (const pc of s.pieces) p.blit(Math.round(pc.x), Math.round(pc.y), pc.spr);
@@ -1619,6 +1688,7 @@ export function drawRoom(p: Pix, s: SceneState): void {
     // standing back, before the pounce: smaller, higher on the carpet (no wear yet)
     drawMachineBack(p, s);
   } else {
+    drawMachineShadow(p, s);
     drawMachine(p, s);
     if (!s.flashWhite) drawWear(p, MACHINE_AT.x0 + s.shake.x, MACHINE_AT.y0 + s.shake.y, s.damage, s.lights[1] ? 'A' : 'a');
     // the flash whites the print too: a white rect over the hole, in the room's grid

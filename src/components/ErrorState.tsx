@@ -42,7 +42,7 @@ export function ErrorState({ kind, code, onFile, onChoose, onRetry }: Props) {
   }, [kind, code]);
   return (
     <div className="state-pad">
-      <DropZone onFile={onFile}>
+      <DropZone onFile={onFile} onChoose={onChoose}>
         <div className="error-card" role="alert">
           <div className="error-title">{t(`error.${kind}.title`)}</div>
           <div className="error-body">{t(`error.${kind}.body`)}</div>

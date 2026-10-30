@@ -1,12 +1,11 @@
 import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
 import { t, tPlural, useLocale } from '../i18n';
-import type { ErrorCode } from '../lib/errors';
 import type { ExportFormat } from '../lib/exportFile';
 import type { Ink } from '../lib/inks';
 import { OTHER_TIP, PRINTER_TIPS } from '../lib/printerTips';
 import RisingGlyphs from './RisingGlyphs';
 import { PageCanvas } from './PageCanvas';
-import type { ErrorKind } from './ErrorState';
+import type { Notice } from '../App';
 import { PrintReminder } from './PrintReminder';
 import { PUFF_MS, THIN_MS, VORTEX_MS, VortexCanvas } from './VortexCanvas';
 import { reducedMotion } from '../prntr/anim';
@@ -37,9 +36,9 @@ interface Props {
   onPrint: () => void;
   onDownload: () => void;
   busy: 'print' | 'download' | null;
-  /** A failed print or download, shown over the page until dismissed or retried. */
-  exportError: { code: ErrorCode; kind: ErrorKind } | null;
-  onDismissExportError: () => void;
+  /** A failed print or download, an unsupported file dropped, a document cut short: shown above the page until dismissed. */
+  notice: Notice | null;
+  onDismissNotice: () => void;
   showReminder: boolean;
   onDismissReminder: () => void;
   onOpenPrntr: () => void;
@@ -66,8 +65,8 @@ export function PreviewState({
   onPrint,
   onDownload,
   busy,
-  exportError,
-  onDismissExportError,
+  notice,
+  onDismissNotice,
   showReminder,
   onDismissReminder,
   onOpenPrntr,
@@ -75,6 +74,12 @@ export function PreviewState({
 }: Props) {
   const pageReady = recoloredCanvas !== null;
   const locale = useLocale();
+  // The preview takes the focus the picker's button had before it unmounted: a hidden heading naming the
+  // document, so a keyboard or screen-reader user lands on what just opened rather than on the page body.
+  const heading = useRef<HTMLHeadingElement>(null);
+  useEffect(() => {
+    heading.current?.focus({ preventScroll: true });
+  }, []);
   const inkHex = inks[inkIndex].hex;
 
   // Transient confirmation after a swatch click; flashKey restarts the
@@ -173,6 +178,16 @@ export function PreviewState({
     };
   }, []);
 
+  // Esc closes the after-print reminder.
+  useEffect(() => {
+    if (!showReminder) return;
+    const onKey = (e: globalThis.KeyboardEvent) => {
+      if (e.key === 'Escape') onDismissReminder();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [showReminder, onDismissReminder]);
+
   function holdKeyDown(e: KeyboardEvent<HTMLButtonElement>) {
     if ((e.key === ' ' || e.key === 'Enter') && !e.repeat) {
       e.preventDefault();
@@ -188,10 +203,14 @@ export function PreviewState({
 
   return (
     <>
+      <h1 className="sr-only" tabIndex={-1} ref={heading}>
+        {fileName}, {tPlural('preview.pages', pageCount)}
+      </h1>
       <div className="toolbar">
         <div className="toolbar-file">
-          <span className="file-chip">
-            {fileName} · {tPlural('preview.pages', pageCount)}
+          <span className="file-chip" title={fileName}>
+            <span className="file-name">{fileName}</span>
+            <span className="file-pages">{'\u00a0· '}{tPlural('preview.pages', pageCount)}</span>
           </span>
           <button className="btn-text" onClick={onChooseFile}>
             {t('preview.chooseDifferent')}
@@ -204,13 +223,13 @@ export function PreviewState({
               (downloadHint && pageReady && busy === null ? ' btn-shimmer' : '')
             }
             onClick={onDownload}
-            disabled={busy !== null}
+            aria-disabled={busy !== null}
           >
             {busy === 'download'
               ? t('preview.preparing')
               : t('preview.download', { format: downloadFormat.toUpperCase() })}
           </button>
-          <button className="btn-primary toolbar-print" onClick={onPrint} disabled={busy !== null}>
+          <button className="btn-primary toolbar-print" onClick={onPrint} aria-disabled={busy !== null}>
             {busy === 'print' ? t('preview.preparing') : t('preview.print')}
           </button>
         </div>
@@ -219,13 +238,22 @@ export function PreviewState({
       <div className="preview-grid">
         <div className={'preview-stage' + (pageCount > 1 ? ' is-paged' : '')}>
           {showReminder && <PrintReminder onDismiss={onDismissReminder} />}
-          {exportError && (
-            <div className="print-reminder export-error" role="alert">
+          {notice && (
+            <div className="print-reminder" role="alert">
               <div className="print-reminder-text">
-                <strong>{t(`error.${exportError.kind}.title`)}</strong> {t(`error.${exportError.kind}.body`)}
-                <span className="export-error-code">{t('error.code', { code: exportError.code })}</span>
+                {notice.kind === 'error' ? (
+                  <>
+                    <strong>{t(`error.${notice.errorKind}.title`)}</strong> {t(`error.${notice.errorKind}.body`)}
+                    <span className="export-error-code">{t('error.code', { code: notice.code })}</span>
+                  </>
+                ) : (
+                  <>
+                    <strong>{t('preview.partialTitle', { from: notice.rendered + 1, total: notice.total })}</strong>{' '}
+                    {t('preview.partialBody')}
+                  </>
+                )}
               </div>
-              <button className="btn-outline-small" onClick={onDismissExportError}>
+              <button className="btn-outline-small" onClick={onDismissNotice}>
                 {t('printReminder.dismiss')}
               </button>
             </div>
@@ -277,12 +305,17 @@ export function PreviewState({
               className="page-stack"
               style={{ '--page-aspect': recoloredCanvas.width / recoloredCanvas.height } as CSSProperties}
             >
-              <PageCanvas canvas={recoloredCanvas} className={'page-layer' + (vortex && !vortex.thinned ? ' is-swallowed' : '')} />
+              <PageCanvas
+                canvas={recoloredCanvas}
+                className={'page-layer' + (vortex && !vortex.thinned ? ' is-swallowed' : '')}
+                label={t('preview.pageAlt', { page: currentPage + 1, total: pageCount, ink: t(inks[inkIndex].nameKey) })}
+              />
               {/* While the vortex swirls this layer is the original underneath, in its own colours, fitted
                   to the certificate's frame; restored, the same canvas is the document's own original. */}
               <PageCanvas
                 canvas={swirling ? originalPage : sourceCanvas}
                 className={'page-layer page-original' + (holding ? ' visible' : '') + (swirling ? ' is-under' : '')}
+                hidden
               />
               {flashKey > 0 && (
                 <div key={flashKey} className="page-flash" style={{ color: inkHex }} />
