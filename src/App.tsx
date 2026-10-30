@@ -99,7 +99,8 @@ export default function App() {
   const [currentPage, setCurrentPage] = useState(0);
   const [holding, setHolding] = useState(false);
   const [showPrintReminder, setShowPrintReminder] = useState(false);
-  const [printImages, setPrintImages] = useState<string[]>([]);
+  // The print root's pages: an object URL each, and whether the sheet turns landscape for it.
+  const [printImages, setPrintImages] = useState<{ src: string; landscape: boolean }[]>([]);
   const [busy, setBusy] = useState<'print' | 'download' | null>(null);
   // A print or download that failed (not one stopped by a new document).
   const [exportError, setExportError] = useState<ErrorCode | null>(null);
@@ -362,9 +363,9 @@ export default function App() {
 
   // The print root's object URLs go with the pages they showed (a new document, a new ink).
   function clearPrintImages() {
-    setPrintImages((urls) => {
-      urls.forEach((u) => URL.revokeObjectURL(u));
-      return urls.length ? [] : urls;
+    setPrintImages((pages) => {
+      pages.forEach((p) => URL.revokeObjectURL(p.src));
+      return pages.length ? [] : pages;
     });
   }
 
@@ -563,7 +564,7 @@ export default function App() {
         urls.forEach((u) => URL.revokeObjectURL(u));
         return;
       }
-      flushSync(() => setPrintImages(urls));
+      flushSync(() => setPrintImages(urls.map((src, i) => ({ src, landscape: pages[i].canvas.width > pages[i].canvas.height }))));
       // The dialog snapshots the page: every image must be decoded by then, or it prints blank.
       // A decode that never settles would otherwise hold both buttons until the next file.
       const images = Array.from(printRoot.current?.querySelectorAll('img') ?? []);
@@ -709,8 +710,8 @@ export default function App() {
         onChange={onInputChange}
       />
       <div className="print-root" ref={printRoot} aria-hidden="true">
-        {printImages.map((src, i) => (
-          <img key={i} src={src} alt="" />
+        {printImages.map((p, i) => (
+          <img key={i} src={p.src} alt="" className={p.landscape ? 'is-landscape' : undefined} />
         ))}
       </div>
     </div>

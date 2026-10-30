@@ -1032,6 +1032,24 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
     break-before: page;
   }
 
+  /* Each page on a sheet of its own orientation, so a landscape page is not a strip across the top
+     of a portrait sheet (named pages; a browser without them prints portrait as before). */
+  @page portrait {
+    size: portrait;
+  }
+
+  @page landscape {
+    size: landscape;
+  }
+
+  .print-root img {
+    page: portrait;
+  }
+
+  .print-root img.is-landscape {
+    page: landscape;
+  }
+
   /* Printed from the browser's menu before the Print button: the page on screen,
      not the app around it. */
   .app:not(.has-print-pages) .no-print :is(.header, .toolbar, .pager, .preview-progress, .pill-btn, .sidebar, .compare-caption, .print-reminder, .page-original, .page-flash, .vortex, .drag-overlay) {
