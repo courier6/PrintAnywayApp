@@ -682,7 +682,7 @@ export default function App() {
             onRetry={handleRetry}
           />
         )}
-        {dragging && appState !== 'empty' && (
+        {dragging && appState === 'preview' && (
           <div className="drag-overlay">
             <div className="drag-overlay-frame" aria-hidden="true" />
             <div className="drag-overlay-headline">
