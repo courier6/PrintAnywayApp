@@ -9,12 +9,13 @@ import { prntrAudioContext } from './components/prntrAudio';
 import type { Certificate } from './prntr/types';
 import { reducedMotion } from './prntr/anim';
 import { ErrorState, type ErrorKind } from './components/ErrorState';
-import { t, useLocale } from './i18n';
+import { t, tPlural, useLocale } from './i18n';
 import { GOLD_INK, INKS } from './lib/inks';
 import { fileKind, loadDocument, prefetchPdfjs, type SourceDocument } from './lib/loadDocument';
-import { classifyError, logAppError, type ErrorCode } from './lib/errors';
+import { classifyError, logAppError, UnsupportedFileError, type ErrorCode } from './lib/errors';
 import { DocumentReplacedError, PageStore, type PageSnapshot } from './lib/pageStore';
 import { exportFormat, exportRecolored, type ExportFormat, type ExportPage } from './lib/exportFile';
+import { canvasBlob } from './lib/canvasBlob';
 
 type AppState = 'empty' | 'processing' | 'preview' | 'error' | 'prntr';
 
@@ -27,6 +28,12 @@ const KIND_BY_CODE: Record<ErrorCode, ErrorKind> = {
   'PA-105': 'image',
   'PA-106': 'memory',
 };
+
+/** A notice over the preview: a print or download that failed (not one stopped by a new document), an
+ * unsupported file dropped on the document, or a document cut short by a page that would not render. */
+export type Notice =
+  | { kind: 'error'; code: ErrorCode; errorKind: ErrorKind }
+  | { kind: 'partial'; rendered: number; total: number };
 
 /** The document the certificate replaced, as the vortex brings it back (PRNTR-VORTEX.md). */
 interface OriginalDocument {
@@ -42,6 +49,12 @@ interface OriginalDocument {
 const PRINT_DECODE_MS = 5000;
 /** Under reduced motion, how long the GAME OVER card stays up before the plain cut back to the app. */
 const REDUCED_OVER_HOLD_MS = 2000;
+
+/** A page as a PNG object URL for the print root, encoded off the main thread (toDataURL would hold it
+ * for every page at once: a 20-page print froze it for 0.3–2 s). */
+async function pngUrl(canvas: HTMLCanvasElement): Promise<string> {
+  return URL.createObjectURL(await canvasBlob(canvas, 'image/png'));
+}
 
 const scheduleIdle: (cb: () => void) => number =
   typeof window.requestIdleCallback === 'function'
@@ -91,11 +104,13 @@ export default function App() {
   const [currentPage, setCurrentPage] = useState(0);
   const [holding, setHolding] = useState(false);
   const [showPrintReminder, setShowPrintReminder] = useState(false);
-  const [printImages, setPrintImages] = useState<string[]>([]);
+  // The print root's pages: an object URL each, and whether the sheet turns landscape for it.
+  const [printImages, setPrintImages] = useState<{ src: string; landscape: boolean }[]>([]);
   const [busy, setBusy] = useState<'print' | 'download' | null>(null);
-  // A print or download that failed (not one stopped by a new document).
-  const [exportError, setExportError] = useState<ErrorCode | null>(null);
+  const [notice, setNotice] = useState<Notice | null>(null);
   const [dragging, setDragging] = useState(false);
+  // What a screen reader is told when a document's preview is ready (a live region kept mounted).
+  const [status, setStatus] = useState('');
   const [, setPagesVersion] = useState(0);
   const [prntrStage, setPrntrStage] = useState(0);
   const prntrPage = useRef<{ source: HTMLCanvasElement; recolored: HTMLCanvasElement } | null>(null);
@@ -276,11 +291,12 @@ export default function App() {
     }
     releaseDocument();
     setShowPrintReminder(false);
-    setPrintImages([]);
+    clearPrintImages();
     setHolding(false);
     setBusy(null);
-    setExportError(null);
+    setNotice(null);
     setVortexOriginal(null);
+    setStatus('');
     setFileName(name);
     if (exportAs) setFormat(exportAs);
     setCurrentPage(0);
@@ -288,8 +304,14 @@ export default function App() {
   }
 
   async function handleFile(file: File) {
-    lastFile.current = file;
     const kind = fileKind(file);
+    if (kind === null && appState === 'preview') {
+      // A document is open: an unsupported file is a notice over it, not the end of it.
+      logAppError('PA-101', new UnsupportedFileError(), file);
+      setNotice({ kind: 'error', code: 'PA-101', errorKind: KIND_BY_CODE['PA-101'] });
+      return;
+    }
+    lastFile.current = file;
     const token = startDocument(file.name, kind && exportFormat(kind));
     setPageCount(0);
     setProcessedCount(0);
@@ -318,13 +340,29 @@ export default function App() {
   // Pages `from` to the end, in order, into the store; the first one shows the preview. Stops when a newer document starts.
   async function renderPages(doc: SourceDocument, from: number, token: number) {
     for (let i = from; i < doc.pageCount; i++) {
-      const { canvas, sizePt } = await doc.renderPage(i);
+      let rendered;
+      try {
+        rendered = await doc.renderPage(i);
+      } catch (err) {
+        if (token !== runToken.current || i === 0) throw err;
+        // A page that will not render after pages that did: the document is the pages before it, and a
+        // notice says which are missing, rather than the error card over everything already rendered.
+        logAppError(classifyError(err), err, lastFile.current);
+        store.truncate(i);
+        setPageCount(i);
+        setNotice({ kind: 'partial', rendered: i, total: doc.pageCount });
+        return;
+      }
+      const { canvas, sizePt } = rendered;
       if (token !== runToken.current) return;
       store.setSource(i, canvas, sizePt);
       store.ensureRecolored(i, inkRef.current);
       setProcessedCount(i + 1);
       setPagesVersion((v) => v + 1);
-      if (i === 0) setAppState('preview');
+      if (i === 0) {
+        setAppState('preview');
+        setStatus(t('status.ready', { name: lastFile.current?.name ?? '', pages: tPlural('preview.pages', doc.pageCount) }));
+      }
       // Yield to the UI between pages so progress and preview stay live.
       await new Promise((r) => setTimeout(r, 0));
       if (token !== runToken.current) return;
@@ -352,6 +390,14 @@ export default function App() {
     }
   }
 
+  // The print root's object URLs go with the pages they showed (a new document, a new ink).
+  function clearPrintImages() {
+    setPrintImages((pages) => {
+      pages.forEach((p) => URL.revokeObjectURL(p.src));
+      return pages.length ? [] : pages;
+    });
+  }
+
   // The pages already rendered stay in the store; only the parsed file goes.
   function releaseDocument() {
     docRef.current?.destroy();
@@ -361,7 +407,7 @@ export default function App() {
   function selectInk(index: number) {
     setInkIndex(index);
     // The print pages are in the old ink; the next Print makes them again.
-    setPrintImages([]);
+    clearPrintImages();
     const hex = inks[index].hex;
     inkRef.current = hex;
     // Visible page synchronously; the rest catch up in idle time.
@@ -537,12 +583,17 @@ export default function App() {
   async function handlePrint() {
     if (busy) return;
     const token = runToken.current;
-    setShowPrintReminder(true);
-    setExportError(null);
+    setShowPrintReminder(false);
+    setNotice(null);
     setBusy('print');
     try {
       const pages = await collectAllRecolored(token);
-      flushSync(() => setPrintImages(pages.map((p) => p.canvas.toDataURL('image/png'))));
+      const urls = await Promise.all(pages.map((p) => pngUrl(p.canvas)));
+      if (token !== runToken.current) {
+        urls.forEach((u) => URL.revokeObjectURL(u));
+        return;
+      }
+      flushSync(() => setPrintImages(urls.map((src, i) => ({ src, landscape: pages[i].canvas.width > pages[i].canvas.height }))));
       // The dialog snapshots the page: every image must be decoded by then, or it prints blank.
       // A decode that never settles would otherwise hold both buttons until the next file.
       const images = Array.from(printRoot.current?.querySelectorAll('img') ?? []);
@@ -552,6 +603,8 @@ export default function App() {
       ]);
       if (token !== runToken.current) return;
       window.print();
+      // Back from the dialog (at once where the browser does not wait): the fallback for a grey print.
+      if (token === runToken.current) setShowPrintReminder(true);
     } catch (err) {
       if (token !== runToken.current || err instanceof DocumentReplacedError) return;
       setShowPrintReminder(false);
@@ -565,7 +618,7 @@ export default function App() {
   async function handleDownload() {
     if (busy) return;
     const token = runToken.current;
-    setExportError(null);
+    setNotice(null);
     setBusy('download');
     try {
       const pages = await collectAllRecolored(token);
@@ -582,7 +635,7 @@ export default function App() {
   function reportExportError(err: unknown) {
     const code = classifyError(err);
     logAppError(code, err, lastFile.current);
-    setExportError(code);
+    setNotice({ kind: 'error', code, errorKind: KIND_BY_CODE[code] });
   }
 
   function handleRetry() {
@@ -608,6 +661,9 @@ export default function App() {
         }}
       >
         <Header />
+        <div className="sr-only" role="status">
+          {status}
+        </div>
         {appState === 'empty' && (
           <EmptyState onFile={(f) => void handleFile(f)} onChoose={openPicker} />
         )}
@@ -635,8 +691,8 @@ export default function App() {
             onPrint={() => void handlePrint()}
             onDownload={() => void handleDownload()}
             busy={busy}
-            exportError={exportError && { code: exportError, kind: KIND_BY_CODE[exportError] }}
-            onDismissExportError={() => setExportError(null)}
+            notice={notice}
+            onDismissNotice={() => setNotice(null)}
             showReminder={showPrintReminder}
             onDismissReminder={() => setShowPrintReminder(false)}
             onOpenPrntr={() => enterPrntr(0)}
@@ -652,7 +708,7 @@ export default function App() {
             onRetry={handleRetry}
           />
         )}
-        {dragging && appState !== 'empty' && (
+        {dragging && appState === 'preview' && (
           <div className="drag-overlay">
             <div className="drag-overlay-frame" aria-hidden="true" />
             <div className="drag-overlay-headline">
@@ -688,8 +744,8 @@ export default function App() {
         onChange={onInputChange}
       />
       <div className="print-root" ref={printRoot} aria-hidden="true">
-        {printImages.map((src, i) => (
-          <img key={i} src={src} alt="" />
+        {printImages.map((p, i) => (
+          <img key={i} src={p.src} alt="" className={p.landscape ? 'is-landscape' : undefined} />
         ))}
       </div>
     </div>

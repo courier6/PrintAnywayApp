@@ -48,6 +48,19 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
   outline-offset: 2px;
 }
 
+/* Read by assistive technology, drawn nowhere: headings and status lines the layout has no room for. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
 .app {
   --ink-75: color-mix(in oklab, var(--ink) 75%, white);
   --ink-70: color-mix(in oklab, var(--ink) 70%, white);
@@ -247,12 +260,13 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
 }
 
 @media (hover: hover) {
-  .btn-primary:hover:not(:disabled) {
+  .btn-primary:hover:not(:disabled, [aria-disabled='true']) {
     opacity: 0.9;
   }
 }
 
-.btn-primary:disabled {
+/* Busy (aria-disabled) looks disabled but keeps the focus: a disabled button drops it to the page body. */
+.btn-primary:is(:disabled, [aria-disabled='true']) {
   opacity: 0.6;
   cursor: default;
 }
@@ -272,7 +286,7 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
   cursor: pointer;
 }
 
-.btn-secondary:disabled {
+.btn-secondary:is(:disabled, [aria-disabled='true']) {
   opacity: 0.6;
   cursor: default;
 }
@@ -334,6 +348,7 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
 
 .drop-zone {
   flex: 1;
+  cursor: pointer;
   border: 2px dashed var(--ink-38);
   background: var(--ink-4);
   display: flex;
@@ -349,6 +364,11 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
 .drop-zone.drag-over {
   border-color: var(--ink-70);
   background: var(--ink-8);
+}
+
+/* The darker drag-over background takes the muted text under 4.5:1; a step darker keeps it over. */
+.drop-zone.drag-over :is(.hero-subline, .hero-formats) {
+  color: var(--ink-75);
 }
 
 .hero-headline {
@@ -540,6 +560,8 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
 .toolbar-actions {
   justify-self: end;
   padding-right: 26px;
+  display: flex;
+  gap: 10px;
 }
 
 .toolbar-file {
@@ -564,13 +586,24 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
   white-space: nowrap;
 }
 
+/* A long name is cut with an ellipsis; the page count after it always shows, and the title holds the whole name. */
 .file-chip {
   font-size: 13px;
   color: var(--ink-70);
+  display: inline-flex;
+  min-width: 0;
+  max-width: 34ch;
+  white-space: nowrap;
+}
+
+.file-name {
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 34ch;
+  min-width: 0;
+}
+
+.file-pages {
+  flex: none;
 }
 
 .pager {
@@ -610,11 +643,6 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
   font-size: 13px;
   font-weight: 700;
   color: var(--ink);
-}
-
-.toolbar-actions {
-  display: flex;
-  gap: 10px;
 }
 
 /* ---------- Preview stage ---------- */
@@ -759,12 +787,16 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
 
 /* ---------- Sidebar ---------- */
 
+/* As tall as the stage and no taller: with contain: size its content gives it no height, so the
+   printer tips opening scroll inside the column instead of growing the row and moving the page. */
 .sidebar {
   border-left: 1px solid var(--ink-18);
   padding: 24px;
   display: flex;
   flex-direction: column;
   gap: 22px;
+  contain: size;
+  overflow-y: auto;
 }
 
 .side-label {
@@ -790,6 +822,13 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
   cursor: pointer;
   flex: none;
   position: relative;
+}
+
+/* The focus ring sits outside the selected ring (white 2 px, ink 4 px) and is dashed, so a focused
+   swatch never reads as the selected one and the selected one still shows its focus. */
+.swatch:focus-visible {
+  outline: 2px dashed var(--ink);
+  outline-offset: 6px;
 }
 
 /* A bigger target than the dot for a finger: 36 × 44 px, short of the next swatch. */
@@ -930,13 +969,11 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
   100% { transform: translate(-50%, 22px); opacity: 0; }
 }
 
-/* ---------- Print reminder overlay ---------- */
+/* ---------- Print reminder and the stage's notices ---------- */
 
+/* In the stage's flow, its first child: it pushes the caption and the pager down rather than
+   covering them, and Esc or "Got it" closes it. */
 .print-reminder {
-  position: absolute;
-  top: 16px;
-  left: 50%;
-  transform: translateX(-50%);
   background: #ffffff;
   border: 1.5px solid var(--ink);
   padding: 14px 18px;
@@ -945,8 +982,7 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
   align-items: center;
   box-shadow: 0 12px 32px color-mix(in oklab, var(--ink) 22%, transparent);
   width: 470px;
-  max-width: calc(100% - 32px);
-  z-index: 3;
+  max-width: 100%;
   text-align: left;
 }
 
@@ -1032,6 +1068,24 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
     break-before: page;
   }
 
+  /* Each page on a sheet of its own orientation, so a landscape page is not a strip across the top
+     of a portrait sheet (named pages; a browser without them prints portrait as before). */
+  @page portrait {
+    size: portrait;
+  }
+
+  @page landscape {
+    size: landscape;
+  }
+
+  .print-root img {
+    page: portrait;
+  }
+
+  .print-root img.is-landscape {
+    page: landscape;
+  }
+
   /* Printed from the browser's menu before the Print button: the page on screen,
      not the app around it. */
   .app:not(.has-print-pages) .no-print :is(.header, .toolbar, .pager, .preview-progress, .pill-btn, .sidebar, .compare-caption, .print-reminder, .page-original, .page-flash, .vortex, .drag-overlay) {
@@ -1102,9 +1156,12 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
     grid-template-columns: minmax(0, 1fr);
   }
 
+  /* Under the stage here, so its height is its content's again. */
   .sidebar {
     border-left: none;
     border-top: 1px solid var(--ink-18);
+    contain: none;
+    overflow-y: visible;
   }
 
   .toolbar {
@@ -1125,4 +1182,5 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
     flex-basis: 100%;
     justify-content: center;
   }
+
 }
