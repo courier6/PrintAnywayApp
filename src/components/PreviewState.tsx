@@ -222,13 +222,13 @@ export function PreviewState({
               (downloadHint && pageReady && busy === null ? ' btn-shimmer' : '')
             }
             onClick={onDownload}
-            disabled={busy !== null}
+            aria-disabled={busy !== null}
           >
             {busy === 'download'
               ? t('preview.preparing')
               : t('preview.download', { format: downloadFormat.toUpperCase() })}
           </button>
-          <button className="btn-primary toolbar-print" onClick={onPrint} disabled={busy !== null}>
+          <button className="btn-primary toolbar-print" onClick={onPrint} aria-disabled={busy !== null}>
             {busy === 'print' ? t('preview.preparing') : t('preview.print')}
           </button>
         </div>

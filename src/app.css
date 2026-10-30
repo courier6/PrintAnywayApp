@@ -260,12 +260,13 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
 }
 
 @media (hover: hover) {
-  .btn-primary:hover:not(:disabled) {
+  .btn-primary:hover:not(:disabled, [aria-disabled='true']) {
     opacity: 0.9;
   }
 }
 
-.btn-primary:disabled {
+/* Busy (aria-disabled) looks disabled but keeps the focus: a disabled button drops it to the page body. */
+.btn-primary:is(:disabled, [aria-disabled='true']) {
   opacity: 0.6;
   cursor: default;
 }
@@ -285,7 +286,7 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
   cursor: pointer;
 }
 
-.btn-secondary:disabled {
+.btn-secondary:is(:disabled, [aria-disabled='true']) {
   opacity: 0.6;
   cursor: default;
 }
