@@ -304,12 +304,17 @@ export function PreviewState({
               className="page-stack"
               style={{ '--page-aspect': recoloredCanvas.width / recoloredCanvas.height } as CSSProperties}
             >
-              <PageCanvas canvas={recoloredCanvas} className={'page-layer' + (vortex && !vortex.thinned ? ' is-swallowed' : '')} />
+              <PageCanvas
+                canvas={recoloredCanvas}
+                className={'page-layer' + (vortex && !vortex.thinned ? ' is-swallowed' : '')}
+                label={t('preview.pageAlt', { page: currentPage + 1, total: pageCount, ink: t(inks[inkIndex].nameKey) })}
+              />
               {/* While the vortex swirls this layer is the original underneath, in its own colours, fitted
                   to the certificate's frame; restored, the same canvas is the document's own original. */}
               <PageCanvas
                 canvas={swirling ? originalPage : sourceCanvas}
                 className={'page-layer page-original' + (holding ? ' visible' : '') + (swirling ? ' is-under' : '')}
+                hidden
               />
               {flashKey > 0 && (
                 <div key={flashKey} className="page-flash" style={{ color: inkHex }} />
