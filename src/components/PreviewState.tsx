@@ -208,8 +208,9 @@ export function PreviewState({
       </h1>
       <div className="toolbar">
         <div className="toolbar-file">
-          <span className="file-chip">
-            {fileName} · {tPlural('preview.pages', pageCount)}
+          <span className="file-chip" title={fileName}>
+            <span className="file-name">{fileName}</span>
+            <span className="file-pages">{'\u00a0· '}{tPlural('preview.pages', pageCount)}</span>
           </span>
           <button className="btn-text" onClick={onChooseFile}>
             {t('preview.chooseDifferent')}

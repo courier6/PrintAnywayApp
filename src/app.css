@@ -586,13 +586,24 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
   white-space: nowrap;
 }
 
+/* A long name is cut with an ellipsis; the page count after it always shows, and the title holds the whole name. */
 .file-chip {
   font-size: 13px;
   color: var(--ink-70);
+  display: inline-flex;
+  min-width: 0;
+  max-width: 34ch;
+  white-space: nowrap;
+}
+
+.file-name {
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 34ch;
+  min-width: 0;
+}
+
+.file-pages {
+  flex: none;
 }
 
 .pager {
