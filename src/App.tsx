@@ -43,6 +43,14 @@ const PRINT_DECODE_MS = 5000;
 /** Under reduced motion, how long the GAME OVER card stays up before the plain cut back to the app. */
 const REDUCED_OVER_HOLD_MS = 2000;
 
+/** A page as a PNG object URL for the print root: toBlob encodes off the main thread, where
+ * toDataURL would hold it for every page at once (a 20-page print froze it for 0.3–2 s). */
+function pngUrl(canvas: HTMLCanvasElement): Promise<string> {
+  return new Promise((resolve, reject) =>
+    canvas.toBlob((b) => (b ? resolve(URL.createObjectURL(b)) : reject(new Error('canvas.toBlob failed'))), 'image/png'),
+  );
+}
+
 const scheduleIdle: (cb: () => void) => number =
   typeof window.requestIdleCallback === 'function'
     ? (cb) => window.requestIdleCallback(cb)
@@ -276,7 +284,7 @@ export default function App() {
     }
     releaseDocument();
     setShowPrintReminder(false);
-    setPrintImages([]);
+    clearPrintImages();
     setHolding(false);
     setBusy(null);
     setExportError(null);
@@ -352,6 +360,14 @@ export default function App() {
     }
   }
 
+  // The print root's object URLs go with the pages they showed (a new document, a new ink).
+  function clearPrintImages() {
+    setPrintImages((urls) => {
+      urls.forEach((u) => URL.revokeObjectURL(u));
+      return urls.length ? [] : urls;
+    });
+  }
+
   // The pages already rendered stay in the store; only the parsed file goes.
   function releaseDocument() {
     docRef.current?.destroy();
@@ -361,7 +377,7 @@ export default function App() {
   function selectInk(index: number) {
     setInkIndex(index);
     // The print pages are in the old ink; the next Print makes them again.
-    setPrintImages([]);
+    clearPrintImages();
     const hex = inks[index].hex;
     inkRef.current = hex;
     // Visible page synchronously; the rest catch up in idle time.
@@ -542,7 +558,12 @@ export default function App() {
     setBusy('print');
     try {
       const pages = await collectAllRecolored(token);
-      flushSync(() => setPrintImages(pages.map((p) => p.canvas.toDataURL('image/png'))));
+      const urls = await Promise.all(pages.map((p) => pngUrl(p.canvas)));
+      if (token !== runToken.current) {
+        urls.forEach((u) => URL.revokeObjectURL(u));
+        return;
+      }
+      flushSync(() => setPrintImages(urls));
       // The dialog snapshots the page: every image must be decoded by then, or it prints blank.
       // A decode that never settles would otherwise hold both buttons until the next file.
       const images = Array.from(printRoot.current?.querySelectorAll('img') ?? []);
