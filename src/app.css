@@ -348,6 +348,7 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
 
 .drop-zone {
   flex: 1;
+  cursor: pointer;
   border: 2px dashed var(--ink-38);
   background: var(--ink-4);
   display: flex;
