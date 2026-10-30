@@ -787,12 +787,16 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
 
 /* ---------- Sidebar ---------- */
 
+/* As tall as the stage and no taller: with contain: size its content gives it no height, so the
+   printer tips opening scroll inside the column instead of growing the row and moving the page. */
 .sidebar {
   border-left: 1px solid var(--ink-18);
   padding: 24px;
   display: flex;
   flex-direction: column;
   gap: 22px;
+  contain: size;
+  overflow-y: auto;
 }
 
 .side-label {
@@ -1152,9 +1156,12 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
     grid-template-columns: minmax(0, 1fr);
   }
 
+  /* Under the stage here, so its height is its content's again. */
   .sidebar {
     border-left: none;
     border-top: 1px solid var(--ink-18);
+    contain: none;
+    overflow-y: visible;
   }
 
   .toolbar {
