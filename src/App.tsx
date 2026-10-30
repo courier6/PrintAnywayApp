@@ -9,7 +9,7 @@ import { prntrAudioContext } from './components/prntrAudio';
 import type { Certificate } from './prntr/types';
 import { reducedMotion } from './prntr/anim';
 import { ErrorState, type ErrorKind } from './components/ErrorState';
-import { t, useLocale } from './i18n';
+import { t, tPlural, useLocale } from './i18n';
 import { GOLD_INK, INKS } from './lib/inks';
 import { fileKind, loadDocument, prefetchPdfjs, type SourceDocument } from './lib/loadDocument';
 import { classifyError, logAppError, UnsupportedFileError, type ErrorCode } from './lib/errors';
@@ -110,6 +110,8 @@ export default function App() {
   const [busy, setBusy] = useState<'print' | 'download' | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
   const [dragging, setDragging] = useState(false);
+  // What a screen reader is told when a document's preview is ready (a live region kept mounted).
+  const [status, setStatus] = useState('');
   const [, setPagesVersion] = useState(0);
   const [prntrStage, setPrntrStage] = useState(0);
   const prntrPage = useRef<{ source: HTMLCanvasElement; recolored: HTMLCanvasElement } | null>(null);
@@ -295,6 +297,7 @@ export default function App() {
     setBusy(null);
     setNotice(null);
     setVortexOriginal(null);
+    setStatus('');
     setFileName(name);
     if (exportAs) setFormat(exportAs);
     setCurrentPage(0);
@@ -357,7 +360,10 @@ export default function App() {
       store.ensureRecolored(i, inkRef.current);
       setProcessedCount(i + 1);
       setPagesVersion((v) => v + 1);
-      if (i === 0) setAppState('preview');
+      if (i === 0) {
+        setAppState('preview');
+        setStatus(t('status.ready', { name: lastFile.current?.name ?? '', pages: tPlural('preview.pages', doc.pageCount) }));
+      }
       // Yield to the UI between pages so progress and preview stay live.
       await new Promise((r) => setTimeout(r, 0));
       if (token !== runToken.current) return;
@@ -656,6 +662,9 @@ export default function App() {
         }}
       >
         <Header />
+        <div className="sr-only" role="status">
+          {status}
+        </div>
         {appState === 'empty' && (
           <EmptyState onFile={(f) => void handleFile(f)} onChoose={openPicker} />
         )}

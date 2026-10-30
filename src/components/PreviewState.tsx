@@ -74,6 +74,12 @@ export function PreviewState({
 }: Props) {
   const pageReady = recoloredCanvas !== null;
   const locale = useLocale();
+  // The preview takes the focus the picker's button had before it unmounted: a hidden heading naming the
+  // document, so a keyboard or screen-reader user lands on what just opened rather than on the page body.
+  const heading = useRef<HTMLHeadingElement>(null);
+  useEffect(() => {
+    heading.current?.focus({ preventScroll: true });
+  }, []);
   const inkHex = inks[inkIndex].hex;
 
   // Transient confirmation after a swatch click; flashKey restarts the
@@ -197,6 +203,9 @@ export function PreviewState({
 
   return (
     <>
+      <h1 className="sr-only" tabIndex={-1} ref={heading}>
+        {fileName}, {tPlural('preview.pages', pageCount)}
+      </h1>
       <div className="toolbar">
         <div className="toolbar-file">
           <span className="file-chip">
