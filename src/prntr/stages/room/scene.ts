@@ -1015,7 +1015,8 @@ function drawScreen(set: (x: number, y: number, k: PalKey) => void, rect: (x0: n
  * the power light and the button, the output opening, two drawers, three ink caps on the back
  * ledge. The lid stands up for a scan; the lamp sweeps the glass and lights the lid's
  * underside; the flash whites the top and throws light over the lid. Shifted by `shake`; all
- * white for the hit flash.
+ * white for the hit flash. Its shadow is drawMachineShadow's, drawn before it (the pieces' buffer
+ * must not carry it).
  */
 export function drawMachine(p: Painter, s: MachineScene): void {
   const { x: ox, y: oy } = s.shake;
@@ -1036,8 +1037,7 @@ export function drawMachine(p: Painter, s: MachineScene): void {
   const dither = (x0: number, y0: number, x1: number, y1: number, k: PalKey, phase: number) => {
     for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) if (((x + y + phase) & 1) === 0) set(x, y, k);
   };
-  // the shadow on the carpet (the window is the light), the feet
-  p.rect(84 + ox - m.lift, 146 + oy + m.lift, 176 + ox + m.lift, 152 + oy + m.lift, 'X');
+  // the feet
   rect(74, 143, 82, 146, 'K');
   rect(158, 143, 166, 146, 'K');
   // the front face, and the top surface we look slightly down on
@@ -1150,7 +1150,25 @@ class LetterPix implements Painter {
   }
 }
 
-/** The machine drawn full size here (its shadow and standing lid included), to be sampled smaller when it stands back. */
+/** A shadow on the carpet (half-open rect): the carpet's light pixels darkened to X, its dark ones left, so it
+ * reads as a shadow on the fabric rather than a slab. The window is the room's light: every shadow lies on
+ * its object's foot rows and runs off to the left. */
+function shade(p: Painter, x0: number, y0: number, x1: number, y1: number): void {
+  for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) if (((x + y) & 1) === 0) p.set(x, y, 'X');
+}
+
+/** How far the machine's shadow runs left of its body, px. */
+const MACHINE_SHADOW_REACH = 12;
+
+/** The machine's shadow: under its feet (rows 143–146, the feet's rows) across the body and MACHINE_SHADOW_REACH
+ * off to the left, the window being the light; swelling and dropping by `lift` under the slam's lifted body (the
+ * body goes up with `shake`, the shadow stays on the carpet). Drawn before the machine, which covers its middle. */
+export function drawMachineShadow(p: Painter, s: Pick<SceneState, 'machine' | 'shake'>): void {
+  const { x: ox, y: oy } = s.shake, lift = s.machine.lift;
+  shade(p, MACHINE_AT.x0 - MACHINE_SHADOW_REACH + ox - lift, 143 + oy + lift, MACHINE_AT.x1 + ox + lift, 147 + oy + lift);
+}
+
+/** The machine drawn full size here (its standing lid included), to be sampled smaller when it stands back. */
 const BACK_PIX = new LetterPix(MACHINE_AT.x0, 40, 104, 112);
 
 /**
@@ -1166,6 +1184,8 @@ function drawMachineBack(p: Pix, s: MachineScene): void {
   drawMachine(BACK_PIX, { ...s, shake: { x: 0, y: 0 } });
   const cx = 120;
   const { x: ox, y: oy } = s.shake;
+  // its shadow at the same scale, on the carpet under its foot line; the body goes over its middle
+  shade(p, Math.round(cx + (MACHINE_AT.x0 - MACHINE_SHADOW_REACH - cx) * sc) + ox, Math.round(foot - 3 * sc) + oy, Math.round(cx + (MACHINE_AT.x1 - cx) * sc) + ox, foot + 1 + oy);
   // which cells this machine has put down so far, and whether with plum (2) or anything else (1)
   const mine = new Uint8Array(W * H);
   for (let y = 0; y < BACK_PIX.h; y++) {
@@ -1510,11 +1530,11 @@ export function drawRoom(p: Pix, s: SceneState): void {
       // the door's leading edge
       p.rect(13 + s.doorGap, 43, 14 + s.doorGap, 108, 'E');
     }
-    // the knob: brass, lit from the upper left, its shadow down and to the right
+    // the knob: brass, lit from the upper right like the room, its shadow down and to the left
     const kx = knobX(s.doorGap);
-    p.rect(kx + 1, KNOB.y + 1, kx + KNOB.w + 1, KNOB.y + KNOB.h + 1, 'K');
+    p.rect(kx - 1, KNOB.y + 1, kx + KNOB.w - 1, KNOB.y + KNOB.h + 1, 'K');
     p.rect(kx, KNOB.y, kx + KNOB.w, KNOB.y + KNOB.h, 'y');
-    p.set(kx, KNOB.y, 'W');
+    p.set(kx + KNOB.w - 1, KNOB.y, 'W');
   }
   // the EXIT sign: on the wall, hanging loose, falling, or on the floor in front of the door
   const sign = s.exit;
@@ -1571,8 +1591,8 @@ export function drawRoom(p: Pix, s: SceneState): void {
   p.blit(KIT_AT.x, KIT_AT.y, s.broken.kit ? SPR.KIT_OPEN : SPR.KIT);
   // the bullet holes, under the cooler, the plant and the machine, which stand in front of the wall
   drawHoles(p, s);
-  // cooler and plant, their shadows to the left (the window is the light)
-  p.rect(42, 128, 56, 131, 'X');
+  // cooler and plants, their shadows on their feet's rows, off to the left (the window is the light)
+  shade(p, 40, 132, 52, 136);
   if (s.fire) drawFire(p, s.fire, 'back');
   if (s.broken.tank) {
     // the water on the carpet, the stump of the bottle, the cooler itself
@@ -1592,10 +1612,10 @@ export function drawRoom(p: Pix, s: SceneState): void {
     if (ck.state === 'burning') drawFlames(p, 'clock', [{ x: x + spr.w / 2, floor: y + spr.h, w: spr.w / 2 - 1, h: 14, seed: 500 }], s.fire?.t ?? s.storm.t);
   }
   if (s.fire) drawFire(p, s.fire, 'mid');
-  p.rect(190, 132, 206, 135, 'X');
+  shade(p, 194, 132, 208, 135);
   // the weeping fig behind the monstera: standing in its planter, or falling (then leaning) toward the machine
   // with the planter in shards; burning once it has caught from the fire
-  p.rect(170, 127, 184, 130, 'X');
+  shade(p, 172, 128, 185, 131);
   const figTree = s.broken.fig ? SPR.FIG_BARE : SPR.FIG;
   const figAt = s.broken.fig ? FIG_AT.bare : FIG_AT.tree;
   if (s.fig.fall <= 0) p.blit(figAt.x, figAt.y, figTree);
@@ -1627,7 +1647,7 @@ export function drawRoom(p: Pix, s: SceneState): void {
   }
   // the ink sprayed from behind the machine, where it is still behind it: it has not left yet
   for (const d of s.inkBehind) p.rect(d.x + sx, d.y + sy, d.x + d.size + sx, d.y + d.size + sy, d.color);
-  // the printer; its shadow falls the other way. Nothing points it out.
+  // the printer, on its shadow
   if (s.printer === 'wreck') {
     // the burst machine: its pieces in the air and on the floor, the fire raging where it stood
     for (const pc of s.pieces) p.blit(Math.round(pc.x), Math.round(pc.y), pc.spr);
@@ -1635,6 +1655,7 @@ export function drawRoom(p: Pix, s: SceneState): void {
     // standing back, before the pounce: smaller, higher on the carpet (no wear yet)
     drawMachineBack(p, s);
   } else {
+    drawMachineShadow(p, s);
     drawMachine(p, s);
     if (!s.flashWhite) drawWear(p, MACHINE_AT.x0 + s.shake.x, MACHINE_AT.y0 + s.shake.y, s.damage, s.lights[1] ? 'A' : 'a');
     // the flash whites the print too: a white rect over the hole, in the room's grid
