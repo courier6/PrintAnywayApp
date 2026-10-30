@@ -3359,7 +3359,7 @@ export const room: Stage = {
       dg.setTransform(1, 0, 0, 1, 0, 0);
       dg.clearRect(0, 0, doc.width, doc.height);
       if (scene.windowOpen) drawWindowWreck(fpix);
-      if (scene.fire) drawFireFront(fpix, scene.fire, scene.printer === 'wreck' ? scene.pieces : null);
+      if (scene.fire) drawFireFront(fpix, scene.fire, scene.printer === 'wreck' ? scene.pieces : null, scene.shake);
       // The marks on the glass, under the things in flight, the landed pages and the ink.
       drawMarks(fpix, scene.marks);
       // Out of the slot: only the top rows of the sprite so far, then the whole thing.

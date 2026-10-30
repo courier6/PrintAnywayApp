@@ -392,6 +392,8 @@ export interface Emitter {
   w: number;
   h: number;
   seed: number;
+  /** Standing on the machine: its foot rides the machine's shake, its tip lags (none of it). */
+  ride?: boolean;
 }
 
 /** The fire's frame rate: each frame is held this long, the next is a step. The glows flicker in step. */
@@ -423,10 +425,13 @@ const noise2 = (x: number, y: number) => 0.65 * vnoise(x, y) + 0.35 * vnoise(x *
 
 /** The scratch field one layer's flames are summed into (max), room-sized; `cells` are its banded result. */
 const field = new Float32Array(W * H);
+/** Per cell, how much of the machine's shake it rides, 0..255: 255 at a riding flame's foot, 0 at its tip and for every other flame. */
+const rideField = new Uint8Array(W * H);
 interface FlameCache {
   tick: number;
   key: string;
   cells: Uint8Array;
+  ride: Uint8Array;
   x0: number;
   y0: number;
   x1: number;
@@ -463,7 +468,10 @@ function emitInto(e: Emitter, tq: number): void {
       let v = across * (1.05 - 0.7 * q) * (0.3 + 1.05 * n) - 0.08 - 0.22 * q;
       if (q > 1) v -= (q - 1) * 1.5; // what is above the nominal tip dies quickly
       const i = y * W + x;
-      if (v > field[i]) field[i] = v;
+      if (v > field[i]) {
+        field[i] = v;
+        rideField[i] = e.ride ? Math.round(255 * Math.max(0, 1 - q)) : 0;
+      }
     }
   }
 }
@@ -474,22 +482,26 @@ function emitInto(e: Emitter, tq: number): void {
  * a cream core; the yellow/orange edge shifting every other tick like a cycled palette) and put on `p`.
  * The banded cells are cached per layer and rebuilt only when the tick changes or the emitters' rounded
  * sizes and places do, so the fire steps at 10 fps whatever the frame rate, and is still under reduced
- * motion (t = 0) but still grows.
+ * motion (t = 0) but still grows. On the blit a riding cell (a flame on the machine) moves with the machine by
+ * its share of `shake`: all of it at the foot, none at the tip, so the flames ride the trembling machine
+ * at their feet and lag at their tips rather than hanging in the air or jittering with it.
  */
-export function drawFlames(p: Pix, layer: string, emitters: Emitter[], t: number): void {
+export function drawFlames(p: Pix, layer: string, emitters: Emitter[], t: number, shake: { x: number; y: number } = { x: 0, y: 0 }): void {
   const tick = Math.floor(t / FIRE_TICK_MS);
   let key = '';
   for (const e of emitters) key += `${Math.round(e.x)},${Math.round(e.floor)},${Math.round(e.w)},${Math.round(e.h)};`;
   let c = flameCaches.get(layer);
   if (!c) {
-    c = { tick: -1, key: '', cells: new Uint8Array(W * H), x0: 0, y0: 0, x1: -1, y1: -1 };
+    c = { tick: -1, key: '', cells: new Uint8Array(W * H), ride: new Uint8Array(W * H), x0: 0, y0: 0, x1: -1, y1: -1 };
     flameCaches.set(layer, c);
   }
   if (c.tick !== tick || c.key !== key) {
     c.tick = tick;
     c.key = key;
     field.fill(0);
+    rideField.fill(0);
     c.cells.fill(0);
+    c.ride.fill(0);
     const tq = tick * FIRE_TICK_MS;
     for (const e of emitters) emitInto(e, tq);
     const shift = tick & 1 ? 0.05 : -0.05;
@@ -501,6 +513,7 @@ export function drawFlames(p: Pix, layer: string, emitters: Emitter[], t: number
         const rim = x === 0 || x === W - 1 || y === 0 || field[i - 1] < 0.2 || field[i + 1] < 0.2 || field[i - W] < 0.2;
         const u = v + shift;
         c.cells[i] = rim ? 1 : u > 0.92 ? 4 : u > 0.5 ? 3 : 2;
+        c.ride[i] = rideField[i];
         if (x < x0) x0 = x;
         if (x > x1) x1 = x;
         if (y < y0) y0 = y;
@@ -512,10 +525,13 @@ export function drawFlames(p: Pix, layer: string, emitters: Emitter[], t: number
     c.x1 = x1;
     c.y1 = y1;
   }
+  const { x: sx, y: sy } = shake;
   for (let y = c.y0; y <= c.y1; y++) {
     for (let x = c.x0; x <= c.x1; x++) {
-      const k = c.cells[y * W + x];
-      if (k) p.set(x, y, FLAME_KEYS[k - 1]);
+      const i = y * W + x, k = c.cells[i];
+      if (!k) continue;
+      const r = c.ride[i] / 255;
+      p.set(x + Math.round(sx * r), y + Math.round(sy * r), FLAME_KEYS[k - 1]);
     }
   }
 }
@@ -544,16 +560,16 @@ export function fireEmitters(f: Fire, pieces: Piece[] | null = null): { back: Em
   const machine: Emitter[] = [];
   if (f.v > 0) {
     const v = Math.min(1, f.v);
-    if (pieces === null) machine.push({ x: 73, floor: 146, w: 4 + 3 * v, h: 20 + 46 * v, seed: 400 });
+    if (pieces === null) machine.push({ x: 73, floor: 146, w: 4 + 3 * v, h: 20 + 46 * v, seed: 400, ride: true });
     const reach = 72 + 96 * v;
     for (let x = 84; x < reach; x += 13) {
       const age = Math.min(1, (reach - x) / 40), rr = hash(x * 3);
-      machine.push({ x: x + 4 * Math.sin(x), floor: 146, w: (6 + 4 * age) * (0.8 + 0.4 * rr), h: (12 + 40 * age) * (0.6 + 0.8 * hash(x * 5)), seed: 500 + x });
+      machine.push({ x: x + 4 * Math.sin(x), floor: 146, w: (6 + 4 * age) * (0.8 + 0.4 * rr), h: (12 + 40 * age) * (0.6 + 0.8 * hash(x * 5)), seed: 500 + x, ride: pieces === null });
     }
     if (pieces === null && v > 0.45) {
       const top = (v - 0.45) / 0.55, reachTop = 72 + 96 * top;
       for (let x = 74; x < reachTop; x += 12) {
-        machine.push({ x: x + 3 * hash(x), floor: 80, w: 4 + 2 * hash(x + 1), h: (7 + 11 * Math.min(1, (reachTop - x) / 30)) * (0.6 + 0.8 * hash(x * 7)), seed: 700 + x });
+        machine.push({ x: x + 3 * hash(x), floor: 80, w: 4 + 2 * hash(x + 1), h: (7 + 11 * Math.min(1, (reachTop - x) / 30)) * (0.6 + 0.8 * hash(x * 7)), seed: 700 + x, ride: true });
       }
     }
     // the burst machine: a flame on every piece, standing two rows into its top edge (so its foot sits on the
@@ -693,9 +709,9 @@ function drawFire(p: Pix, f: Fire, layer: 'back' | 'mid'): void {
  * spreads. Drawn on the front canvas, so they are in front of the slot's red light like the pages, under
  * the things the machine throws; once it has burst, on its pieces (`pieces`).
  */
-export function drawFireFront(p: Pix, f: Fire, pieces: Piece[] | null): void {
+export function drawFireFront(p: Pix, f: Fire, pieces: Piece[] | null, shake = { x: 0, y: 0 }): void {
   const e = fireEmitters(f, pieces);
-  drawFlames(p, 'front', e.front.concat(e.machine), f.t);
+  drawFlames(p, 'front', e.front.concat(e.machine), f.t, shake);
 }
 
 /** The storm this frame: the rain's time (0 = still), the near flash 0..1, the far flicker 0..1, the bolt. */
