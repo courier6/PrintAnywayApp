@@ -15,6 +15,7 @@ import { fileKind, loadDocument, prefetchPdfjs, type SourceDocument } from './li
 import { classifyError, logAppError, UnsupportedFileError, type ErrorCode } from './lib/errors';
 import { DocumentReplacedError, PageStore, type PageSnapshot } from './lib/pageStore';
 import { exportFormat, exportRecolored, type ExportFormat, type ExportPage } from './lib/exportFile';
+import { canvasBlob } from './lib/canvasBlob';
 
 type AppState = 'empty' | 'processing' | 'preview' | 'error' | 'prntr';
 
@@ -49,12 +50,10 @@ const PRINT_DECODE_MS = 5000;
 /** Under reduced motion, how long the GAME OVER card stays up before the plain cut back to the app. */
 const REDUCED_OVER_HOLD_MS = 2000;
 
-/** A page as a PNG object URL for the print root: toBlob encodes off the main thread, where
- * toDataURL would hold it for every page at once (a 20-page print froze it for 0.3–2 s). */
-function pngUrl(canvas: HTMLCanvasElement): Promise<string> {
-  return new Promise((resolve, reject) =>
-    canvas.toBlob((b) => (b ? resolve(URL.createObjectURL(b)) : reject(new Error('canvas.toBlob failed'))), 'image/png'),
-  );
+/** A page as a PNG object URL for the print root, encoded off the main thread (toDataURL would hold it
+ * for every page at once: a 20-page print froze it for 0.3–2 s). */
+async function pngUrl(canvas: HTMLCanvasElement): Promise<string> {
+  return URL.createObjectURL(await canvasBlob(canvas, 'image/png'));
 }
 
 const scheduleIdle: (cb: () => void) => number =

@@ -1,3 +1,4 @@
+import { canvasBlob } from './canvasBlob';
 import type { FileKind, PageSize } from './loadDocument';
 
 const PHOTO_WIDTH_PT = 612; // a photo has no page size: US Letter wide, height by its aspect
@@ -52,11 +53,4 @@ async function buildPdf(pages: ExportPage[]): Promise<Blob> {
   // Copy into a fresh ArrayBuffer-backed view: pdf-lib types its output as
   // Uint8Array<ArrayBufferLike>, which BlobPart no longer accepts.
   return new Blob([new Uint8Array(pdfBytes)], { type: 'application/pdf' });
-}
-
-/** JPEG at quality 0.92; PNG is lossless. */
-function canvasBlob(canvas: HTMLCanvasElement, type: 'image/png' | 'image/jpeg'): Promise<Blob> {
-  return new Promise((resolve, reject) =>
-    canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('canvas.toBlob failed'))), type, 0.92),
-  );
 }
