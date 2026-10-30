@@ -70,6 +70,15 @@ export class PageStore {
     return this.pages.length;
   }
 
+  /** Keeps the first `count` pages; whoever waits on a later one gives up as on a replaced document. */
+  truncate(count: number): void {
+    for (let i = count; i < this.pages.length; i++) this.readyRejecters[i]?.(new DocumentReplacedError());
+    this.pages.length = count;
+    this.readyResolvers.length = count;
+    this.readyRejecters.length = count;
+    this.readyPromises.length = count;
+  }
+
   setSource(index: number, canvas: HTMLCanvasElement, sizePt: PageSize | null): void {
     const page = this.pages[index];
     if (!page) return;

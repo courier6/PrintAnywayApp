@@ -28,6 +28,12 @@ const KIND_BY_CODE: Record<ErrorCode, ErrorKind> = {
   'PA-106': 'memory',
 };
 
+/** A notice over the preview: a print or download that failed (not one stopped by a new document), an
+ * unsupported file dropped on the document, or a document cut short by a page that would not render. */
+export type Notice =
+  | { kind: 'error'; code: ErrorCode; errorKind: ErrorKind }
+  | { kind: 'partial'; rendered: number; total: number };
+
 /** The document the certificate replaced, as the vortex brings it back (PRNTR-VORTEX.md). */
 interface OriginalDocument {
   pages: PageSnapshot;
@@ -102,8 +108,7 @@ export default function App() {
   // The print root's pages: an object URL each, and whether the sheet turns landscape for it.
   const [printImages, setPrintImages] = useState<{ src: string; landscape: boolean }[]>([]);
   const [busy, setBusy] = useState<'print' | 'download' | null>(null);
-  // A print or download that failed (not one stopped by a new document).
-  const [exportError, setExportError] = useState<ErrorCode | null>(null);
+  const [notice, setNotice] = useState<Notice | null>(null);
   const [dragging, setDragging] = useState(false);
   const [, setPagesVersion] = useState(0);
   const [prntrStage, setPrntrStage] = useState(0);
@@ -288,7 +293,7 @@ export default function App() {
     clearPrintImages();
     setHolding(false);
     setBusy(null);
-    setExportError(null);
+    setNotice(null);
     setVortexOriginal(null);
     setFileName(name);
     if (exportAs) setFormat(exportAs);
@@ -301,7 +306,7 @@ export default function App() {
     if (kind === null && appState === 'preview') {
       // A document is open: an unsupported file is a notice over it, not the end of it.
       logAppError('PA-101', new UnsupportedFileError(), file);
-      setExportError('PA-101');
+      setNotice({ kind: 'error', code: 'PA-101', errorKind: KIND_BY_CODE['PA-101'] });
       return;
     }
     lastFile.current = file;
@@ -333,7 +338,20 @@ export default function App() {
   // Pages `from` to the end, in order, into the store; the first one shows the preview. Stops when a newer document starts.
   async function renderPages(doc: SourceDocument, from: number, token: number) {
     for (let i = from; i < doc.pageCount; i++) {
-      const { canvas, sizePt } = await doc.renderPage(i);
+      let rendered;
+      try {
+        rendered = await doc.renderPage(i);
+      } catch (err) {
+        if (token !== runToken.current || i === 0) throw err;
+        // A page that will not render after pages that did: the document is the pages before it, and a
+        // notice says which are missing, rather than the error card over everything already rendered.
+        logAppError(classifyError(err), err, lastFile.current);
+        store.truncate(i);
+        setPageCount(i);
+        setNotice({ kind: 'partial', rendered: i, total: doc.pageCount });
+        return;
+      }
+      const { canvas, sizePt } = rendered;
       if (token !== runToken.current) return;
       store.setSource(i, canvas, sizePt);
       store.ensureRecolored(i, inkRef.current);
@@ -561,7 +579,7 @@ export default function App() {
     if (busy) return;
     const token = runToken.current;
     setShowPrintReminder(false);
-    setExportError(null);
+    setNotice(null);
     setBusy('print');
     try {
       const pages = await collectAllRecolored(token);
@@ -595,7 +613,7 @@ export default function App() {
   async function handleDownload() {
     if (busy) return;
     const token = runToken.current;
-    setExportError(null);
+    setNotice(null);
     setBusy('download');
     try {
       const pages = await collectAllRecolored(token);
@@ -612,7 +630,7 @@ export default function App() {
   function reportExportError(err: unknown) {
     const code = classifyError(err);
     logAppError(code, err, lastFile.current);
-    setExportError(code);
+    setNotice({ kind: 'error', code, errorKind: KIND_BY_CODE[code] });
   }
 
   function handleRetry() {
@@ -665,8 +683,8 @@ export default function App() {
             onPrint={() => void handlePrint()}
             onDownload={() => void handleDownload()}
             busy={busy}
-            exportError={exportError && { code: exportError, kind: KIND_BY_CODE[exportError] }}
-            onDismissExportError={() => setExportError(null)}
+            notice={notice}
+            onDismissNotice={() => setNotice(null)}
             showReminder={showPrintReminder}
             onDismissReminder={() => setShowPrintReminder(false)}
             onOpenPrntr={() => enterPrntr(0)}

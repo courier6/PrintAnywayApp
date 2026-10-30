@@ -1,12 +1,11 @@
 import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
 import { t, tPlural, useLocale } from '../i18n';
-import type { ErrorCode } from '../lib/errors';
 import type { ExportFormat } from '../lib/exportFile';
 import type { Ink } from '../lib/inks';
 import { OTHER_TIP, PRINTER_TIPS } from '../lib/printerTips';
 import RisingGlyphs from './RisingGlyphs';
 import { PageCanvas } from './PageCanvas';
-import type { ErrorKind } from './ErrorState';
+import type { Notice } from '../App';
 import { PrintReminder } from './PrintReminder';
 import { PUFF_MS, THIN_MS, VORTEX_MS, VortexCanvas } from './VortexCanvas';
 import { reducedMotion } from '../prntr/anim';
@@ -37,9 +36,9 @@ interface Props {
   onPrint: () => void;
   onDownload: () => void;
   busy: 'print' | 'download' | null;
-  /** A failed print or download, shown over the page until dismissed or retried. */
-  exportError: { code: ErrorCode; kind: ErrorKind } | null;
-  onDismissExportError: () => void;
+  /** A failed print or download, an unsupported file dropped, a document cut short: shown above the page until dismissed. */
+  notice: Notice | null;
+  onDismissNotice: () => void;
   showReminder: boolean;
   onDismissReminder: () => void;
   onOpenPrntr: () => void;
@@ -66,8 +65,8 @@ export function PreviewState({
   onPrint,
   onDownload,
   busy,
-  exportError,
-  onDismissExportError,
+  notice,
+  onDismissNotice,
   showReminder,
   onDismissReminder,
   onOpenPrntr,
@@ -229,13 +228,22 @@ export function PreviewState({
       <div className="preview-grid">
         <div className={'preview-stage' + (pageCount > 1 ? ' is-paged' : '')}>
           {showReminder && <PrintReminder onDismiss={onDismissReminder} />}
-          {exportError && (
-            <div className="print-reminder export-error" role="alert">
+          {notice && (
+            <div className="print-reminder" role="alert">
               <div className="print-reminder-text">
-                <strong>{t(`error.${exportError.kind}.title`)}</strong> {t(`error.${exportError.kind}.body`)}
-                <span className="export-error-code">{t('error.code', { code: exportError.code })}</span>
+                {notice.kind === 'error' ? (
+                  <>
+                    <strong>{t(`error.${notice.errorKind}.title`)}</strong> {t(`error.${notice.errorKind}.body`)}
+                    <span className="export-error-code">{t('error.code', { code: notice.code })}</span>
+                  </>
+                ) : (
+                  <>
+                    <strong>{t('preview.partialTitle', { from: notice.rendered + 1, total: notice.total })}</strong>{' '}
+                    {t('preview.partialBody')}
+                  </>
+                )}
               </div>
-              <button className="btn-outline-small" onClick={onDismissExportError}>
+              <button className="btn-outline-small" onClick={onDismissNotice}>
                 {t('printReminder.dismiss')}
               </button>
             </div>
