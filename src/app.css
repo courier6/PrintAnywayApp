@@ -540,6 +540,8 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
 .toolbar-actions {
   justify-self: end;
   padding-right: 26px;
+  display: flex;
+  gap: 10px;
 }
 
 .toolbar-file {
@@ -610,11 +612,6 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
   font-size: 13px;
   font-weight: 700;
   color: var(--ink);
-}
-
-.toolbar-actions {
-  display: flex;
-  gap: 10px;
 }
 
 /* ---------- Preview stage ---------- */
@@ -930,13 +927,11 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
   100% { transform: translate(-50%, 22px); opacity: 0; }
 }
 
-/* ---------- Print reminder overlay ---------- */
+/* ---------- Print reminder and the stage's notices ---------- */
 
+/* In the stage's flow, its first child: it pushes the caption and the pager down rather than
+   covering them, and Esc or "Got it" closes it. */
 .print-reminder {
-  position: absolute;
-  top: 16px;
-  left: 50%;
-  transform: translateX(-50%);
   background: #ffffff;
   border: 1.5px solid var(--ink);
   padding: 14px 18px;
@@ -945,8 +940,7 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
   align-items: center;
   box-shadow: 0 12px 32px color-mix(in oklab, var(--ink) 22%, transparent);
   width: 470px;
-  max-width: calc(100% - 32px);
-  z-index: 3;
+  max-width: 100%;
   text-align: left;
 }
 
@@ -1143,4 +1137,5 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
     flex-basis: 100%;
     justify-content: center;
   }
+
 }

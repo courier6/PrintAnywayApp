@@ -173,6 +173,16 @@ export function PreviewState({
     };
   }, []);
 
+  // Esc closes the after-print reminder.
+  useEffect(() => {
+    if (!showReminder) return;
+    const onKey = (e: globalThis.KeyboardEvent) => {
+      if (e.key === 'Escape') onDismissReminder();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [showReminder, onDismissReminder]);
+
   function holdKeyDown(e: KeyboardEvent<HTMLButtonElement>) {
     if ((e.key === ' ' || e.key === 'Enter') && !e.repeat) {
       e.preventDefault();

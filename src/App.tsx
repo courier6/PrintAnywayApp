@@ -554,7 +554,7 @@ export default function App() {
   async function handlePrint() {
     if (busy) return;
     const token = runToken.current;
-    setShowPrintReminder(true);
+    setShowPrintReminder(false);
     setExportError(null);
     setBusy('print');
     try {
@@ -574,6 +574,8 @@ export default function App() {
       ]);
       if (token !== runToken.current) return;
       window.print();
+      // Back from the dialog (at once where the browser does not wait): the fallback for a grey print.
+      if (token === runToken.current) setShowPrintReminder(true);
     } catch (err) {
       if (token !== runToken.current || err instanceof DocumentReplacedError) return;
       setShowPrintReminder(false);
