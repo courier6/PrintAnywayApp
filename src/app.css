@@ -803,6 +803,13 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
   position: relative;
 }
 
+/* The focus ring sits outside the selected ring (white 2 px, ink 4 px) and is dashed, so a focused
+   swatch never reads as the selected one and the selected one still shows its focus. */
+.swatch:focus-visible {
+  outline: 2px dashed var(--ink);
+  outline-offset: 6px;
+}
+
 /* A bigger target than the dot for a finger: 36 × 44 px, short of the next swatch. */
 .swatch::before {
   content: '';
