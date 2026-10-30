@@ -12,7 +12,7 @@ import { ErrorState, type ErrorKind } from './components/ErrorState';
 import { t, useLocale } from './i18n';
 import { GOLD_INK, INKS } from './lib/inks';
 import { fileKind, loadDocument, prefetchPdfjs, type SourceDocument } from './lib/loadDocument';
-import { classifyError, logAppError, type ErrorCode } from './lib/errors';
+import { classifyError, logAppError, UnsupportedFileError, type ErrorCode } from './lib/errors';
 import { DocumentReplacedError, PageStore, type PageSnapshot } from './lib/pageStore';
 import { exportFormat, exportRecolored, type ExportFormat, type ExportPage } from './lib/exportFile';
 
@@ -297,8 +297,14 @@ export default function App() {
   }
 
   async function handleFile(file: File) {
-    lastFile.current = file;
     const kind = fileKind(file);
+    if (kind === null && appState === 'preview') {
+      // A document is open: an unsupported file is a notice over it, not the end of it.
+      logAppError('PA-101', new UnsupportedFileError(), file);
+      setExportError('PA-101');
+      return;
+    }
+    lastFile.current = file;
     const token = startDocument(file.name, kind && exportFormat(kind));
     setPageCount(0);
     setProcessedCount(0);
