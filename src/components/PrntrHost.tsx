@@ -1,8 +1,19 @@
-import { Component, Suspense, lazy, type ReactNode } from 'react';
+import { Component, Suspense, lazy, useState, type CSSProperties, type ReactNode } from 'react';
 import type { Certificate } from '../prntr/types';
 
-const loadPrntr = () => import('../prntr/Prntr');
+type PrntrModule = typeof import('../prntr/Prntr');
+/** The chunk once it is in (the trigger's prefetch, or an earlier run): rendered directly, not through lazy. */
+let loaded: PrntrModule | null = null;
+const loadPrntr = () =>
+  import('../prntr/Prntr').then((m) => {
+    loaded = m;
+    return m;
+  });
 const Prntr = lazy(loadPrntr);
+
+/** What shows while the chunk is still loading: Prntr's black, over the app, so the click never shows the app
+ * emptied to white. React reveals a suspended boundary's content no sooner than 300 ms after its fallback. */
+const LOADING: CSSProperties = { position: 'fixed', inset: 0, zIndex: 100, background: '#000000' };
 
 /**
  * Warms the Prntr chunk (JS + CSS + @font-face) and its two fonts, so the opening
@@ -53,11 +64,17 @@ class PrntrBoundary extends Component<{ onExit: () => void; children: ReactNode 
 }
 
 export function PrntrHost(props: PrntrHostProps) {
+  // Chosen once per mount: switching from the lazy component to the loaded one would remount the run.
+  const [Loaded] = useState(() => loaded?.default ?? null);
   return (
     <PrntrBoundary onExit={props.onExit}>
-      <Suspense fallback={null}>
-        <Prntr {...props} />
-      </Suspense>
+      {Loaded ? (
+        <Loaded {...props} />
+      ) : (
+        <Suspense fallback={<div style={LOADING} />}>
+          <Prntr {...props} />
+        </Suspense>
+      )}
     </PrntrBoundary>
   );
 }
