@@ -117,7 +117,6 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 28px;
   font-family: 'Helvetica Neue', Helvetica, sans-serif;
   opacity: 0;
   animation: prntr-card 1250ms linear forwards;
@@ -132,7 +131,7 @@
 }
 
 .prntr-card.is-beep .prntr-card-name,
-.prntr-card.is-beep .prntr-card-presents,
+.prntr-card.is-beep .prntr-card-rule,
 .prntr-card.is-beep .prntr-card-logo {
   display: none;
 }
@@ -151,35 +150,38 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 18px;
+  /* The lockup's unit: the name's size. Every gap below is set so that the space between the visible ink (the
+     mark's base, the name's caps, the hairline) is a multiple of u, the name's cap height (≈ 0.75em): 1u from the
+     mark to the caps, 0.55u from the caps to the hairline. The phone card changes this size alone. */
+  font-size: 30px;
 }
-
+/* The SNARC, its viewBox cut to its ink (the full box had 16 of 96 units empty, which made the gap under it
+   look larger than it was). */
 .prntr-card-logo {
   display: block;
-  width: 120px;
-  height: 72px;
+  width: 4.4em;
+  height: 2.2135em;
 }
-
 .prntr-card-logo path {
   stroke-width: 1.6;
 }
-
 .prntr-card-name {
+  margin-top: 0.612em;
   color: #EDEDED;
-  font-size: 30px;
+  font-size: 1em;
   font-weight: 700;
+  line-height: 1;
   letter-spacing: 0.06em;
-  padding: 0 0.1em 10px;
-  border-bottom: 1px solid #4A4A4A; /* a hairline under the name, like a letterhead */
+  padding-left: 0.06em; /* optical centring against the tracking */
+  white-space: nowrap;
   text-transform: uppercase;
 }
-
-.prntr-card-presents {
-  color: #8A8A8A;
-  font-size: 13px;
-  letter-spacing: 0.45em;
-  padding-left: 0.45em; /* optical centring against the tracking */
-  text-transform: uppercase;
+/* A hairline under the name, like a letterhead: as wide as the name's ink plus ½u each side. */
+.prntr-card-rule {
+  width: 11.25em;
+  height: 1px;
+  margin-top: 0.294em;
+  background: #4A4A4A;
 }
 
 .prntr-title-wrap {
@@ -368,12 +370,8 @@
 }
 
 @media (max-width: 640px) {
-  .prntr-card { gap: 22px; }
-  .prntr-card-brand { gap: 14px; }
-  .prntr-card-logo { width: 90px; height: 54px; }
+  .prntr-card-brand { font-size: 18px; }
   .prntr-card-logo path { stroke-width: 2; }
-  .prntr-card-name { font-size: 18px; padding-bottom: 6px; }
-  .prntr-card-presents { font-size: 11px; }
   .prntr-title { gap: 2px; font-size: min(112px, 23.4vw, calc(56px * var(--s, 5))); }
   .prntr-prompt { font-size: 16px; letter-spacing: 0.06em; }
   .prntr-footer { font-size: 8px; gap: 8px; }
