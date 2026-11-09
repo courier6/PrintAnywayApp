@@ -34,6 +34,31 @@
   inset: 0;
 }
 
+/* The ✕'s refusal (refusal.ts, REFUSE_MS): the view jumps and tears for ~0.3 s while everything runs red, then the
+   red fades back out. The ✕ itself and the live region are outside .prntr-stage and stay put. Every keyframe names
+   the same filter functions so the fade interpolates. */
+.prntr.is-refused .prntr-stage {
+  animation: prntr-refuse 900ms linear;
+}
+.prntr.is-motion-reduced.is-refused .prntr-stage {
+  animation-name: prntr-refuse-still;
+}
+@keyframes prntr-refuse {
+  0% { animation-timing-function: steps(1, end); transform: translate(-7px, 0) skewX(-4deg); clip-path: inset(0 0 0 0); filter: sepia(0.5) saturate(2) hue-rotate(-30deg) contrast(1.2); }
+  6% { animation-timing-function: steps(1, end); transform: translate(9px, -3px) skewX(0deg); clip-path: inset(18% 0 52% 0); }
+  12% { animation-timing-function: steps(1, end); transform: translate(-4px, 2px) skewX(6deg); clip-path: inset(0 0 0 0); filter: sepia(0.55) saturate(2.3) hue-rotate(-35deg) contrast(1.3); }
+  18% { animation-timing-function: steps(1, end); transform: translate(5px, 0) skewX(0deg); clip-path: inset(60% 0 8% 0); }
+  24% { animation-timing-function: steps(1, end); transform: translate(-2px, 1px) skewX(0deg); clip-path: inset(0 0 0 0); }
+  30% { animation-timing-function: steps(1, end); transform: translate(3px, -1px) skewX(-2deg); clip-path: inset(34% 0 30% 0); }
+  34% { animation-timing-function: linear; transform: none; clip-path: inset(0 0 0 0); filter: sepia(0.4) saturate(1.7) hue-rotate(-26deg) contrast(1.1); }
+  100% { transform: none; clip-path: inset(0 0 0 0); filter: sepia(0) saturate(1) hue-rotate(0deg) contrast(1); }
+}
+@keyframes prntr-refuse-still {
+  0% { filter: sepia(0.4) saturate(1.7) hue-rotate(-26deg) contrast(1.1); }
+  34% { filter: sepia(0.4) saturate(1.7) hue-rotate(-26deg) contrast(1.1); }
+  100% { filter: sepia(0) saturate(1) hue-rotate(0deg) contrast(1); }
+}
+
 .prntr-run {
   position: absolute;
   inset: 0;
