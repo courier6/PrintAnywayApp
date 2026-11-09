@@ -3,6 +3,7 @@ import './prntr.css';
 import { keepPrntrAudio, releasePrntrAudio } from '../components/prntrAudio';
 import { reducedMotion } from './anim';
 import { createPrntrAudio, type PrntrAudio } from './audio';
+import { playWrongAnswer, REFUSE_MS, touchOnly } from './refusal';
 import { makeCertificate } from './certificate';
 import { capturePage } from './page';
 import { runChain } from './runner';
@@ -57,6 +58,11 @@ export default function Prntr({ source, recolored, inkHex, stage, audioContext, 
   onExitRef.current = onExit;
   const onDoneRef = useRef(onDone);
   onDoneRef.current = onDone;
+  /** The run's sound, for the ✕'s buzzer (set while a run is live). */
+  const audioRef = useRef<PrntrAudio | null>(null);
+  /** Presses on ✕ this mount, and the timer that ends the refused look. */
+  const refusals = useRef(0);
+  const refuseTimer = useRef(0);
   // Read once when a run starts: the host changes them during the drop (the certificate
   // comes up in gold), and a change must not restart the chain under it.
   const startRef = useRef({ source, recolored, inkHex });
@@ -117,6 +123,7 @@ export default function Prntr({ source, recolored, inkHex, stage, audioContext, 
     );
     const start = startRef.current;
     const audio = createPrntrAudio(audioContext);
+    audioRef.current = audio;
     const ctx: StageContext = {
       root,
       page: capturePage(start.source, start.recolored),
@@ -148,18 +155,40 @@ export default function Prntr({ source, recolored, inkHex, stage, audioContext, 
       });
     return () => {
       controller.abort();
+      audioRef.current = null;
+      window.clearTimeout(refuseTimer.current);
       releaseRunAudio(audio, finished);
       root.remove();
       document.body.style.overflow = prevOverflow;
     };
   }, [stage, audioContext]);
 
+  // ✕ is a joke (refusal.ts): a wrong-answer buzzer and the view glitching red, and the game goes on. Escape leaves;
+  // on a touch screen, with no Escape, the second press does.
+  const refuse = () => {
+    const el = rootRef.current;
+    if (!el) return;
+    refusals.current++;
+    if (refusals.current > 1 && touchOnly()) {
+      onExit();
+      return;
+    }
+    const a = audioRef.current;
+    if (a?.context && a.master) playWrongAnswer(a.context, a.master);
+    el.classList.remove('is-refused');
+    void el.offsetWidth; // a press during the glitch starts it again
+    el.classList.add('is-refused');
+    window.clearTimeout(refuseTimer.current);
+    refuseTimer.current = window.setTimeout(() => el.classList.remove('is-refused'), REFUSE_MS);
+    setLive(touchOnly() ? 'Nice try.' : 'Nice try. Escape leaves.');
+  };
+
   return (
     <div className={reducedMotion() ? 'prntr is-motion-reduced' : 'prntr'} ref={rootRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="Prntr">
       <div className="prntr-stage" ref={stageRef} />
-      {/* Provisional: the exit's place is not designed (handoff §5.2). Gone once the chain has finished. */}
+      {/* Provisional: the exit's place is not designed (handoff §5.2). Gone once the chain has finished. It refuses (refusal.ts). */}
       {!done && (
-        <button className="prntr-exit" aria-label="Leave" onClick={onExit}>
+        <button className="prntr-exit" aria-label="Leave" onClick={refuse}>
           ✕
         </button>
       )}
