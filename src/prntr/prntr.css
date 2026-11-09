@@ -81,6 +81,51 @@
   cursor: pointer;
 }
 
+/* The ✕'s pop (refusal.ts, POP_MS): the glyph swells to 1.5 and is gone by 90 ms, and eight specks fly out from
+   its middle and fade. The button's own 50% moves onto the glyph so the specks start at full white. Reduced motion:
+   the glyph fades out where it is, no specks. */
+.prntr-exit.is-popping {
+  opacity: 1;
+  pointer-events: none;
+}
+.prntr-exit.is-popping .prntr-exit-x {
+  display: inline-block;
+  animation: prntr-exit-swell 260ms linear forwards;
+}
+.prntr-exit.is-popping::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 2px;
+  height: 2px;
+  margin: -1px 0 0 -1px;
+  opacity: 0;
+  box-shadow: 0 -7px, 5px -5px, 7px 0, 5px 5px, 0 7px, -5px 5px, -7px 0, -5px -5px;
+  animation: prntr-exit-burst 260ms cubic-bezier(0.2, 0.7, 0.3, 1) forwards;
+}
+.prntr.is-motion-reduced .prntr-exit.is-popping .prntr-exit-x {
+  animation-name: prntr-exit-fade;
+}
+.prntr.is-motion-reduced .prntr-exit.is-popping::after {
+  content: none;
+}
+@keyframes prntr-exit-swell {
+  0% { transform: scale(1); opacity: 0.5; }
+  25% { transform: scale(1.5); opacity: 1; }
+  35%, 100% { transform: scale(1.5); opacity: 0; }
+}
+@keyframes prntr-exit-burst {
+  0%, 24% { transform: scale(0.6); opacity: 0; }
+  25% { transform: scale(0.6); opacity: 1; }
+  65% { opacity: 1; }
+  100% { transform: scale(2.6); opacity: 0; }
+}
+@keyframes prntr-exit-fade {
+  0% { opacity: 0.5; }
+  100% { opacity: 0; }
+}
+
 .prntr-live {
   position: absolute;
   width: 1px;
