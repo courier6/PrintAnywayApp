@@ -3,7 +3,7 @@ import './prntr.css';
 import { keepPrntrAudio, releasePrntrAudio } from '../components/prntrAudio';
 import { reducedMotion } from './anim';
 import { createPrntrAudio, type PrntrAudio } from './audio';
-import { playWrongAnswer, REFUSE_MS, touchOnly } from './refusal';
+import { playPop, playWrongAnswer, POP_DELAY_MS, POP_MS, REFUSE_MS, touchOnly } from './refusal';
 import { makeCertificate } from './certificate';
 import { capturePage } from './page';
 import { runChain } from './runner';
@@ -63,6 +63,11 @@ export default function Prntr({ source, recolored, inkHex, stage, audioContext, 
   /** Presses on ✕ this mount, and the timer that ends the refused look. */
   const refusals = useRef(0);
   const refuseTimer = useRef(0);
+  /** The ✕ itself: up, doomed (pressed, POP_DELAY_MS), popping (POP_MS), then gone for the rest of this mount. */
+  const [exit, setExit] = useState<'up' | 'doomed' | 'popping' | 'gone'>('up');
+  const exitRef = useRef<HTMLButtonElement>(null);
+  const popTimer = useRef(0);
+  useEffect(() => () => window.clearTimeout(popTimer.current), []);
   // Read once when a run starts: the host changes them during the drop (the certificate
   // comes up in gold), and a change must not restart the chain under it.
   const startRef = useRef({ source, recolored, inkHex });
@@ -163,33 +168,50 @@ export default function Prntr({ source, recolored, inkHex, stage, audioContext, 
     };
   }, [stage, audioContext]);
 
-  // ✕ is a joke (refusal.ts): a wrong-answer buzzer and the view glitching red, and the game goes on. Escape leaves;
-  // on a touch screen, with no Escape, the second press does.
+  // ✕ is a joke (refusal.ts): a wrong-answer buzzer and the view glitching red, and the game goes on. When the buzzer
+  // has ended the ✕ pops and is gone. Escape leaves; on a touch screen, with no Escape, the ✕ stays and its second
+  // press leaves.
+  const pop = () => {
+    const button = exitRef.current;
+    if (!button) {
+      setExit('gone'); // the chain finished first and took the ✕ with it
+      return;
+    }
+    const a = audioRef.current;
+    if (a?.context && a.master) playPop(a.context, a.master);
+    setExit('popping');
+    popTimer.current = window.setTimeout(() => setExit('gone'), POP_MS);
+    // the button is leaving the page: keep the keyboard inside the dialog
+    if (document.activeElement === button) rootRef.current?.focus();
+    setLive('The ✕ is gone. Escape leaves.');
+  };
   const refuse = () => {
     const el = rootRef.current;
-    if (!el) return;
+    if (!el || exit !== 'up') return;
     refusals.current++;
-    if (refusals.current > 1 && touchOnly()) {
+    const touch = touchOnly();
+    if (refusals.current > 1 && touch) {
       onExit();
       return;
     }
     const a = audioRef.current;
     if (a?.context && a.master) playWrongAnswer(a.context, a.master);
-    el.classList.remove('is-refused');
-    void el.offsetWidth; // a press during the glitch starts it again
     el.classList.add('is-refused');
     window.clearTimeout(refuseTimer.current);
     refuseTimer.current = window.setTimeout(() => el.classList.remove('is-refused'), REFUSE_MS);
-    setLive(touchOnly() ? 'Nice try.' : 'Nice try. Escape leaves.');
+    setLive(touch ? 'Nice try.' : 'Nice try. Escape leaves.');
+    if (touch) return;
+    setExit('doomed');
+    popTimer.current = window.setTimeout(pop, POP_DELAY_MS);
   };
 
   return (
     <div className={reducedMotion() ? 'prntr is-motion-reduced' : 'prntr'} ref={rootRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="Prntr">
       <div className="prntr-stage" ref={stageRef} />
-      {/* Provisional: the exit's place is not designed (handoff §5.2). Gone once the chain has finished. It refuses (refusal.ts). */}
-      {!done && (
-        <button className="prntr-exit" aria-label="Leave" onClick={refuse}>
-          ✕
+      {/* Provisional: the exit's place is not designed (handoff §5.2). Gone once the chain has finished. It refuses, then pops (refusal.ts). */}
+      {!done && exit !== 'gone' && (
+        <button className={exit === 'popping' ? 'prntr-exit is-popping' : 'prntr-exit'} aria-label="Leave" onClick={refuse} ref={exitRef}>
+          <span className="prntr-exit-x">✕</span>
         </button>
       )}
       <span className="prntr-live" aria-live="polite">
