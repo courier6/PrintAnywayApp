@@ -37,9 +37,9 @@ const LETTERS = [
   { ch: 'r', color: '#46D36E', y: -0.17, rot: -9 },
 ];
 
-/** The Simple Products mark: the surviving SNARC neuron, verbatim from the storyboard. */
+/** The Simple Products mark: the surviving SNARC neuron, from the storyboard, its viewBox cut to its ink (y 4.5–85). */
 const LOGO =
-  '<svg class="prntr-card-logo" viewBox="0 0 160 96" role="img" aria-label="Simple Products logo: silhouette of a SNARC neuron" fill="#EDEDED">' +
+  '<svg class="prntr-card-logo" viewBox="0 4.5 160 80.5" role="img" aria-label="Simple Products logo: silhouette of a SNARC neuron" fill="#EDEDED">' +
   '<rect x="14" y="20" width="9" height="42" rx="4.5"></rect>' +
   '<rect x="27" y="28" width="9" height="34" rx="4.5"></rect>' +
   '<rect x="40" y="18" width="9" height="44" rx="4.5"></rect>' +
@@ -129,8 +129,8 @@ export const opening: Stage = {
     // Beats 1–2: the card, 1.25s in total (in 250ms, hold, out 250ms).
     const card = el('div', 'prntr-card');
     card.innerHTML =
-      `<div class="prntr-card-brand">${LOGO}${CUT_MARK}<div class="prntr-card-name">SIMPLE PRODUCTS</div></div>` +
-      '<div class="prntr-card-presents">presents</div>';
+      `<div class="prntr-card-brand">${LOGO}${CUT_MARK}<div class="prntr-card-name">SIMPLE PRODUCTS</div>` +
+      '<div class="prntr-card-rule"></div></div>';
     root.append(card);
     // Under the card, as long as it is on: the jingle. Cut with the stage.
     const jingle = audio.context && audio.master ? playCardJingle(audio.context, audio.master, CARD_MS / 1000) : null;
