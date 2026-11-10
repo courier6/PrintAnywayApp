@@ -156,7 +156,7 @@ async function loadPdf(file: File): Promise<SourceDocument> {
     throw err;
   }
   if (pdf.numPages === 0) {
-    void pdf.destroy();
+    void task.destroy().catch(() => undefined);
     throw new EmptyPdfError();
   }
   return {
@@ -181,7 +181,7 @@ async function loadPdf(file: File): Promise<SourceDocument> {
       }
       return { canvas, sizePt: { width: natural.width, height: natural.height } };
     },
-    destroy: () => void pdf.destroy(),
+    destroy: () => void task.destroy().catch(() => undefined),
   };
 }
 
