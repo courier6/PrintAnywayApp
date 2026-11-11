@@ -1136,8 +1136,10 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
   }
 
   /* Printed from the browser's menu before the Print button: the page on screen,
-     not the app around it. */
-  .app:not(.has-print-pages) .no-print :is(.header, .toolbar, .pager, .preview-progress, .pill-btn, .sidebar, .compare-caption, .print-reminder, .page-original, .page-flash, .vortex, .drag-overlay) {
+     not the app around it. By structure, so whatever is added to the stage or laid over the page
+     is left out without being named here: everything around the stage, everything in the stage
+     but the page, and every layer of the page but the first (the recolored one). */
+  .app:not(.has-print-pages) .no-print :is(.header, .toolbar, .sidebar, .drag-overlay, .preview-stage > :not(.page-stack, .page-placeholder), .page-stack > :not(:first-child)) {
     display: none !important;
   }
 
