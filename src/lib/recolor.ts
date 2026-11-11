@@ -4,6 +4,8 @@
 // near-white clamps to pure paper white so scanned documents don't print a
 // faint tint wash, near-black clamps to full ink so photo shadows don't wash out.
 
+import { GOLD_INK } from './inks';
+
 const WHITE_CLAMP = 0.94;
 // Shadows at or below this luminance saturate to full ink. Photo blacks rarely
 // reach luma 0; without this they'd land mid-ramp and print as a pale tint.
@@ -76,20 +78,8 @@ function inkLut(inkHex: string): Uint8Array {
   return rampLut([[0, '#ffffff'], [1, inkHex]]);
 }
 
-/**
- * Gold (src/lib/inks.ts GOLD_INK) is not one colour: its ramp runs paper → pale gold → gold →
- * deep gold, and a sheen sweeps across the page, so the ink shifts between the two ramps below
- * along diagonal bands SHEEN_PERIOD px wide. Unrealistic on purpose.
- */
-const GOLD_HEX = '#c9a227';
-const GOLD_RAMPS: [string, string, string][] = [
-  ['#fff1b3', '#e2b53a', '#7a5a10'],
-  ['#fff8d6', '#f7d262', '#a8821c'],
-];
-const SHEEN_PERIOD = 420;
-
-/** A gold ramp: paper at strength 0, pale at 0.35, gold at 0.7, deep at 1. */
-function goldLut([pale, gold, deep]: [string, string, string]): Uint8Array {
+/** One of gold's ramps (GOLD_INK.ramps): paper at strength 0, pale at 0.35, gold at 0.7, deep at 1. */
+function goldLut([pale, gold, deep]: readonly [string, string, string]): Uint8Array {
   return rampLut([[0, '#ffffff'], [0.35, pale], [0.7, gold], [1, deep]]);
 }
 
@@ -131,11 +121,11 @@ export function recolorToCanvas(
   if (!ctx) throw new Error('Canvas 2D context unavailable');
   const img = ctx.createImageData(width, height);
   const d = img.data;
-  if (inkHex === GOLD_HEX) {
+  if (inkHex === GOLD_INK.hex) {
     // the sheen: a blend of the two gold ramps that sweeps diagonally across the page
-    const a = goldLut(GOLD_RAMPS[0]);
-    const b = goldLut(GOLD_RAMPS[1]);
-    const period = Math.max(60, Math.round((SHEEN_PERIOD * width) / 1224));
+    const a = goldLut(GOLD_INK.ramps[0]);
+    const b = goldLut(GOLD_INK.ramps[1]);
+    const period = Math.max(60, Math.round((GOLD_INK.sheenPeriod * width) / 1224));
     for (let y = 0, p = 0, i = 0; y < height; y++) {
       for (let x = 0; x < width; x++, p++, i += 4) {
         const w = 0.5 + 0.5 * Math.sin(((x + y) / period) * 2 * Math.PI);
