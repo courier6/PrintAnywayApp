@@ -1,4 +1,14 @@
 import { BOARD_MAX, BOARD_NAME_MAX, rowLine, type BoardRow } from './board';
+import { CUT_MARK } from './stages/opening';
+
+/** The card's two views (PRNTR-BOARD.md §18): the board kept in this browser, and the world's top ten. */
+export type BoardView = 'local' | 'world';
+const TITLES: Record<BoardView, string> = { local: 'LOCAL LEADERBOARD', world: 'WORLD TOP 10' };
+/** The opening's cut mark, small, in the card's colours: its black as the title's yellow, its dark red as the mat. */
+const BOARD_MARK = CUT_MARK.replace('prntr-card-cutmark', 'prntr-board-mark')
+  .replace(/prntr-cut-sil/g, 'prntr-board-sil')
+  .replace(/#000/g, '#FFD91A')
+  .replace(/#5C0A12/g, '#1E1433');
 
 export const NOTE_REFUSED = "COULDN'T KEEP IT HERE. THE BROWSER SAID NO.";
 export const NOTE_NOT_CLEARED = "COULDN'T CLEAR IT. THE BROWSER SAID NO.";
@@ -23,6 +33,11 @@ export const outLine = (r: { name: string; score: number }, word: string) => `  
 
 export interface BoardCard {
   card: HTMLElement;
+  /** The switch under the title (§18): LOCAL, the view the card comes up on, and WORLD. */
+  localTab: HTMLButtonElement;
+  worldTab: HTMLButtonElement;
+  /** Shows a view: its title, its tab pressed. WORLD is COMING SOON over the cut mark, with CONTINUE alone. */
+  showView: (view: BoardView) => void;
   goBtn: HTMLButtonElement;
   clearBtn: HTMLButtonElement;
   yesBtn: HTMLButtonElement;
@@ -34,20 +49,31 @@ export interface BoardCard {
   showRows: (rows: BoardRow[], newRank: number) => void;
   /** The grey line under the rows ('' hides it) and the note. */
   showOut: (text: string, note: string) => void;
-  /** The clear's question in the buttons' place, or the buttons back. */
+  /** The clear's question in the buttons' place, or the buttons back. WORLD cannot be pressed while it is asked. */
   asking: (on: boolean) => void;
   /** The board as it will be with `run` on it at `rank`: its row marked, the name's field in the name's place, and OK
-   * alone in the buttons' place. showRows ends it. */
+   * alone in the buttons' place; WORLD cannot be pressed meanwhile. showRows ends it. */
   askName: (rows: BoardRow[], rank: number, run: { score: number; at: string; won: boolean }) => void;
 }
 
 /**
- * The board's card (PRNTR-BOARD.md §14–§17): LOCAL LEADERBOARD, the rows (or NOBODY YET.), the run's out line, the
- * name's field in its row with OK, CONTINUE, CLEAR THE BOARD and the clear's question (YOU SURE?, YES, CANCEL), then the note.
+ * The board's card (PRNTR-BOARD.md §14–§18): the title, the LOCAL / WORLD switch, then the view. LOCAL: the rows (or
+ * NOBODY YET.), the run's out line, the name's field in its row with OK, CONTINUE, CLEAR THE BOARD and the clear's
+ * question (YOU SURE?, YES, CANCEL), then the note. WORLD (WORLD TOP 10): COMING SOON over the cut mark, and CONTINUE.
  */
 export function buildBoardCard(): BoardCard {
   const card = el('div', 'prntr-board-card');
-  const title = el('div', 'prntr-board-title', 'LOCAL LEADERBOARD');
+  const title = el('div', 'prntr-board-title', TITLES.local);
+  const tabsEl = el('div', 'prntr-board-tabs');
+  const localTab = button('prntr-board-tab', 'LOCAL');
+  const worldTab = button('prntr-board-tab', 'WORLD');
+  tabsEl.append(localTab, worldTab);
+  // the local view's own parts, in a box that lays out as if it were not there, so one class on the card hides them
+  const localEl = el('div', 'prntr-board-local');
+  // the world's place until there is a world board: a ribbon over the cut mark
+  const soonEl = el('div', 'prntr-board-soon');
+  soonEl.append(el('div', 'prntr-board-ribbon', 'COMING SOON'));
+  soonEl.insertAdjacentHTML('beforeend', BOARD_MARK);
   const rowsEl = el('ol', 'prntr-board-rows');
   const emptyEl = el('div', 'prntr-board-empty', 'NOBODY YET.');
   // the run's line when it is not on the board: under the rows, in the rows' column
@@ -73,8 +99,17 @@ export function buildBoardCard(): BoardCard {
   const okBtn = button('prntr-board-ok', 'OK');
   const note = el('div', 'prntr-board-note');
   buttonsEl.append(okBtn, goBtn, clearBtn, yesBtn, cancelBtn);
-  card.append(title, rowsEl, emptyEl, outEl, sureEl, buttonsEl, note);
+  localEl.append(rowsEl, emptyEl, outEl, sureEl);
+  card.append(title, tabsEl, localEl, soonEl, buttonsEl, note);
   sureEl.hidden = yesBtn.hidden = cancelBtn.hidden = okBtn.hidden = true;
+
+  const showView = (view: BoardView) => {
+    card.classList.toggle('is-world', view === 'world');
+    title.textContent = TITLES[view];
+    localTab.setAttribute('aria-pressed', String(view === 'local'));
+    worldTab.setAttribute('aria-pressed', String(view === 'world'));
+  };
+  showView('local');
 
   const showRows = (rows: BoardRow[], newRank: number) => {
     rowsEl.replaceChildren();
@@ -88,6 +123,7 @@ export function buildBoardCard(): BoardCard {
     emptyEl.hidden = rows.length > 0;
     clearBtn.hidden = rows.length === 0;
     okBtn.hidden = true;
+    worldTab.disabled = false;
   };
   const showOut = (text: string, noteText: string) => {
     outEl.textContent = text;
@@ -100,6 +136,8 @@ export function buildBoardCard(): BoardCard {
     cancelBtn.hidden = !on;
     goBtn.hidden = on;
     if (on) clearBtn.hidden = true;
+    // a question is the local board's: it is answered before the view can change
+    worldTab.disabled = on;
   };
   const askName = (rows: BoardRow[], rank: number, run: { score: number; at: string; won: boolean }) => {
     // the board as the write will leave it: the run in at its rank, the row it pushes off the tenth place gone
@@ -112,6 +150,7 @@ export function buildBoardCard(): BoardCard {
     okBtn.hidden = false;
     goBtn.hidden = true;
     clearBtn.hidden = true;
+    worldTab.disabled = true;
   };
-  return { card, goBtn, clearBtn, yesBtn, cancelBtn, nameInput, okBtn, showRows, showOut, asking, askName };
+  return { card, localTab, worldTab, showView, goBtn, clearBtn, yesBtn, cancelBtn, nameInput, okBtn, showRows, showOut, asking, askName };
 }

@@ -1581,6 +1581,103 @@
   color: #FFD91A;
 }
 
+/* The switch under the title (PRNTR-BOARD.md §18): LOCAL, the board kept in this browser, and WORLD. Two buttons
+   sharing a border; the view shown is filled in the title's yellow. */
+.prntr-board-tabs {
+  display: flex;
+}
+
+.prntr-board-tab {
+  min-height: 36px;
+  padding: 8px 14px;
+  border: 2px solid #FFFFFF;
+  border-radius: 0;
+  background: #000000;
+  color: #FFFFFF;
+  font: inherit;
+  font-size: max(9px, var(--prntr-board-row));
+  letter-spacing: inherit;
+  text-transform: uppercase;
+  text-shadow: inherit;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.prntr-board-tab + .prntr-board-tab {
+  margin-left: -2px;
+}
+
+/* a touch target's height on a phone */
+@media (max-width: 599px) {
+  .prntr-board-tab {
+    min-height: 44px;
+  }
+}
+
+.prntr-board-tab[aria-pressed='true'] {
+  position: relative;
+  border-color: #FFD91A;
+  background: #FFD91A;
+  color: #1E1433;
+  text-shadow: none;
+}
+
+.prntr-board-tab:disabled {
+  border-color: #5E5A52;
+  color: #5E5A52;
+  cursor: default;
+}
+
+/* The local view's parts sit in a box that lays out as if it were not there; on WORLD the box, the clear and the
+   note go, and the world's place comes. */
+.prntr-board-local {
+  display: contents;
+}
+
+.prntr-board-card.is-world .prntr-board-local,
+.prntr-board-card.is-world .prntr-board-clear,
+.prntr-board-card.is-world .prntr-board-note,
+.prntr-board-card:not(.is-world) .prntr-board-soon {
+  display: none;
+}
+
+/* The world's place until there is a world board (the world-ten sheet's #6): COMING SOON on a ribbon in the title's
+   yellow, its ends notched in three steps, over the opening's cut mark in the same yellow. As tall as ten rows, so a
+   full board's card keeps its height between the views. */
+.prntr-board-soon {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1.1em;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 16em;
+  font-size: var(--prntr-board-row);
+}
+
+.prntr-board-ribbon {
+  padding: 0.75em 2.4em;
+  background: #FFD91A;
+  color: #1E1433;
+  font-size: 1.3em;
+  letter-spacing: 0.08em;
+  text-shadow: none;
+  clip-path: polygon(
+    0 0, 0 16.67%, 0.32em 16.67%, 0.32em 33.33%, 0.64em 33.33%, 0.64em 66.67%, 0.32em 66.67%, 0.32em 83.33%, 0 83.33%, 0 100%,
+    100% 100%, 100% 83.33%, calc(100% - 0.32em) 83.33%, calc(100% - 0.32em) 66.67%, calc(100% - 0.64em) 66.67%,
+    calc(100% - 0.64em) 33.33%, calc(100% - 0.32em) 33.33%, calc(100% - 0.32em) 16.67%, 100% 16.67%, 100% 0
+  );
+}
+
+/* The mark's box is 160 × 138. */
+.prntr-board-mark {
+  display: block;
+  width: calc(9.6em * 160 / 138);
+  height: 9.6em;
+}
+
 .prntr-board-run {
   font-size: 13px;
   line-height: 1.6;
@@ -1691,6 +1788,7 @@
   color: #FF4A3A !important;
 }
 
+.prntr-board-tab:focus-visible,
 .prntr-board-buttons button:focus-visible {
   outline: 2px solid #19B8F0;
   outline-offset: 2px;

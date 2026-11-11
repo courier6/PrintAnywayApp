@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { reducedMotion } from './anim';
 import { cleanName, clearBoard, pinRow, rankOf, readBoard, today, type BoardRow, type BoardWrite } from './board';
-import { NOTE_NOT_CLEARED, NOTE_REFUSED, buildBoardCard, outLine } from './boardCard';
+import { NOTE_NOT_CLEARED, NOTE_REFUSED, buildBoardCard, outLine, type BoardView } from './boardCard';
 import { BOARD_FRAME_BAND, frameShades, paintBoardFrame } from './boardFrame';
 
 /** A finished run as the app side gets it: won or lost, its score, the badge's name (NULL when none was given), and
@@ -32,7 +32,8 @@ interface Props {
  * gold swatch stay in sight around it. A ranking run the room has not written (the badge left
  * it NULL) asks for the name first (§15.3): OK or Enter writes it, with NULL for an empty field. CONTINUE, a press
  * outside the card or Esc closes it (unanswered, the name's run is not written); CLEAR THE BOARD asks YOU SURE?, YES
- * clears and closes, CANCEL is the board again. Silent: the run's audio has gone with Prntr.
+ * clears and closes, CANCEL is the board again. The switch under the title (§18) changes the view to WORLD TOP 10,
+ * which is COMING SOON, and back. Silent: the run's audio has gone with Prntr.
  */
 export function PrntrBoard({ run, inkHex, onClose }: Props) {
   const dimRef = useRef<HTMLDivElement>(null);
@@ -101,6 +102,14 @@ export function PrntrBoard({ run, inkHex, onClose }: Props) {
       },
       { signal },
     );
+
+    // the switch (§18): the view changes in place; the run's row, a note and the clear stay with LOCAL
+    const view = (v: BoardView) => {
+      c.showView(v);
+      setLive(v === 'world' ? 'World top 10. Coming soon.' : 'Local leaderboard.');
+    };
+    c.localTab.addEventListener('click', () => view('local'), { signal });
+    c.worldTab.addEventListener('click', () => view('world'), { signal });
 
     c.goBtn.addEventListener('click', () => onCloseRef.current(), { signal });
     c.clearBtn.addEventListener(
