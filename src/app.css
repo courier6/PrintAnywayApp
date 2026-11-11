@@ -249,6 +249,31 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
   font-weight: 600;
 }
 
+/* The offer of the browser's own language: first in the list, set apart by a tint, with its own close button. */
+.lang-offer {
+  display: inline-flex;
+  align-items: center;
+  background: var(--ink-8);
+  padding-left: 8px;
+}
+
+.lang-offer a {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.lang-offer button {
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: none;
+  padding: 0;
+  color: var(--ink);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+}
+
 /* ---------- Buttons ---------- */
 
 .btn-primary {
