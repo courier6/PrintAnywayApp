@@ -42,12 +42,12 @@ export interface BoardCard {
 }
 
 /**
- * The board's card (PRNTR-BOARD.md §14–§17): LOCAL LEADER BOARD, the rows (or NOBODY YET.), the run's out line, the
+ * The board's card (PRNTR-BOARD.md §14–§17): LOCAL LEADERBOARD, the rows (or NOBODY YET.), the run's out line, the
  * name's row with OK, CONTINUE, CLEAR THE BOARD and the clear's question (YOU SURE?, YES, CANCEL), then the note.
  */
 export function buildBoardCard(): BoardCard {
   const card = el('div', 'prntr-board-card');
-  const title = el('div', 'prntr-board-title', 'LOCAL LEADER BOARD');
+  const title = el('div', 'prntr-board-title', 'LOCAL LEADERBOARD');
   const rowsEl = el('ol', 'prntr-board-rows');
   const emptyEl = el('div', 'prntr-board-empty', 'NOBODY YET.');
   // the run's line when it is not on the board: under the rows, in the rows' column
@@ -69,7 +69,7 @@ export function buildBoardCard(): BoardCard {
   nameInput.spellcheck = false;
   nameInput.setAttribute('autocapitalize', 'characters');
   nameInput.enterKeyHint = 'done';
-  nameInput.placeholder = 'NULL';
+  nameInput.placeholder = 'ENTER NAME';
   nameInput.setAttribute('aria-label', 'Your name');
   const nameScore = el('span', '');
   nameEl.append('   ', nameInput, nameScore);

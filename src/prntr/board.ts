@@ -128,7 +128,8 @@ export function clearBoard(): boolean {
   }
 }
 
-/** A row's line on the board, 31 characters: `01 EDGAR 7      1337 2026-10-22`. */
+/** A row's line on the board, 31 characters, the date as month-day-year: `01 EDGAR 7      1337 10-22-2026`. */
 export function rowLine(rank: number, row: BoardRow): string {
-  return `${String(rank + 1).padStart(2, '0')} ${row.name.padEnd(BOARD_NAME_MAX)} ${String(row.score).padStart(4, '0')} ${row.at}`;
+  const date = `${row.at.slice(5)}-${row.at.slice(0, 4)}`;
+  return `${String(rank + 1).padStart(2, '0')} ${row.name.padEnd(BOARD_NAME_MAX)} ${String(row.score).padStart(4, '0')} ${date}`;
 }

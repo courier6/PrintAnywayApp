@@ -1573,10 +1573,10 @@
   animation: none;
 }
 
-/* One line unless it has to wrap: LOCAL LEADER BOARD is 18 glyphs at 1.08em each (19.44em), as wide
+/* One line unless it has to wrap: LOCAL LEADERBOARD is 17 glyphs at 1.08em each (18.36em), as wide
    as the rows (35.9 row sizes) at most, and inside the card's padding and the frame's band on a phone. */
 .prntr-board-title {
-  font-size: min(24px, calc(var(--prntr-board-row) * 35.9 / 19.44), calc((100vw - 64px - 2 * var(--band)) / 19.44));
+  font-size: min(24px, calc(var(--prntr-board-row) * 35.9 / 18.36), calc((100vw - 64px - 2 * var(--band)) / 18.36));
   letter-spacing: 0.08em;
   color: #FFD91A;
 }

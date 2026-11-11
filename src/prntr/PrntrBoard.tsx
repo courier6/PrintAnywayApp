@@ -27,8 +27,8 @@ interface Props {
 }
 
 /**
- * The board over the app (PRNTR-BOARD.md §15.2, §16), after the app has dropped in under the jingle: the local leader
- * board's card in a gilded pixel frame in the ink (the board-frame sheet's #5), no dim, so the certificate and the
+ * The board over the app (PRNTR-BOARD.md §15.2, §16, §17), after the app has dropped in under the jingle: the local
+ * leaderboard's card in a gilded pixel frame in the ink (the board-frame sheet's #5), no dim, so the certificate and the
  * gold swatch stay in sight around it. A ranking run the room has not written (the badge left
  * it NULL) asks for the name first (§15.3): OK or Enter writes it, with NULL for an empty field. CONTINUE, a press
  * outside the card or Esc closes it (unanswered, the name's run is not written); CLEAR THE BOARD asks YOU SURE?, YES
@@ -158,7 +158,7 @@ export function PrntrBoard({ run, inkHex, onClose }: Props) {
       ref={dimRef}
       role="dialog"
       aria-modal="true"
-      aria-label="Local leader board"
+      aria-label="Local leaderboard"
       onClick={(e) => {
         if (e.target === e.currentTarget) onCloseRef.current();
       }}
@@ -184,7 +184,7 @@ interface Paint {
  * NULL one waits for its name. */
 function firstPaint(run: BoardRun): Paint {
   const rows = readBoard();
-  const said = (s: string) => `Local leader board. ${s}`;
+  const said = (s: string) => `Local leaderboard. ${s}`;
   const row: BoardRow = { name: run.player, score: run.score, at: today(), won: run.won };
   const how = run.won ? '' : ', game over';
   if (run.player === 'NULL') {
