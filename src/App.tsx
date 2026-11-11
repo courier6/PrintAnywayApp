@@ -449,6 +449,8 @@ export default function App() {
     const clamped = Math.max(0, Math.min(pageCount - 1, page));
     if (store.hasSource(clamped)) store.ensureRecolored(clamped, inkRef.current);
     setCurrentPage(clamped);
+    // Read out by a screen reader, however the page was reached (the buttons, the keys, the page field).
+    if (clamped !== currentPage) setStatus(t('preview.pageOf', { page: clamped + 1, total: pageCount }));
   }
 
   // Prntr takes over the viewport with the document's first page, whatever page is shown (or a page it is

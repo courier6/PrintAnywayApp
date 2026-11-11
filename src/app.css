@@ -671,10 +671,27 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
   cursor: default;
 }
 
+/* A button that reads as the label it was: a click opens the page field in its place. */
 .pager-label {
+  border: none;
+  background: none;
+  padding: 0;
+  height: 28px;
   font-size: 13px;
   font-weight: 700;
   color: var(--ink);
+  cursor: pointer;
+}
+
+.pager-input {
+  width: 9ch;
+  height: 28px;
+  border: 1px solid var(--ink);
+  background: #ffffff;
+  padding: 0 6px;
+  font: 700 13px Helvetica, Arial, sans-serif;
+  color: var(--ink);
+  text-align: center;
 }
 
 /* ---------- Preview stage ---------- */

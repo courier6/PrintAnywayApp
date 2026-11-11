@@ -261,6 +261,51 @@ export function PreviewState({
     onHoldChangeRef.current(false);
   }, [inkIndex, currentPage]);
 
+  // The pager's keys, wherever the focus is: ← and → turn the page, Home and End reach the ends. Not with a
+  // modifier (the browser's own shortcuts), nor while typing in a field.
+  const pager = useRef({ currentPage, pageCount, onPageChange });
+  pager.current = { currentPage, pageCount, onPageChange };
+  const paged = pageCount > 1;
+  useEffect(() => {
+    if (!paged) return;
+    const onKey = (e: globalThis.KeyboardEvent) => {
+      if (e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+      if ((e.target as HTMLElement | null)?.closest?.('input, textarea, select, [contenteditable]')) return;
+      const { currentPage, pageCount, onPageChange } = pager.current;
+      const to =
+        e.key === 'ArrowLeft' ? currentPage - 1
+        : e.key === 'ArrowRight' ? currentPage + 1
+        : e.key === 'Home' ? 0
+        : e.key === 'End' ? pageCount - 1
+        : null;
+      if (to === null) return;
+      e.preventDefault();
+      onPageChange(to);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [paged]);
+
+  // The page field: a click on "Page 3 of 40" swaps it for a number field. Enter goes to that page (the
+  // pager clamps it), Esc or leaving the field closes it. The focus goes back to the label after the keys.
+  const [pageField, setPageField] = useState<string | null>(null);
+  const pagerLabel = useRef<HTMLButtonElement>(null);
+  const refocusLabel = useRef(false);
+  useEffect(() => {
+    if (pageField === null && refocusLabel.current) {
+      refocusLabel.current = false;
+      pagerLabel.current?.focus({ preventScroll: true });
+    }
+  }, [pageField]);
+
+  function pageFieldKeyDown(e: KeyboardEvent<HTMLInputElement>) {
+    if (e.key !== 'Enter' && e.key !== 'Escape') return;
+    e.preventDefault();
+    if (e.key === 'Enter' && pageField) onPageChange(Number(pageField) - 1);
+    refocusLabel.current = true;
+    setPageField(null);
+  }
+
   function holdKeyDown(e: KeyboardEvent<HTMLButtonElement>) {
     if ((e.key === ' ' || e.key === 'Enter') && !e.repeat) {
       e.preventDefault();
@@ -355,9 +400,30 @@ export function PreviewState({
               >
                 ‹
               </button>
-              <span className="pager-label">
-                {t('preview.pageOf', { page: currentPage + 1, total: pageCount })}
-              </span>
+              {pageField === null ? (
+                <button
+                  type="button"
+                  className="pager-label"
+                  ref={pagerLabel}
+                  title={t('preview.goToPage')}
+                  onClick={() => setPageField(String(currentPage + 1))}
+                >
+                  {t('preview.pageOf', { page: currentPage + 1, total: pageCount })}
+                </button>
+              ) : (
+                <input
+                  className="pager-input"
+                  type="text"
+                  inputMode="numeric"
+                  aria-label={t('preview.pageInput')}
+                  autoFocus
+                  value={pageField}
+                  onChange={(e) => setPageField(e.target.value.replace(/\D/g, '').slice(0, 5))}
+                  onFocus={(e) => e.target.select()}
+                  onKeyDown={pageFieldKeyDown}
+                  onBlur={() => setPageField(null)}
+                />
+              )}
               <button
                 className="pager-btn"
                 aria-label={t('preview.nextPage')}
