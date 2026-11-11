@@ -431,7 +431,7 @@ export function PreviewState({
         </div>
 
         <aside className="sidebar">
-          <div>
+          <div className="ink-block">
             <div className="side-label">{t('preview.inkLabel')}</div>
             <div className="swatch-row">
               {inks.map((ink, i) => (

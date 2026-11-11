@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { t } from '../i18n';
 import { PRINTER_TIPS } from '../lib/printerTips';
 import { DropZone } from './DropZone';
@@ -8,10 +9,13 @@ interface Props {
 }
 
 export function EmptyState({ onFile, onChoose }: Props) {
+  // Nothing is dropped on a phone: where the pointer cannot hover, the headline does not ask for it.
+  // Read once; index.html's static copy carries the pointer's headline until this mounts.
+  const [touch] = useState(() => window.matchMedia('(hover: none)').matches);
   return (
     <div className="state-pad">
       <DropZone onFile={onFile} onChoose={onChoose}>
-        <h1 className="hero-headline">{t('empty.headline')}</h1>
+        <h1 className="hero-headline">{t(touch ? 'empty.headlineTouch' : 'empty.headline')}</h1>
         <p className="hero-subline">{t('empty.subline')}</p>
         <div className="hero-actions">
           <button className="btn-primary" onClick={onChoose}>
