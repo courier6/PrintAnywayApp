@@ -1509,18 +1509,22 @@
 .prntr-room-frame.is-small .prntr-room-continue-count { font-size: 64px; }
 
 /* ---------------------------------------------------------------------------
-   Stage 2: the board (PRNTR-BOARD.md). A card over the room's last frame, in the
-   HUD's face and shadow, on CONTINUE?'s dim; the rows shrink on a phone so the
-   31-character line fits with 24px either side.
+   The board over the app (PRNTR-BOARD.md §15.2, §16; the board-frame sheet's #5): a card in
+   the HUD's face and shadow, fixed over the page once the app has dropped in, no dim (the
+   certificate and the gold swatch stay in sight), on the plum mat inside a gilded pixel frame
+   12 cells deep (3 px a cell, 2 under 600 px wide) drawn on a canvas behind it. The rows
+   shrink on a phone so the 31-character line and the frame fit.
    --------------------------------------------------------------------------- */
 .prntr-board {
-  position: absolute;
+  position: fixed;
   inset: 0;
+  z-index: 120;
   display: flex;
   align-items: center;
   justify-content: center;
   overflow-y: auto;
-  background: rgba(0, 0, 0, 0.42);
+  box-sizing: border-box;
+  padding: var(--band) 0;
   color: #FFFFFF;
   font-family: 'Press Start 2P', 'Courier New', monospace;
   text-transform: uppercase;
@@ -1531,8 +1535,15 @@
   user-select: none;
   -webkit-user-select: none;
   /* A row is 31 characters with the letter spacing and the marker's column: 34.5 of this size wide
-     on a desktop, 35.2 at a phone's size (measured), so the rows keep about a 16 px gutter. */
-  --prntr-board-row: clamp(8px, calc((100vw - 32px) / 35), 13px);
+     on a desktop, 35.2 at a phone's size (measured), so the rows keep about a 16 px gutter inside the frame's band. */
+  --band: 36px;
+  --prntr-board-row: clamp(7px, calc((100vw - 64px - 2 * var(--band)) / 35), 13px);
+}
+
+@media (max-width: 599px) {
+  .prntr-board {
+    --band: 24px;
+  }
 }
 
 .prntr-board [hidden] {
@@ -1545,12 +1556,15 @@
   align-items: center;
   gap: 12px;
   box-sizing: border-box;
-  width: min(100% - 32px, calc(34.5 * var(--prntr-board-row) + 32px));
-  /* auto margins, not the dim's align-items alone: a card taller than the viewport (ten rows on a
-     phone in landscape) then starts at the top and the dim scrolls to its end, instead of being
+  position: relative;
+  z-index: 0;
+  width: min(100% - 32px - 2 * var(--band), calc(34.5 * var(--prntr-board-row) + 32px));
+  /* auto margins, not the overlay's align-items alone: a card taller than the viewport (ten rows on a
+     phone in landscape) then starts at the top and the overlay scrolls to its end, instead of being
      centred with its top half out of reach */
   margin: auto 0;
   padding: 16px;
+  background: #1E1433;
   text-align: center;
   animation: prntr-pop 250ms ease-out both;
 }
@@ -1560,9 +1574,9 @@
 }
 
 /* One line unless it has to wrap: LOCAL LEADER BOARD is 18 glyphs at 1.08em each (19.44em), as wide
-   as the rows (34.5 row sizes) at most, and inside the card's padding on a phone. */
+   as the rows (34.5 row sizes) at most, and inside the card's padding and the frame's band on a phone. */
 .prntr-board-title {
-  font-size: min(24px, calc(var(--prntr-board-row) * 34.5 / 19.44), calc((100vw - 64px) / 19.44));
+  font-size: min(24px, calc(var(--prntr-board-row) * 34.5 / 19.44), calc((100vw - 64px - 2 * var(--band)) / 19.44));
   letter-spacing: 0.08em;
   color: #FFD91A;
 }
@@ -1716,37 +1730,6 @@
 .prntr-board-ok {
   border-color: #FFD91A !important;
   color: #FFD91A !important;
-}
-
-/* The board over the app (PRNTR-BOARD.md §15.2, the board-frame sheet's #5): fixed over the page once the app has
-   dropped in, no dim (the certificate and the gold swatch stay in sight), the card on the plum mat inside a gilded
-   pixel frame 12 cells deep (3 px a cell, 2 under 600 px wide) drawn on a canvas behind it. The rows shrink to leave
-   the frame room on a phone. */
-.prntr-board.is-app {
-  position: fixed;
-  z-index: 120;
-  padding: var(--band) 0;
-  box-sizing: border-box;
-  background: none;
-  --band: 36px;
-  --prntr-board-row: clamp(7px, calc((100vw - 64px - 2 * var(--band)) / 35), 13px);
-}
-
-@media (max-width: 599px) {
-  .prntr-board.is-app {
-    --band: 24px;
-  }
-}
-
-.prntr-board.is-app .prntr-board-card {
-  position: relative;
-  z-index: 0;
-  width: min(100% - 32px - 2 * var(--band), calc(34.5 * var(--prntr-board-row) + 32px));
-  background: #1E1433;
-}
-
-.prntr-board.is-app .prntr-board-title {
-  font-size: min(24px, calc(var(--prntr-board-row) * 34.5 / 19.44), calc((100vw - 64px - 2 * var(--band)) / 19.44));
 }
 
 .prntr-board-frame {

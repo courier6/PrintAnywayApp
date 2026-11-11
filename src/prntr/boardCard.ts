@@ -42,11 +42,10 @@ export interface BoardCard {
 }
 
 /**
- * The board's card (PRNTR-BOARD.md §14, §15): LOCAL LEADER BOARD, the rows (or NOBODY YET.), the run's out line, and,
- * unless it is the room's glimpse, the name's row with OK, CONTINUE, CLEAR THE BOARD and the clear's question (YOU SURE?,
- * YES, CANCEL), then the note. Built by the room's board stage (the glimpse) and by the app-side board.
+ * The board's card (PRNTR-BOARD.md §14–§16): LOCAL LEADER BOARD, the rows (or NOBODY YET.), the run's out line, the
+ * name's row with OK, CONTINUE, CLEAR THE BOARD and the clear's question (YOU SURE?, YES, CANCEL), then the note.
  */
-export function buildBoardCard({ buttons }: { buttons: boolean }): BoardCard {
+export function buildBoardCard(): BoardCard {
   const card = el('div', 'prntr-board-card');
   const title = el('div', 'prntr-board-title', 'LOCAL LEADER BOARD');
   const rowsEl = el('ol', 'prntr-board-rows');
@@ -77,9 +76,7 @@ export function buildBoardCard({ buttons }: { buttons: boolean }): BoardCard {
   const okBtn = button('prntr-board-ok', 'OK');
   const note = el('div', 'prntr-board-note');
   buttonsEl.append(okBtn, goBtn, clearBtn, yesBtn, cancelBtn);
-  card.append(title, rowsEl, emptyEl, outEl);
-  if (buttons) card.append(nameEl, sureEl, buttonsEl);
-  card.append(note);
+  card.append(title, rowsEl, emptyEl, outEl, nameEl, sureEl, buttonsEl, note);
   sureEl.hidden = yesBtn.hidden = cancelBtn.hidden = nameEl.hidden = okBtn.hidden = true;
 
   const showRows = (rows: BoardRow[], newRank: number) => {

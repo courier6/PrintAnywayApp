@@ -48,7 +48,7 @@ export function PrntrBoard({ run, inkHex, onClose }: Props) {
     if (!dim) return;
     const controller = new AbortController();
     const { signal } = controller;
-    const c = buildBoardCard({ buttons: true });
+    const c = buildBoardCard();
     const card = c.card;
     if (reducedMotion()) card.classList.add('is-still');
     const frame = document.createElement('canvas');
@@ -150,7 +150,7 @@ export function PrntrBoard({ run, inkHex, onClose }: Props) {
 
   return (
     <div
-      className="prntr-board is-app"
+      className="prntr-board"
       ref={dimRef}
       role="dialog"
       aria-modal="true"
