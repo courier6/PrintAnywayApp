@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type MouseEvent } from 'react';
 import { t, tPlural, useLocale } from '../i18n';
 import type { ExportFormat } from '../lib/exportFile';
 import type { Ink } from '../lib/inks';
@@ -9,6 +9,11 @@ import type { Notice } from '../App';
 import { PrintReminder } from './PrintReminder';
 import { PUFF_MS, THIN_MS, VORTEX_MS, VortexCanvas } from './VortexCanvas';
 import { reducedMotion } from '../prntr/anim';
+
+/** A press on the compare button let go within this latches: the original stays until the next press. */
+const LATCH_MS = 350;
+/** A click this soon after a press came from that press, and is not a click of its own. */
+const CLICK_AFTER_PRESS_MS = 500;
 
 interface Props {
   fileName: string;
@@ -188,15 +193,86 @@ export function PreviewState({
     return () => window.removeEventListener('keydown', onKey);
   }, [showReminder, onDismissReminder]);
 
-  function holdKeyDown(e: KeyboardEvent<HTMLButtonElement>) {
-    if ((e.key === ' ' || e.key === 'Enter') && !e.repeat) {
-      e.preventDefault();
+  // The compare button. Held, it shows the original until it is let go. Pressed and let go within LATCH_MS,
+  // the original stays until the next press: a click, a tap, Enter, a switch or a voice command cannot hold.
+  // Not on the certificate: there the hold runs the vortex, which stays a hold.
+  const [latched, setLatched] = useState(false);
+  const latchedRef = useRef(false);
+  latchedRef.current = latched;
+  const press = useRef<{ at: number; unlatches: boolean; mayLatch: boolean } | null>(null);
+  const lastPressAt = useRef(0);
+  const canLatch = originalPage === null;
+
+  function pressStart() {
+    if (press.current) return;
+    const at = performance.now();
+    lastPressAt.current = at;
+    if (latched) {
+      // the press that ends a latch: its release does nothing more
+      press.current = { at, unlatches: true, mayLatch: false };
+      setLatched(false);
+      onHoldChange(false);
+      return;
+    }
+    // decided as the press starts: one that began on the certificate brings the original back and must not latch on it
+    press.current = { at, unlatches: false, mayLatch: canLatch };
+    onHoldChange(true);
+  }
+
+  /** `mayLatch`: the press ended on the button (let go), not by leaving it. */
+  function pressEnd(mayLatch: boolean) {
+    const p = press.current;
+    press.current = null;
+    if (!p) {
+      // a hold nobody is pressing (the vortex hands the original back held): any release ends it
+      if (holding && !latched) onHoldChange(false);
+      return;
+    }
+    const now = performance.now();
+    lastPressAt.current = now;
+    if (p.unlatches) return;
+    if (mayLatch && p.mayLatch && now - p.at < LATCH_MS) setLatched(true);
+    else onHoldChange(false);
+  }
+
+  // A click no pointer or key press produced (a screen reader, voice control, a switch) toggles the latch.
+  function holdClick(e: MouseEvent<HTMLButtonElement>) {
+    if (e.detail !== 0 || performance.now() - lastPressAt.current < CLICK_AFTER_PRESS_MS) return;
+    if (latched) {
+      setLatched(false);
+      onHoldChange(false);
+    } else if (canLatch) {
+      setLatched(true);
       onHoldChange(true);
     }
   }
 
+  // The hold ended from outside (a new document, Prntr): the latch goes with it.
+  useEffect(() => {
+    if (!holding) setLatched(false);
+  }, [holding]);
+
+  // Another ink or another page ends a latch: what is shown next is the recolored page.
+  const onHoldChangeRef = useRef(onHoldChange);
+  onHoldChangeRef.current = onHoldChange;
+  useEffect(() => {
+    if (!latchedRef.current) return;
+    setLatched(false);
+    onHoldChangeRef.current(false);
+  }, [inkIndex, currentPage]);
+
+  function holdKeyDown(e: KeyboardEvent<HTMLButtonElement>) {
+    if ((e.key === ' ' || e.key === 'Enter') && !e.repeat) {
+      e.preventDefault();
+      pressStart();
+    }
+  }
+
   function holdKeyUp(e: KeyboardEvent<HTMLButtonElement>) {
-    if (e.key === ' ' || e.key === 'Enter') onHoldChange(false);
+    if (e.key === ' ' || e.key === 'Enter') {
+      e.preventDefault();
+      pressEnd(true);
+    }
   }
 
   const swirling = vortex !== null && vortex.releasedAt === null;
@@ -264,7 +340,7 @@ export function PreviewState({
             style={justInked && !holding ? { color: inkHex } : undefined}
           >
             {holding && !swirling
-              ? t('preview.captionOriginal')
+              ? t(latched ? 'preview.captionLatched' : 'preview.captionOriginal')
               : justInked
                 ? t('preview.captionInked', { ink: t(inks[inkIndex].nameKey) })
                 : t('preview.captionDefault')}
@@ -339,17 +415,18 @@ export function PreviewState({
             aria-pressed={holding}
             onPointerDown={(e) => {
               e.preventDefault();
-              onHoldChange(true);
+              pressStart();
             }}
-            onPointerUp={() => onHoldChange(false)}
-            onPointerLeave={() => onHoldChange(false)}
-            onPointerCancel={() => onHoldChange(false)}
+            onPointerUp={() => pressEnd(true)}
+            onPointerLeave={() => pressEnd(false)}
+            onPointerCancel={() => pressEnd(false)}
             onKeyDown={holdKeyDown}
             onKeyUp={holdKeyUp}
-            onBlur={() => onHoldChange(false)}
+            onClick={holdClick}
+            onBlur={() => pressEnd(false)}
             onContextMenu={(e) => e.preventDefault()}
           >
-            {t('preview.hold')}
+            {t(latched ? 'preview.holdLatched' : 'preview.hold')}
           </button>
         </div>
 
