@@ -1,4 +1,4 @@
-import { BOARD_NAME_MAX, rowLine, type BoardRow } from './board';
+import { BOARD_MAX, BOARD_NAME_MAX, rowLine, type BoardRow } from './board';
 
 export const NOTE_REFUSED = "COULDN'T KEEP IT HERE. THE BROWSER SAID NO.";
 export const NOTE_NOT_CLEARED = "COULDN'T CLEAR IT. THE BROWSER SAID NO.";
@@ -27,7 +27,7 @@ export interface BoardCard {
   clearBtn: HTMLButtonElement;
   yesBtn: HTMLButtonElement;
   cancelBtn: HTMLButtonElement;
-  /** The name asked for (§15.3): the field in the run's row, and OK. */
+  /** The name asked for (§15.3, §17): the field, in the run's row where it will stand on the board, and OK. */
   nameInput: HTMLInputElement;
   okBtn: HTMLButtonElement;
   /** The rows, the run's own row marked at newRank (-1: none); a game over's row is grey, a cleared one has a star. */
@@ -36,14 +36,14 @@ export interface BoardCard {
   showOut: (text: string, note: string) => void;
   /** The clear's question in the buttons' place, or the buttons back. */
   asking: (on: boolean) => void;
-  /** The name's row (`   [name] 1341`) in the out line's place and OK alone in the buttons' (a score), or the board's
-   * buttons back (null). */
-  naming: (score: number | null) => void;
+  /** The board as it will be with `run` on it at `rank`: its row marked, the name's field in the name's place, and OK
+   * alone in the buttons' place. showRows ends it. */
+  askName: (rows: BoardRow[], rank: number, run: { score: number; at: string; won: boolean }) => void;
 }
 
 /**
  * The board's card (PRNTR-BOARD.md §14–§17): LOCAL LEADERBOARD, the rows (or NOBODY YET.), the run's out line, the
- * name's row with OK, CONTINUE, CLEAR THE BOARD and the clear's question (YOU SURE?, YES, CANCEL), then the note.
+ * name's field in its row with OK, CONTINUE, CLEAR THE BOARD and the clear's question (YOU SURE?, YES, CANCEL), then the note.
  */
 export function buildBoardCard(): BoardCard {
   const card = el('div', 'prntr-board-card');
@@ -59,8 +59,7 @@ export function buildBoardCard(): BoardCard {
   const sureEl = el('div', 'prntr-board-sure', 'YOU SURE?');
   const yesBtn = button('prntr-board-yes', 'YES');
   const cancelBtn = button('prntr-board-cancel', 'CANCEL');
-  // the name asked for a ranking run the badge left NULL: a field in a row's place, the score after it, and OK
-  const nameEl = el('div', 'prntr-board-run is-name');
+  // the name asked for a ranking run the badge left NULL: a field in the name's place of the run's row, and OK
   const nameInput = document.createElement('input');
   nameInput.className = 'prntr-board-name';
   nameInput.type = 'text';
@@ -71,13 +70,11 @@ export function buildBoardCard(): BoardCard {
   nameInput.enterKeyHint = 'done';
   nameInput.placeholder = 'ENTER NAME';
   nameInput.setAttribute('aria-label', 'Your name');
-  const nameScore = el('span', '');
-  nameEl.append('   ', nameInput, nameScore);
   const okBtn = button('prntr-board-ok', 'OK');
   const note = el('div', 'prntr-board-note');
   buttonsEl.append(okBtn, goBtn, clearBtn, yesBtn, cancelBtn);
-  card.append(title, rowsEl, emptyEl, outEl, nameEl, sureEl, buttonsEl, note);
-  sureEl.hidden = yesBtn.hidden = cancelBtn.hidden = nameEl.hidden = okBtn.hidden = true;
+  card.append(title, rowsEl, emptyEl, outEl, sureEl, buttonsEl, note);
+  sureEl.hidden = yesBtn.hidden = cancelBtn.hidden = okBtn.hidden = true;
 
   const showRows = (rows: BoardRow[], newRank: number) => {
     rowsEl.replaceChildren();
@@ -90,6 +87,7 @@ export function buildBoardCard(): BoardCard {
     rowsEl.hidden = rows.length === 0;
     emptyEl.hidden = rows.length > 0;
     clearBtn.hidden = rows.length === 0;
+    okBtn.hidden = true;
   };
   const showOut = (text: string, noteText: string) => {
     outEl.textContent = text;
@@ -103,17 +101,17 @@ export function buildBoardCard(): BoardCard {
     goBtn.hidden = on;
     if (on) clearBtn.hidden = true;
   };
-  const naming = (score: number | null) => {
-    const on = score !== null;
-    nameEl.hidden = !on;
-    okBtn.hidden = !on;
-    goBtn.hidden = on;
-    if (on) {
-      // blanks where a row has its date, so the line is a row's width and centres into the rows' column
-      nameScore.textContent = ` ${String(score).padStart(4, '0')}${' '.repeat(11)}`;
-      outEl.hidden = true;
-      clearBtn.hidden = true;
-    }
+  const askName = (rows: BoardRow[], rank: number, run: { score: number; at: string; won: boolean }) => {
+    // the board as the write will leave it: the run in at its rank, the row it pushes off the tenth place gone
+    showRows([...rows.slice(0, rank), { name: '', ...run }, ...rows.slice(rank)].slice(0, BOARD_MAX), rank);
+    const li = rowsEl.children[rank];
+    const line = li.textContent ?? '';
+    // `02 ` and ` 0420 11-11-2026` around the field, which is the name's twelve glyphs wide
+    li.replaceChildren(line.slice(0, 3), nameInput, line.slice(3 + BOARD_NAME_MAX));
+    outEl.hidden = true;
+    okBtn.hidden = false;
+    goBtn.hidden = true;
+    clearBtn.hidden = true;
   };
-  return { card, goBtn, clearBtn, yesBtn, cancelBtn, nameInput, okBtn, showRows, showOut, asking, naming };
+  return { card, goBtn, clearBtn, yesBtn, cancelBtn, nameInput, okBtn, showRows, showOut, asking, askName };
 }

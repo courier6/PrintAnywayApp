@@ -1703,15 +1703,8 @@
   color: #BDBDBD;
 }
 
-/* The name asked for a ranking run the badge left NULL (PRNTR-BOARD.md §15.3): a row-shaped line in the out line's
-   place, three blanks for the rank, the field twelve glyphs wide in the rows' type, the score after it; OK as CONTINUE. */
-.prntr-board-run.is-name {
-  margin-top: -0.4em;
-  padding-left: 1.2em;
-  font-size: var(--prntr-board-row);
-  text-align: left;
-}
-
+/* The name asked for a ranking run the badge left NULL (PRNTR-BOARD.md §15.3, §17): a field in the name's place of
+   the run's row, where it will stand on the board, twelve glyphs wide in the row's type and colour; OK as CONTINUE. */
 .prntr-board-name {
   box-sizing: content-box;
   width: calc(12 * (1ch + 0.06em));
@@ -1721,8 +1714,8 @@
   border-bottom: 2px solid #FFFFFF;
   border-radius: 0;
   background: #000000;
-  color: #FFD91A;
-  caret-color: #FFD91A;
+  color: inherit;
+  caret-color: currentColor;
   font: inherit;
   letter-spacing: inherit;
   text-transform: uppercase;

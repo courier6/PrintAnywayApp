@@ -64,7 +64,6 @@ export function PrntrBoard({ run, inkHex, onClose }: Props) {
 
     const show = ({ rows, rank, out, note, say }: Paint) => {
       c.asking(false);
-      c.naming(null);
       c.showRows(rows, rank);
       c.showOut(out, note);
       c.goBtn.focus();
@@ -72,9 +71,8 @@ export function PrntrBoard({ run, inkHex, onClose }: Props) {
     };
     const first = shownRef.current!;
     if (first.ask) {
-      c.showRows(first.rows, -1);
       c.showOut('', '');
-      c.naming(run.score);
+      c.askName(first.rows, first.rank, { score: run.score, at: today(), won: run.won });
       c.nameInput.focus();
       setLive(first.say);
     } else {
@@ -176,7 +174,7 @@ interface Paint {
   out: string;
   note: string;
   say: string;
-  /** A run the room left unwritten (NULL) that ranks: the name is asked before it is written. */
+  /** A run the room left unwritten (NULL) that ranks: the name is asked, in its row at `rank`, before it is written. */
   ask: boolean;
 }
 
@@ -190,7 +188,7 @@ function firstPaint(run: BoardRun): Paint {
   if (run.player === 'NULL') {
     const rank = rankOf(rows, run.score);
     if (rank === -1) return { rows, rank: -1, out: outLine(row, 'NOT ON IT.'), note: '', say: said(`${row.score}${how}, not on it.`), ask: false };
-    return { rows, rank: -1, out: '', note: '', say: said(`${row.score}${how}, number ${rank + 1}. Your name?`), ask: true };
+    return { rows, rank, out: '', note: '', say: said(`${row.score}${how}, number ${rank + 1}. Your name?`), ask: true };
   }
   // it was written as the room ended, or not, and `board` says which (the row is not looked up again: its date stamp
   // could differ from today's across midnight)
