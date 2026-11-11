@@ -10,12 +10,50 @@ export type ErrorCode =
   | 'PA-104' // HEIC decode failure
   | 'PA-105' // image decode failure
   | 'PA-106' // out of memory / canvas unavailable
-  | 'PA-107'; // browser too old for pdf.js
+  | 'PA-107' // browser too old for pdf.js
+  | 'PA-108'; // an office or text document: it has to be saved as a PDF first
+
+/** Which message the error card and the notices show: error.<kind>.title / .body in the .properties files. */
+export type ErrorKind =
+  | 'unsupported'
+  | 'password'
+  | 'damaged-pdf'
+  | 'heic'
+  | 'image'
+  | 'memory'
+  | 'old-browser'
+  | 'office'
+  | 'processing';
+
+const KIND_BY_CODE: Record<ErrorCode, ErrorKind> = {
+  'PA-100': 'processing',
+  'PA-101': 'unsupported',
+  'PA-102': 'password',
+  'PA-103': 'damaged-pdf',
+  'PA-104': 'heic',
+  'PA-105': 'image',
+  'PA-106': 'memory',
+  'PA-107': 'old-browser',
+  'PA-108': 'office',
+};
+
+/** The message for a code: each code has exactly one, so only the code is ever stored. */
+export function kindOf(code: ErrorCode): ErrorKind {
+  return KIND_BY_CODE[code];
+}
 
 export class UnsupportedFileError extends Error {
   constructor() {
     super('Unsupported file type');
     this.name = 'UnsupportedFileError';
+  }
+}
+
+/** A Word, Excel, PowerPoint, OpenDocument, iWork or text file: not opened here, but one "Save as PDF" away. */
+export class OfficeFileError extends Error {
+  constructor() {
+    super('Office or text document');
+    this.name = 'OfficeFileError';
   }
 }
 
@@ -41,6 +79,14 @@ export class EmptyPdfError extends Error {
   }
 }
 
+/** The browser gave a canvas no 2D context: the page is too large for it, or memory has run out. */
+export class CanvasUnavailableError extends Error {
+  constructor() {
+    super('Canvas 2D context unavailable');
+    this.name = 'CanvasUnavailableError';
+  }
+}
+
 /** The browser lacks what pdf.js needs: no PDF will open in it, whatever the file. */
 export class BrowserTooOldError extends Error {
   constructor(message = 'Browser too old for pdf.js') {
@@ -53,6 +99,7 @@ export class BrowserTooOldError extends Error {
 // exception classes never need to be imported on the happy path.
 export function classifyError(err: unknown): ErrorCode {
   if (err instanceof UnsupportedFileError) return 'PA-101';
+  if (err instanceof OfficeFileError) return 'PA-108';
   if (err instanceof HeicDecodeError) return 'PA-104';
   if (err instanceof ImageDecodeError) return 'PA-105';
   if (err instanceof BrowserTooOldError) return 'PA-107';
@@ -62,7 +109,7 @@ export function classifyError(err: unknown): ErrorCode {
   if (name === 'PasswordException') return 'PA-102';
   if (name === 'InvalidPDFException' || err instanceof EmptyPdfError) return 'PA-103';
   if (
-    (err instanceof Error && err.message === 'Canvas 2D context unavailable') ||
+    err instanceof CanvasUnavailableError ||
     err instanceof RangeError ||
     (err instanceof DOMException && err.name === 'QuotaExceededError')
   ) {

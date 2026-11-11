@@ -1,4 +1,6 @@
-import { BrowserTooOldError, EmptyPdfError, HeicDecodeError, ImageDecodeError, UnsupportedFileError } from './errors';
+import { get2d } from './canvas2d';
+import type { ExportFormat } from './exportFile';
+import { BrowserTooOldError, EmptyPdfError, HeicDecodeError, ImageDecodeError, OfficeFileError, UnsupportedFileError } from './errors';
 
 // pdf.js's modern build calls built-ins only the newest browsers have
 // (Map#getOrInsertComputed, Math.sumPrecise, Uint8Array#toHex, …) without
@@ -111,23 +113,95 @@ export interface SourceDocument {
 
 export type FileKind = 'pdf' | 'png' | 'jpg' | 'heic';
 
-/** The supported format of `file`, from its MIME type or extension. */
+/** HEIF brands that hold a HEVC-coded photo (ISO 23008-12); the file names it at byte 8, after "ftyp". */
+const HEIC_BRANDS = ['heic', 'heix', 'hevc', 'hevx', 'heim', 'heis', 'hevm', 'hevs', 'mif1', 'msf1'];
+/** A PDF's "%PDF-" may follow junk; readers look for it in the first kilobyte. */
+const SNIFF_BYTES = 1024;
+
+interface Format {
+  kind: FileKind;
+  mimes: readonly string[];
+  /** Lower case, without the dot. */
+  extensions: readonly string[];
+  /** What a download of it is saved as: browsers cannot encode HEIC, so it leaves as JPG. */
+  exportAs: ExportFormat;
+  /** Whether the file's first SNIFF_BYTES bytes (also given as Latin-1 text) are this format's. */
+  magic: (head: Uint8Array, ascii: string) => boolean;
+}
+
+/**
+ * The input formats, one row each: everything that depends on the list (the kind a name claims, the kind
+ * the bytes show, the download format, the picker's filter) is built from it. A new format is a row here
+ * and its loader in loadDocument. Where a name and a MIME type disagree, the earlier row wins.
+ */
+const FORMATS: readonly Format[] = [
+  { kind: 'pdf', mimes: ['application/pdf'], extensions: ['pdf'], exportAs: 'pdf', magic: (_, ascii) => ascii.includes('%PDF-') },
+  {
+    kind: 'heic',
+    mimes: ['image/heic', 'image/heif'],
+    extensions: ['heic', 'heif'],
+    exportAs: 'jpg',
+    magic: (_, ascii) => ascii.slice(4, 8) === 'ftyp' && HEIC_BRANDS.includes(ascii.slice(8, 12)),
+  },
+  { kind: 'png', mimes: ['image/png'], extensions: ['png'], exportAs: 'png', magic: (head) => head[0] === 0x89 && head[1] === 0x50 && head[2] === 0x4e && head[3] === 0x47 },
+  { kind: 'jpg', mimes: ['image/jpeg'], extensions: ['jpg', 'jpeg'], exportAs: 'jpg', magic: (head) => head[0] === 0xff && head[1] === 0xd8 && head[2] === 0xff },
+];
+
+/** The file picker's filter: every format's extensions and MIME types. */
+export const ACCEPT = [...FORMATS.flatMap((f) => f.extensions.map((e) => `.${e}`)), ...FORMATS.flatMap((f) => f.mimes)].join(',');
+
+/** What a download of a file of this kind is saved as. */
+export function exportFormat(kind: FileKind): ExportFormat {
+  return FORMATS.find((f) => f.kind === kind)!.exportAs;
+}
+
+/** The supported format `file` claims to be, from its MIME type or extension. */
 export function fileKind(file: File): FileKind | null {
   const name = file.name.toLowerCase();
-  if (file.type === 'application/pdf' || name.endsWith('.pdf')) return 'pdf';
-  if (file.type === 'image/heic' || file.type === 'image/heif' || /\.hei[cf]$/.test(name))
-    return 'heic';
-  if (file.type === 'image/png' || name.endsWith('.png')) return 'png';
-  if (file.type === 'image/jpeg' || /\.jpe?g$/.test(name)) return 'jpg';
+  return FORMATS.find((f) => f.mimes.includes(file.type) || f.extensions.some((e) => name.endsWith(`.${e}`)))?.kind ?? null;
+}
+
+/** The format the file's first bytes say it is, whatever its name says; null when they say nothing known. */
+export async function sniffKind(file: Blob): Promise<FileKind | null> {
+  let head: Uint8Array;
+  try {
+    head = new Uint8Array(await file.slice(0, SNIFF_BYTES).arrayBuffer());
+  } catch {
+    return null; // unreadable now: the load reports it
+  }
+  const ascii = String.fromCharCode(...head);
+  // Last row first: the signatures at a fixed place are asked before the PDF's, which may sit anywhere in these bytes.
+  for (let i = FORMATS.length - 1; i >= 0; i--) if (FORMATS[i].magic(head, ascii)) return FORMATS[i].kind;
   return null;
 }
 
-export async function loadDocument(file: File): Promise<SourceDocument> {
-  const kind = fileKind(file);
+/**
+ * The file's format: what its bytes say (a PNG named .pdf is a PNG), else what its name and MIME type claim
+ * (a damaged PDF is still a PDF, and is reported as one).
+ */
+export async function detectKind(file: File): Promise<FileKind | null> {
+  return (await sniffKind(file)) ?? fileKind(file);
+}
+
+const OFFICE_EXTENSIONS = /\.(docx?|odt|rtf|txt|pages|xlsx?|ods|numbers|pptx?|odp|key)$/;
+const OFFICE_MIME = /^(application\/(msword|rtf|vnd\.openxmlformats-officedocument|vnd\.oasis\.opendocument|vnd\.ms-)|text\/(plain|rtf))/;
+
+/** A word processor, spreadsheet, presentation or text file: every app that makes one can save it as a PDF. */
+export function isOfficeFile(file: File): boolean {
+  return OFFICE_EXTENSIONS.test(file.name.toLowerCase()) || OFFICE_MIME.test(file.type);
+}
+
+/** The error for a file that is none of the formats: its own for an office file, which has a way forward. */
+export function unsupportedError(file: File): Error {
+  return isOfficeFile(file) ? new OfficeFileError() : new UnsupportedFileError();
+}
+
+/** `kind` is detectKind's answer for the file. */
+export async function loadDocument(file: File, kind: FileKind | null): Promise<SourceDocument> {
   if (kind === 'pdf') return loadPdf(file);
   if (kind === 'heic') return fromBitmap(await decodeHeic(file));
   if (kind === 'png' || kind === 'jpg') return loadImage(file);
-  throw new UnsupportedFileError();
+  throw unsupportedError(file);
 }
 
 // Safari decodes HEIC itself, and iPhones, where most HEIC files come from,
@@ -190,8 +264,7 @@ async function loadPdf(file: File): Promise<SourceDocument> {
       const canvas = document.createElement('canvas');
       canvas.width = Math.ceil(viewport.width);
       canvas.height = Math.ceil(viewport.height);
-      const ctx = canvas.getContext('2d', { willReadFrequently: true });
-      if (!ctx) throw new Error('Canvas 2D context unavailable');
+      const ctx = get2d(canvas, { willReadFrequently: true });
       // PDF pages may not paint their own background; force paper white.
       ctx.fillStyle = '#ffffff';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -223,8 +296,7 @@ function fromBitmap(bitmap: ImageBitmap): SourceDocument {
   const canvas = document.createElement('canvas');
   canvas.width = Math.round(bitmap.width * scale);
   canvas.height = Math.round(bitmap.height * scale);
-  const ctx = canvas.getContext('2d', { willReadFrequently: true });
-  if (!ctx) throw new Error('Canvas 2D context unavailable');
+  const ctx = get2d(canvas, { willReadFrequently: true });
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
