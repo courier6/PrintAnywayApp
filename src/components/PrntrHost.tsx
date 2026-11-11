@@ -1,4 +1,5 @@
 import { Component, Suspense, lazy, useState, type CSSProperties, type ReactNode } from 'react';
+import type { BoardRun } from '../prntr/PrntrBoard';
 import type { Certificate } from '../prntr/types';
 
 type PrntrModule = typeof import('../prntr/Prntr');
@@ -37,6 +38,9 @@ export function prefetchPrntr(): void {
  */
 export const loadVortex = () => loadPrntr().then((m) => m.createVortex);
 
+/** The board over the app after a run (PRNTR-BOARD.md §15.2), from the Prntr chunk, loaded already by then. */
+const PrntrBoard = lazy(() => loadPrntr().then((m) => ({ default: m.PrntrBoard })));
+
 export interface PrntrHostProps {
   source: HTMLCanvasElement;
   recolored: HTMLCanvasElement;
@@ -45,7 +49,7 @@ export interface PrntrHostProps {
   audioContext: AudioContext | null;
   onExit: () => void;
   /** The chain finished: the room was cleared (with the certificate to load as the page), or it was a game over. */
-  onDone: (outcome: 'cleared' | 'over', certificate?: Certificate) => void;
+  onDone: (outcome: 'cleared' | 'over', certificate: Certificate | undefined, run: BoardRun) => void;
 }
 
 /** Whatever breaks inside Prntr, the user lands back on the preview. */
@@ -75,6 +79,23 @@ export function PrntrHost(props: PrntrHostProps) {
           <Prntr {...props} />
         </Suspense>
       )}
+    </PrntrBoundary>
+  );
+}
+
+export interface PrntrBoardHostProps {
+  run: BoardRun;
+  inkHex: string;
+  onClose: () => void;
+}
+
+/** The board over the app; if it breaks, it is simply gone. */
+export function PrntrBoardHost(props: PrntrBoardHostProps) {
+  return (
+    <PrntrBoundary onExit={props.onClose}>
+      <Suspense fallback={null}>
+        <PrntrBoard {...props} />
+      </Suspense>
     </PrntrBoundary>
   );
 }

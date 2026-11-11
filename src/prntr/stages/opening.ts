@@ -62,8 +62,9 @@ const LOGO =
 
 /** The cut's mark: the machine from the room (SP-7331, front on, lid shut, its four ink caps) as a flat
  * silhouette in the SNARC's style, over two crossed bones like a skull and crossbones. Black on the
- * cut's dark red; its openings and the halo that parts it from the bones are the red. */
-const CUT_MARK =
+ * cut's dark red; its openings and the halo that parts it from the bones are the red. The board's card
+ * (boardCard.ts) shows a small copy in its own two colours, swapped in for the `#000` and `#5C0A12` written here. */
+export const CUT_MARK =
   '<svg class="prntr-card-cutmark" viewBox="0 0 160 138" role="img" aria-label="A printer over crossed bones">' +
   // the bones, crossing under the machine with their ends out at its sides: a shaft and two knobs at each end
   '<g fill="#000" stroke="#000">' +

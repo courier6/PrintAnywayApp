@@ -31,9 +31,12 @@ export interface StageContext {
  * and build its own input from `ctx.page` (that is what lets the dev entrance
  * `?prntr=N` begin at any stage), plus the kind its predecessor emits. New kinds
  * are added here as stages land: the room (stage 1) ends with `cleared` (and who
- * cleared it), or with `over` (a game over), which ends the chain whatever follows.
+ * cleared it), or with `over` (a game over, and who lost), which ends the chain.
  */
-export type Handoff = { kind: 'start' } | { kind: 'cleared'; score: number; player: string; stats: RunStats } | { kind: 'over'; score: number };
+export type Handoff =
+  | { kind: 'start' }
+  | { kind: 'cleared'; score: number; player: string; stats: RunStats }
+  | { kind: 'over'; score: number; player: string };
 
 /** What the room counted while it was won; the certificate turns it into honours. */
 export interface RunStats {

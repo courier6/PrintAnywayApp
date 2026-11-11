@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from 
 import type { AppState } from './App';
 import { prntrAudioContext } from './components/prntrAudio';
 import { reducedMotion } from './prntr/anim';
+import type { BoardRun } from './prntr/PrntrBoard';
 import type { Certificate } from './prntr/types';
 
 /** The page Prntr is handed: the document's first page as it was and in the chosen ink. */
@@ -22,6 +23,9 @@ interface Options {
   onEnter: () => void;
   /** The room was cleared: the certificate becomes the document. May throw. */
   onCertificate: (certificate: Certificate) => void;
+  /** Prntr has gone after a finished run (the drop landed, or the reduced-motion cut was made): the board comes up
+   * over the app with that run. */
+  onGone: (run: BoardRun) => void;
   /** onCertificate threw: the old document is gone, so the app shows the error card. */
   onError: (err: unknown) => void;
 }
@@ -30,11 +34,14 @@ interface Options {
  * The app's side of a Prntr run (PRNTR-ARCHITECTURE.md): what the game is handed, where the app goes
  * back to, and how its UI comes back over the game's last frame.
  */
-export function usePrntrSession({ appState, setAppState, firstPage, onEnter, onCertificate, onError }: Options) {
+export function usePrntrSession({ appState, setAppState, firstPage, onEnter, onCertificate, onGone, onError }: Options) {
   const [stage, setStage] = useState(0);
   const page = useRef<PrntrPage | null>(null);
   const audio = useRef<AudioContext | null>(null);
   const returnTo = useRef<AppState>('preview');
+  // The run Prntr finished with, kept from its end until the board comes up over the app (PRNTR-BOARD.md §15.2);
+  // undefined when there is none to show
+  const run = useRef<BoardRun | undefined>(undefined);
   const overHold = useRef<number | null>(null); // the reduced-motion GAME OVER hold before the cut
   // Set while the app's UI falls back into place over Prntr's last frame: the sky
   // drop after the room is cleared, the Tetris drop after a game over.
@@ -50,6 +57,7 @@ export function usePrntrSession({ appState, setAppState, firstPage, onEnter, onC
       if (!entering) return;
     }
     clearOverHold();
+    run.current = undefined;
     returnTo.current = appState;
     audio.current = prntrAudioContext();
     onEnter();
@@ -74,6 +82,15 @@ export function usePrntrSession({ appState, setAppState, firstPage, onEnter, onC
   function land() {
     page.current = null;
     setDrop(null);
+    gone();
+  }
+
+  // Prntr has gone: the finished run, if there is one, is handed over once.
+  function gone() {
+    const finished = run.current;
+    if (finished === undefined) return;
+    run.current = undefined;
+    onGone(finished);
   }
 
   // The drops (PRNTR-STAGE-1.md §4.10): after the room is cleared the app's UI falls
@@ -82,7 +99,7 @@ export function usePrntrSession({ appState, setAppState, firstPage, onEnter, onC
   // mounted until the drop has landed. Reduced motion is a plain cut, as is any exit.
   // The room cleared, the page the app comes back to is the certificate of completion,
   // in place of whatever document it had.
-  function finish(outcome: 'cleared' | 'over', certificate?: Certificate) {
+  function finish(outcome: 'cleared' | 'over', certificate: Certificate | undefined, finished: BoardRun) {
     if (certificate) {
       try {
         onCertificate(certificate);
@@ -94,6 +111,7 @@ export function usePrntrSession({ appState, setAppState, firstPage, onEnter, onC
       }
       returnTo.current = 'preview';
     }
+    run.current = finished;
     if (reducedMotion()) {
       if (outcome === 'over') {
         // a plain cut, but not on the very frame the card went up: the GAME OVER card is held for a moment first (an Esc
@@ -102,10 +120,12 @@ export function usePrntrSession({ appState, setAppState, firstPage, onEnter, onC
           overHold.current = null;
           page.current = null;
           setAppState((s) => (s === 'prntr' ? returnTo.current : s));
+          gone();
         }, REDUCED_OVER_HOLD_MS);
         return;
       }
       exit();
+      gone();
       return;
     }
     setDrop(outcome === 'over' ? 'tetris' : 'sky');

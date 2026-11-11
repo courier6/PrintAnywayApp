@@ -5,12 +5,15 @@ import { reducedMotion } from './anim';
 import { createPrntrAudio, type PrntrAudio } from './audio';
 import { playPop, playWrongAnswer, POP_DELAY_MS, POP_MS, REFUSE_MS, touchOnly } from './refusal';
 import { makeCertificate } from './certificate';
+import { readBoard, settleRun, today } from './board';
 import { capturePage } from './page';
+import type { BoardRun } from './PrntrBoard';
 import { runChain } from './runner';
 import { STAGES } from './stages';
 import type { Certificate, StageContext } from './types';
 
 export { createVortex } from './vortex';
+export { PrntrBoard } from './PrntrBoard';
 
 /** After a finished run, how long its last sounds (the fanfare, the game-over sting) may play on. */
 const FINISHED_TAIL_MS = 4000;
@@ -44,9 +47,10 @@ interface Props {
    * The chain finished: `prntr:done` with reason complete. `cleared` is the room won
    * (the sky drop, with the certificate of completion as the page the app comes back
    * to), `over` a game over (the Tetris drop). Either way the host
-   * drops its UI over the last frame, then unmounts Prntr.
+   * drops its UI over the last frame, then unmounts Prntr and puts the board up over the app
+   * with `run`.
    */
-  onDone: (outcome: 'cleared' | 'over', certificate?: Certificate) => void;
+  onDone: (outcome: 'cleared' | 'over', certificate: Certificate | undefined, run: BoardRun) => void;
 }
 
 export default function Prntr({ source, recolored, inkHex, stage, audioContext, onExit, onDone }: Props) {
@@ -144,12 +148,23 @@ export default function Prntr({ source, recolored, inkHex, stage, audioContext, 
     runChain(ctx, STAGES, startAt)
       .then((handoff) => {
         if (!handoff) return;
+        // no stage ran to an end: leave as ✕ would
+        if (handoff.kind === 'start') return onExitRef.current();
         finished = true;
         // Made before ✕ goes: if it throws, the way out must still be there.
-        const certificate = handoff.kind === 'cleared' ? makeCertificate(handoff.player, handoff.score, 1337, handoff.stats) : undefined;
+        const certificate = handoff.kind === 'cleared' ? makeCertificate(handoff.player, handoff.score, Math.max(readBoard()[0]?.score ?? 0, handoff.score), handoff.stats) : undefined;
+        // The run goes on the board here, once, after the certificate has read the best before it (PRNTR-BOARD.md §16):
+        // the board over the app shows what became of it.
+        const won = handoff.kind === 'cleared';
+        const run: BoardRun = {
+          won,
+          score: handoff.score,
+          player: handoff.player,
+          board: settleRun({ name: handoff.player, score: handoff.score, at: today(), won }),
+        };
         setDone(true);
-        if (certificate) onDoneRef.current('cleared', certificate);
-        else onDoneRef.current('over');
+        if (certificate) onDoneRef.current('cleared', certificate, run);
+        else onDoneRef.current('over', undefined, run);
       })
       // A stage that throws (no 2D context on a phone short of memory, a bug) would
       // leave a black screen, and on a phone there is no Esc: leave as ✕ would.

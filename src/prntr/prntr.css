@@ -1507,3 +1507,343 @@
 .prntr-room-frame.is-small .prntr-room-hint-keys { font-size: 8px; }
 .prntr-room-frame.is-small .prntr-room-continue-label { font-size: 20px; }
 .prntr-room-frame.is-small .prntr-room-continue-count { font-size: 64px; }
+
+/* ---------------------------------------------------------------------------
+   The board over the app (PRNTR-BOARD.md §15.2, §16; the board-frame sheet's #5): a card in
+   the HUD's face and shadow, fixed over the page once the app has dropped in, no dim (the
+   certificate and the gold swatch stay in sight), on the plum mat inside a gilded pixel frame
+   12 cells deep (3 px a cell, 2 under 600 px wide) drawn on a canvas behind it. The rows
+   shrink on a phone so the 31-character line, its star and the frame fit.
+   --------------------------------------------------------------------------- */
+.prntr-board {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow-y: auto;
+  box-sizing: border-box;
+  padding: var(--band) 0;
+  color: #FFFFFF;
+  font-family: 'Press Start 2P', 'Courier New', monospace;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  text-shadow: 2px 2px 0 #1E1433, -1px -1px 0 #1E1433, 1px -1px 0 #1E1433, -1px 1px 0 #1E1433;
+  cursor: auto;
+  touch-action: pan-y;
+  user-select: none;
+  -webkit-user-select: none;
+  /* A row is 31 characters with the letter spacing, the marker's column and a cleared row's star: 35.9 of this
+     size wide on a desktop and a little more at a phone's size, so the rows keep a gutter inside the frame's band. */
+  --band: 36px;
+  --prntr-board-row: clamp(7px, calc((100vw - 64px - 2 * var(--band)) / 36.4), 13px);
+}
+
+@media (max-width: 599px) {
+  .prntr-board {
+    --band: 24px;
+  }
+}
+
+.prntr-board [hidden] {
+  display: none !important;
+}
+
+.prntr-board-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  box-sizing: border-box;
+  position: relative;
+  z-index: 0;
+  width: min(100% - 32px - 2 * var(--band), calc(35.9 * var(--prntr-board-row) + 32px));
+  /* auto margins, not the overlay's align-items alone: a card taller than the viewport (ten rows on a
+     phone in landscape) then starts at the top and the overlay scrolls to its end, instead of being
+     centred with its top half out of reach */
+  margin: auto 0;
+  padding: 16px;
+  background: #1E1433;
+  text-align: center;
+  animation: prntr-pop 250ms ease-out both;
+}
+
+.prntr-board-card.is-still {
+  animation: none;
+}
+
+/* One line unless it has to wrap: LOCAL LEADERBOARD is 17 glyphs at 1.08em each (18.36em), as wide
+   as the rows (35.9 row sizes) at most, and inside the card's padding and the frame's band on a phone. */
+.prntr-board-title {
+  font-size: min(24px, calc(var(--prntr-board-row) * 35.9 / 18.36), calc((100vw - 64px - 2 * var(--band)) / 18.36));
+  letter-spacing: 0.08em;
+  color: #FFD91A;
+}
+
+/* The switch under the title (PRNTR-BOARD.md §18): LOCAL, the board kept in this browser, and WORLD. Two buttons
+   sharing a border; the view shown is filled in the title's yellow. */
+.prntr-board-tabs {
+  display: flex;
+}
+
+.prntr-board-tab {
+  min-height: 36px;
+  padding: 8px 14px;
+  border: 2px solid #FFFFFF;
+  border-radius: 0;
+  background: #000000;
+  color: #FFFFFF;
+  font: inherit;
+  font-size: max(9px, var(--prntr-board-row));
+  letter-spacing: inherit;
+  text-transform: uppercase;
+  text-shadow: inherit;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.prntr-board-tab + .prntr-board-tab {
+  margin-left: -2px;
+}
+
+/* a touch target's height on a phone */
+@media (max-width: 599px) {
+  .prntr-board-tab {
+    min-height: 44px;
+  }
+}
+
+.prntr-board-tab[aria-pressed='true'] {
+  position: relative;
+  border-color: #FFD91A;
+  background: #FFD91A;
+  color: #1E1433;
+  text-shadow: none;
+}
+
+.prntr-board-tab:disabled {
+  border-color: #5E5A52;
+  color: #5E5A52;
+  cursor: default;
+}
+
+/* The local view's parts sit in a box that lays out as if it were not there; on WORLD the box, the clear and the
+   note go, and the world's place comes. */
+.prntr-board-local {
+  display: contents;
+}
+
+.prntr-board-card.is-world .prntr-board-local,
+.prntr-board-card.is-world .prntr-board-clear,
+.prntr-board-card.is-world .prntr-board-note,
+.prntr-board-card:not(.is-world) .prntr-board-soon {
+  display: none;
+}
+
+/* The world's place until there is a world board (the world-ten sheet's #6): COMING SOON on a ribbon in the title's
+   yellow, its ends notched in three steps, over the opening's cut mark in the same yellow. As tall as ten rows, so a
+   full board's card keeps its height between the views. */
+.prntr-board-soon {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1.1em;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 16em;
+  font-size: var(--prntr-board-row);
+}
+
+.prntr-board-ribbon {
+  padding: 0.75em 2.4em;
+  background: #FFD91A;
+  color: #1E1433;
+  font-size: 1.3em;
+  letter-spacing: 0.08em;
+  text-shadow: none;
+  clip-path: polygon(
+    0 0, 0 16.67%, 0.32em 16.67%, 0.32em 33.33%, 0.64em 33.33%, 0.64em 66.67%, 0.32em 66.67%, 0.32em 83.33%, 0 83.33%, 0 100%,
+    100% 100%, 100% 83.33%, calc(100% - 0.32em) 83.33%, calc(100% - 0.32em) 66.67%, calc(100% - 0.64em) 66.67%,
+    calc(100% - 0.64em) 33.33%, calc(100% - 0.32em) 33.33%, calc(100% - 0.32em) 16.67%, 100% 16.67%, 100% 0
+  );
+}
+
+/* The mark's box is 160 × 138. */
+.prntr-board-mark {
+  display: block;
+  width: calc(9.6em * 160 / 138);
+  height: 9.6em;
+}
+
+.prntr-board-run {
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre;
+}
+
+/* The run that is not on the board: a grey line under the rows, in the rows' type and column. */
+.prntr-board-run.is-out {
+  margin-top: -0.4em;
+  padding-left: 1.2em;
+  font-size: var(--prntr-board-row);
+  color: #BDBDBD;
+  text-align: left;
+}
+
+.prntr-board-rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--prntr-board-row);
+  line-height: 1.6;
+  white-space: pre;
+  text-align: left;
+}
+
+/* A game over's row is grey; the run's own row (below, so it wins) is in the frame's colour, set by PrntrBoard:
+   the certificate's gold after a win, the ink's light tone after a game over. */
+.prntr-board-rows .is-lost {
+  color: #BDBDBD;
+}
+
+.prntr-board-rows .is-new {
+  color: var(--prntr-board-own, #FFD91A);
+}
+
+/* A cleared run's row ends in a gold star: a 7 × 7 pixel star cut from a square of the row's size. */
+.prntr-board-rows li:not(.is-lost)::after {
+  content: '';
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  margin-left: 0.34em;
+  vertical-align: -0.08em;
+  background: #F3CA4A;
+  clip-path: polygon(42.857% 0, 57.143% 0, 57.143% 28.571%, 100% 28.571%, 100% 42.857%, 85.714% 42.857%, 85.714% 57.143%, 71.429% 57.143%, 71.429% 71.429%, 85.714% 71.429%, 85.714% 100%, 71.429% 100%, 71.429% 85.714%, 57.143% 85.714%, 57.143% 71.429%, 42.857% 71.429%, 42.857% 85.714%, 28.571% 85.714%, 28.571% 100%, 14.286% 100%, 14.286% 71.429%, 28.571% 71.429%, 28.571% 57.143%, 14.286% 57.143%, 14.286% 42.857%, 0 42.857%, 0 28.571%, 42.857% 28.571%);
+}
+
+/* The rows leave a column for the marker that points at the run's own row. */
+.prntr-board-rows li {
+  position: relative;
+  padding-left: 1.2em;
+}
+
+.prntr-board-rows .is-new::before {
+  content: '>';
+  position: absolute;
+  left: 0;
+  animation: prntr-blink 700ms step-end infinite;
+}
+
+.prntr-board-card.is-still .prntr-board-rows .is-new::before {
+  animation: none;
+}
+
+.prntr-board-empty {
+  font-size: 13px;
+  color: #BDBDBD;
+}
+
+.prntr-board-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+}
+
+.prntr-board-buttons button {
+  min-height: 44px;
+  padding: 12px 16px;
+  border: 2px solid #FFFFFF;
+  border-radius: 0;
+  background: #000000;
+  color: #FFFFFF;
+  font: inherit;
+  font-size: 13px;
+  letter-spacing: inherit;
+  text-transform: uppercase;
+  text-shadow: inherit;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.prntr-board-go {
+  border-color: #FFD91A !important;
+  color: #FFD91A !important;
+}
+
+/* The clear's question: YOU SURE? in the title's yellow over YES (red: it takes everything down
+   and leaves) and CANCEL (white). */
+.prntr-board-sure {
+  font-size: 13px;
+  color: #FFD91A;
+}
+
+.prntr-board-yes {
+  border-color: #FF4A3A !important;
+  color: #FF4A3A !important;
+}
+
+.prntr-board-tab:focus-visible,
+.prntr-board-buttons button:focus-visible {
+  outline: 2px solid #19B8F0;
+  outline-offset: 2px;
+}
+
+.prntr-board-note {
+  max-width: 31em;
+  font-size: 9px;
+  line-height: 1.6;
+  color: #BDBDBD;
+}
+
+/* The name asked for a ranking run the badge left NULL (PRNTR-BOARD.md §15.3, §17): a field in the name's place of
+   the run's row, where it will stand on the board, twelve glyphs wide in the row's type and colour; OK as CONTINUE. */
+.prntr-board-name {
+  box-sizing: content-box;
+  width: calc(12 * (1ch + 0.06em));
+  margin: 0;
+  padding: 0 0 2px;
+  border: 0;
+  border-bottom: 2px solid #FFFFFF;
+  border-radius: 0;
+  background: #000000;
+  color: inherit;
+  caret-color: currentColor;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: uppercase;
+  text-shadow: inherit;
+  cursor: text;
+  /* the board is user-select: none; a field under it must still take a caret and a selection */
+  user-select: text;
+  -webkit-user-select: text;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.prntr-board-name::placeholder {
+  color: #5E5A52;
+  opacity: 1;
+}
+
+.prntr-board-name:focus-visible {
+  outline: 2px solid #19B8F0;
+  outline-offset: 2px;
+}
+
+.prntr-board-ok {
+  border-color: #FFD91A !important;
+  color: #FFD91A !important;
+}
+
+.prntr-board-frame {
+  position: absolute;
+  z-index: -1;
+  image-rendering: pixelated;
+  pointer-events: none;
+}

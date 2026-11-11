@@ -4,7 +4,8 @@ import { Header } from './components/Header';
 import { EmptyState } from './components/EmptyState';
 import { ProcessingState } from './components/ProcessingState';
 import { PreviewState } from './components/PreviewState';
-import { PrntrHost, prefetchPrntr } from './components/PrntrHost';
+import { PrntrBoardHost, PrntrHost, prefetchPrntr } from './components/PrntrHost';
+import type { BoardRun } from './prntr/PrntrBoard';
 import type { Certificate } from './prntr/types';
 import { usePrntrSession } from './usePrntrSession';
 import { useDevHooks } from './devHooks';
@@ -81,6 +82,8 @@ export default function App() {
   // What a screen reader is told when a document's preview is ready (a live region kept mounted).
   const [status, setStatus] = useState('');
   const [, setPagesVersion] = useState(0);
+  // The board over the app after a run (PRNTR-BOARD.md §15.2), with the run Prntr finished with
+  const [prntrBoard, setPrntrBoard] = useState<{ run: BoardRun; inkHex: string } | null>(null);
   // The document the certificate replaced, kept so the vortex can bring it back (PRNTR-VORTEX.md):
   // its rendered pages, name, format and the page that was open. Dropped by the next document.
   const [vortexOriginal, setVortexOriginal] = useState<OriginalDocument | null>(null);
@@ -108,15 +111,21 @@ export default function App() {
       const source = store.getSource(0);
       return recolored && source ? { source, recolored } : null;
     },
-    onEnter: () => setHolding(false),
+    onEnter: () => {
+      setHolding(false);
+      setPrntrBoard(null);
+    },
     onCertificate: loadCertificate,
+    // The board comes up over the app once Prntr has gone: in gold after a win (the certificate's ink), in the ink the
+    // app is on after a game over.
+    onGone: (run) => setPrntrBoard({ run, inkHex: run.won ? GOLD_INK.hex : inkRef.current }),
     onError: (err) => failTo(err, null),
   });
   // Prntr has the screen: a file dragged over it is not taken (it would end the game
   // and replace the document unseen). Nor while the app's UI is still dropping back in
   // over its last frame: the state is back already, but Prntr is still mounted.
   const inPrntr = useRef(false);
-  inPrntr.current = prntr.active;
+  inPrntr.current = prntr.active || prntrBoard !== null;
 
   // Window-level drag-and-drop: dropping a file anywhere, in any state but
   // Prntr, replaces the loaded document without confirmation. The depth counter
@@ -628,6 +637,7 @@ export default function App() {
           onDone={prntr.finish}
         />
       )}
+      {prntrBoard && <PrntrBoardHost run={prntrBoard.run} inkHex={prntrBoard.inkHex} onClose={() => setPrntrBoard(null)} />}
       {import.meta.env.DEV && DevPanel && (
         <Suspense fallback={null}>
           <DevPanel />
