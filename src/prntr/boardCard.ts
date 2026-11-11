@@ -30,7 +30,7 @@ export interface BoardCard {
   /** The name asked for (§15.3): the field in the run's row, and OK. */
   nameInput: HTMLInputElement;
   okBtn: HTMLButtonElement;
-  /** The rows, the run's yellow row at newRank (-1: none). */
+  /** The rows, the run's own row marked at newRank (-1: none); a game over's row is grey, a cleared one has a star. */
   showRows: (rows: BoardRow[], newRank: number) => void;
   /** The grey line under the rows ('' hides it) and the note. */
   showOut: (text: string, note: string) => void;
@@ -42,7 +42,7 @@ export interface BoardCard {
 }
 
 /**
- * The board's card (PRNTR-BOARD.md §14–§16): LOCAL LEADER BOARD, the rows (or NOBODY YET.), the run's out line, the
+ * The board's card (PRNTR-BOARD.md §14–§17): LOCAL LEADER BOARD, the rows (or NOBODY YET.), the run's out line, the
  * name's row with OK, CONTINUE, CLEAR THE BOARD and the clear's question (YOU SURE?, YES, CANCEL), then the note.
  */
 export function buildBoardCard(): BoardCard {

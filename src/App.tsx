@@ -116,9 +116,9 @@ export default function App() {
       setPrntrBoard(null);
     },
     onCertificate: loadCertificate,
-    // The board comes up over the app once Prntr has gone: in the ink the app landed on after a win (the
-    // certificate's), in gold after a game over, which leaves no certificate.
-    onGone: (run) => setPrntrBoard({ run, inkHex: run.won ? inkRef.current : GOLD_INK.hex }),
+    // The board comes up over the app once Prntr has gone: in gold after a win (the certificate's ink), in the ink the
+    // app is on after a game over.
+    onGone: (run) => setPrntrBoard({ run, inkHex: run.won ? GOLD_INK.hex : inkRef.current }),
     onError: (err) => failTo(err, null),
   });
   // Prntr has the screen: a file dragged over it is not taken (it would end the game

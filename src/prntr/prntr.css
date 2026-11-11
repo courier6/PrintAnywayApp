@@ -1513,7 +1513,7 @@
    the HUD's face and shadow, fixed over the page once the app has dropped in, no dim (the
    certificate and the gold swatch stay in sight), on the plum mat inside a gilded pixel frame
    12 cells deep (3 px a cell, 2 under 600 px wide) drawn on a canvas behind it. The rows
-   shrink on a phone so the 31-character line and the frame fit.
+   shrink on a phone so the 31-character line, its star and the frame fit.
    --------------------------------------------------------------------------- */
 .prntr-board {
   position: fixed;
@@ -1534,10 +1534,10 @@
   touch-action: pan-y;
   user-select: none;
   -webkit-user-select: none;
-  /* A row is 31 characters with the letter spacing and the marker's column: 34.5 of this size wide
-     on a desktop, 35.2 at a phone's size (measured), so the rows keep about a 16 px gutter inside the frame's band. */
+  /* A row is 31 characters with the letter spacing, the marker's column and a cleared row's star: 35.9 of this
+     size wide on a desktop and a little more at a phone's size, so the rows keep a gutter inside the frame's band. */
   --band: 36px;
-  --prntr-board-row: clamp(7px, calc((100vw - 64px - 2 * var(--band)) / 35), 13px);
+  --prntr-board-row: clamp(7px, calc((100vw - 64px - 2 * var(--band)) / 36.4), 13px);
 }
 
 @media (max-width: 599px) {
@@ -1558,7 +1558,7 @@
   box-sizing: border-box;
   position: relative;
   z-index: 0;
-  width: min(100% - 32px - 2 * var(--band), calc(34.5 * var(--prntr-board-row) + 32px));
+  width: min(100% - 32px - 2 * var(--band), calc(35.9 * var(--prntr-board-row) + 32px));
   /* auto margins, not the overlay's align-items alone: a card taller than the viewport (ten rows on a
      phone in landscape) then starts at the top and the overlay scrolls to its end, instead of being
      centred with its top half out of reach */
@@ -1574,9 +1574,9 @@
 }
 
 /* One line unless it has to wrap: LOCAL LEADER BOARD is 18 glyphs at 1.08em each (19.44em), as wide
-   as the rows (34.5 row sizes) at most, and inside the card's padding and the frame's band on a phone. */
+   as the rows (35.9 row sizes) at most, and inside the card's padding and the frame's band on a phone. */
 .prntr-board-title {
-  font-size: min(24px, calc(var(--prntr-board-row) * 34.5 / 19.44), calc((100vw - 64px - 2 * var(--band)) / 19.44));
+  font-size: min(24px, calc(var(--prntr-board-row) * 35.9 / 19.44), calc((100vw - 64px - 2 * var(--band)) / 19.44));
   letter-spacing: 0.08em;
   color: #FFD91A;
 }
@@ -1606,8 +1606,26 @@
   text-align: left;
 }
 
+/* A game over's row is grey; the run's own row (below, so it wins) is in the frame's colour, set by PrntrBoard:
+   the certificate's gold after a win, the ink's light tone after a game over. */
+.prntr-board-rows .is-lost {
+  color: #BDBDBD;
+}
+
 .prntr-board-rows .is-new {
-  color: #FFD91A;
+  color: var(--prntr-board-own, #FFD91A);
+}
+
+/* A cleared run's row ends in a gold star: a 7 × 7 pixel star cut from a square of the row's size. */
+.prntr-board-rows li:not(.is-lost)::after {
+  content: '';
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  margin-left: 0.34em;
+  vertical-align: -0.08em;
+  background: #F3CA4A;
+  clip-path: polygon(42.857% 0, 57.143% 0, 57.143% 28.571%, 100% 28.571%, 100% 42.857%, 85.714% 42.857%, 85.714% 57.143%, 71.429% 57.143%, 71.429% 71.429%, 85.714% 71.429%, 85.714% 100%, 71.429% 100%, 71.429% 85.714%, 57.143% 85.714%, 57.143% 71.429%, 42.857% 71.429%, 42.857% 85.714%, 28.571% 85.714%, 28.571% 100%, 14.286% 100%, 14.286% 71.429%, 28.571% 71.429%, 28.571% 57.143%, 14.286% 57.143%, 14.286% 42.857%, 0 42.857%, 0 28.571%, 42.857% 28.571%);
 }
 
 /* The rows leave a column for the marker that points at the run's own row. */

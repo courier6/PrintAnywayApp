@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { reducedMotion } from './anim';
 import { cleanName, clearBoard, pinRow, rankOf, readBoard, today, type BoardRow, type BoardWrite } from './board';
 import { NOTE_NOT_CLEARED, NOTE_REFUSED, buildBoardCard, outLine } from './boardCard';
-import { BOARD_FRAME_BAND, paintBoardFrame } from './boardFrame';
+import { BOARD_FRAME_BAND, frameShades, paintBoardFrame } from './boardFrame';
 
 /** A finished run as the app side gets it: won or lost, its score, the badge's name (NULL when none was given), and
  * what became of it on the board when the room ended (`board`, from settleRun). */
@@ -21,7 +21,7 @@ const NARROW_PX = 600;
 interface Props {
   /** The run the room handed on. */
   run: BoardRun;
-  /** The ink the frame is drawn in: the certificate's after a win, gold after a loss. */
+  /** The ink the frame is drawn in: gold after a win, the app's ink after a game over. */
   inkHex: string;
   onClose: () => void;
 }
@@ -51,6 +51,9 @@ export function PrntrBoard({ run, inkHex, onClose }: Props) {
     const c = buildBoardCard();
     const card = c.card;
     if (reducedMotion()) card.classList.add('is-still');
+    // the run's own row in the frame's colour: its gold after a win, the ink's light tone after a game over
+    const shades = frameShades(inkHex);
+    card.style.setProperty('--prntr-board-own', run.won ? shades.y : shades.s);
     const frame = document.createElement('canvas');
     frame.className = 'prntr-board-frame';
     frame.setAttribute('aria-hidden', 'true');
