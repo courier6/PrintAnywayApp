@@ -1,0 +1,189 @@
+/* Prntr's side of the app's own page: what the app shows of the easter egg outside the game's chunk
+   (the game's own styles are src/prntr/prntr.css, loaded with it). The way in, the app's UI dropping
+   back over the game's last frame, and the vortex on the certificate. Loaded after app.css. */
+
+/* ---------- The way in ---------- */
+
+/* The way into Prntr stays off touch screens until its touch form is finished. The item before it
+   then becomes the last, so it drops its rule too. */
+@media (hover: none) {
+  .help-other {
+    display: none;
+  }
+
+  .help-item:has(+ .help-other) {
+    border-bottom: none;
+  }
+}
+
+/* The way into Prntr: words in the sentence, in the chosen ink, no underline.
+   The colour is set inline from the ink swatch. */
+.help-link {
+  border: none;
+  background: none;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.help-link:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* The way into Prntr looks like plain text until it has the pointer or the focus; then glyphs rise above it
+   and sink below it (RisingGlyphs): superscripts, subscripts and ASCII in the ink colour, absolutely placed so
+   the words never move, each fading in and out over its own life. Some are split red and cyan, as Prntr's own
+   glitches are. The wrapper is an inline block so the two words stay on one line and the glyphs have a box.
+   The glyphs rise and sink under the OS reduced-motion flag too, as the game ignores it (PRNTR-BROWSERS.md):
+   Windows sets the flag by preset, and held still above and below the words they read as a layout fault. */
+.help-omen {
+  position: relative;
+  display: inline-block;
+}
+
+.omen-glyph {
+  position: absolute;
+  z-index: 1;
+  top: -4px;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  opacity: 0;
+  pointer-events: none;
+  animation: omen-rise 1s ease-out forwards;
+}
+
+.omen-glyph.is-down {
+  top: auto;
+  bottom: -4px;
+  animation-name: omen-sink;
+}
+
+.omen-glyph.is-split {
+  text-shadow:
+    -1px 0 rgba(255, 0, 70, 0.75),
+    1px 0 rgba(0, 190, 255, 0.75);
+}
+
+@keyframes omen-rise {
+  0% { transform: translate(-50%, 0); opacity: 0; }
+  20% { opacity: 1; }
+  100% { transform: translate(-50%, -22px); opacity: 0; }
+}
+
+@keyframes omen-sink {
+  0% { transform: translate(-50%, 0); opacity: 0; }
+  20% { opacity: 1; }
+  100% { transform: translate(-50%, 22px); opacity: 0; }
+}
+
+/* ---------- The drops ---------- */
+
+/* The sky drop (PRNTR-STAGE-1.md §4.10): when Prntr's room is cleared, the whole UI
+   falls into place from above the viewport over Prntr's frozen last frame, in one
+   piece, with one small settle. Reduced motion never gets here (App.tsx cuts). */
+@keyframes sky-drop {
+  0% {
+    transform: translateY(-100vh);
+    animation-timing-function: cubic-bezier(0.5, 0, 1, 0.9);
+  }
+  70% {
+    transform: translateY(0);
+    animation-timing-function: ease-out;
+  }
+  85% {
+    transform: translateY(-8px);
+    animation-timing-function: ease-in;
+  }
+  100% {
+    transform: translateY(0);
+  }
+}
+
+.no-print.is-sky-drop {
+  z-index: 101;
+  min-height: 100vh;
+  min-height: 100dvh;
+  background: #ffffff;
+  animation: sky-drop 700ms both;
+}
+
+/* The Tetris drop (PRNTR-STAGE-1.md §4.10): after a game over the UI's blocks fall in
+   one after another, bottom of the stack first, in discrete steps, and lock with no
+   settle. The frozen room shows between them until they land. Reduced motion never
+   gets here either (App.tsx cuts). The header lands last: App.tsx listens for it. */
+@keyframes tetris-piece {
+  from {
+    transform: translateY(-100vh);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+.no-print.is-tetris-drop {
+  z-index: 101;
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+.no-print.is-tetris-drop :is(.header, .toolbar, .preview-stage, .sidebar, .state-pad) {
+  animation: tetris-piece 600ms steps(12, end) both;
+}
+
+/* .preview-stage keeps its own tinted background. */
+.no-print.is-tetris-drop :is(.header, .toolbar, .sidebar, .state-pad) {
+  background: #ffffff;
+}
+
+.no-print.is-tetris-drop .sidebar {
+  animation-delay: 0ms;
+}
+
+.no-print.is-tetris-drop :is(.preview-stage, .state-pad) {
+  animation-delay: 150ms;
+}
+
+.no-print.is-tetris-drop .toolbar {
+  animation-delay: 300ms;
+}
+
+.no-print.is-tetris-drop .header {
+  animation-delay: 450ms;
+}
+
+/* Below 900 px the sidebar is no box (display: contents in app.css), so the Tetris drop's pieces are its parts. */
+@media (max-width: 900px) {
+  .no-print.is-tetris-drop :is(.ink-block, .side-note, .help-section) {
+    animation: tetris-piece 600ms steps(12, end) both;
+    background: #ffffff;
+  }
+}
+
+/* ---------- The vortex ---------- */
+
+/* The vortex (PRNTR-VORTEX.md): the hold on the certificate of completion. Over the page while
+   the galaxy swallows the certificate or thins back out; the page's own certificate layer hides
+   meanwhile and the original shows underneath, fitted whatever its shape. Drawn at the design
+   sheet's 380 px and scaled with the stack. */
+.vortex {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+  pointer-events: none;
+}
+
+.page-layer.is-swallowed {
+  visibility: hidden;
+}
+
+.page-original.is-under canvas {
+  height: 100%;
+  object-fit: contain;
+}

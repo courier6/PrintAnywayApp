@@ -1,20 +1,19 @@
-import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type MouseEvent } from 'react';
+import { useEffect, useRef, type CSSProperties } from 'react';
 import { t, tPlural, useLocale } from '../i18n';
 import { kindOf } from '../lib/errors';
 import type { ExportFormat } from '../lib/exportFile';
 import type { Ink } from '../lib/inks';
-import { OTHER_TIP, PRINTER_TIPS } from '../lib/printerTips';
-import RisingGlyphs from './RisingGlyphs';
+import { PRINTER_TIPS } from '../lib/printerTips';
 import { PageCanvas } from './PageCanvas';
 import type { Notice } from '../App';
 import { PrintReminder } from './PrintReminder';
-import { PUFF_MS, THIN_MS, VORTEX_MS, VortexCanvas } from './VortexCanvas';
-import { reducedMotion } from '../prntr/anim';
-
-/** A press on the compare button let go within this latches: the original stays until the next press. */
-const LATCH_MS = 350;
-/** A click this soon after a press came from that press, and is not a click of its own. */
-const CLICK_AFTER_PRESS_MS = 500;
+import { VortexCanvas } from './VortexCanvas';
+import { InkPicker } from './preview/InkPicker';
+import { Pager } from './preview/Pager';
+import { PrntrTip } from './preview/PrntrTip';
+import { useCompareHold } from './preview/useCompareHold';
+import { useInkFeedback } from './preview/useInkFeedback';
+import { useVortex } from './preview/useVortex';
 
 interface Props {
   fileName: string;
@@ -88,101 +87,15 @@ export function PreviewState({
   }, []);
   const inkHex = inks[inkIndex].hex;
 
-  // Transient confirmation after a swatch click; flashKey restarts the
-  // glow animation even when clicks come in quick succession.
-  const [justInked, setJustInked] = useState(false);
-  // The way into Prntr has the pointer or the focus: glyphs rise above and below it only then.
-  // The link's glyphs run while it has the pointer or the focus: two flags, so one leaving does not end the other's.
-  const [omenHover, setOmenHover] = useState(false);
-  const [omenFocus, setOmenFocus] = useState(false);
-  const [flashKey, setFlashKey] = useState(0);
-  const inkTimer = useRef<number | null>(null);
-  const prevInk = useRef(inkIndex);
-
-  // Delayed nudge toward the download button: starts after the page flash and
-  // caption have settled so it reads as a second, quieter cue.
-  const [downloadHint, setDownloadHint] = useState(false);
-  const hintTimers = useRef<number[]>([]);
-
-  // The vortex (PRNTR-VORTEX.md): a hold on the certificate starts the swirl; VORTEX_MS later the
-  // original is back (onVortexDone). Let go before that, the swirl thins out (THIN_MS) while the
-  // puff plays (PUFF_MS). The ref mirrors the state for the effect and the timers.
-  interface Vortex {
-    key: number;
-    startedAt: number;
-    releasedAt: number | null;
-    thinned: boolean;
-  }
-  const [vortex, setVortexState] = useState<Vortex | null>(null);
-  const vortexRef = useRef<Vortex | null>(null);
-  const vortexTimers = useRef<number[]>([]);
-  const onVortexDoneRef = useRef(onVortexDone);
-  onVortexDoneRef.current = onVortexDone;
-  const setVortex = (v: Vortex | null) => {
-    vortexRef.current = v;
-    setVortexState(v);
-  };
-  const clearVortexTimers = () => {
-    vortexTimers.current.forEach((t) => window.clearTimeout(t));
-    vortexTimers.current = [];
-  };
-
-  useEffect(() => {
-    if (!originalPage) {
-      // the original is back (or there never was one): nothing to swirl
-      if (vortexRef.current) {
-        clearVortexTimers();
-        setVortex(null);
-      }
-      return;
-    }
-    if (holding) {
-      if (reducedMotion()) {
-        onVortexDoneRef.current();
-        return;
-      }
-      clearVortexTimers();
-      setVortex({ key: (vortexRef.current?.key ?? 0) + 1, startedAt: performance.now(), releasedAt: null, thinned: false });
-      vortexTimers.current = [
-        window.setTimeout(() => {
-          setVortex(null);
-          onVortexDoneRef.current();
-        }, VORTEX_MS),
-      ];
-    } else if (vortexRef.current && vortexRef.current.releasedAt === null) {
-      clearVortexTimers();
-      setVortex({ ...vortexRef.current, releasedAt: performance.now() });
-      vortexTimers.current = [
-        window.setTimeout(() => {
-          if (vortexRef.current) setVortex({ ...vortexRef.current, thinned: true });
-        }, THIN_MS),
-        window.setTimeout(() => setVortex(null), PUFF_MS),
-      ];
-    }
-  }, [holding, originalPage]);
-
-  useEffect(() => {
-    if (prevInk.current === inkIndex) return;
-    prevInk.current = inkIndex;
-    setFlashKey((k) => k + 1);
-    setJustInked(true);
-    if (inkTimer.current !== null) window.clearTimeout(inkTimer.current);
-    inkTimer.current = window.setTimeout(() => setJustInked(false), 2000);
-    setDownloadHint(false);
-    hintTimers.current.forEach((t) => window.clearTimeout(t));
-    hintTimers.current = [
-      window.setTimeout(() => setDownloadHint(true), 1600),
-      window.setTimeout(() => setDownloadHint(false), 1600 + 3600),
-    ];
-  }, [inkIndex]);
-
-  useEffect(() => {
-    return () => {
-      if (inkTimer.current !== null) window.clearTimeout(inkTimer.current);
-      hintTimers.current.forEach((t) => window.clearTimeout(t));
-      vortexTimers.current.forEach((t) => window.clearTimeout(t));
-    };
-  }, []);
+  const { justInked, flashKey, downloadHint } = useInkFeedback(inkIndex);
+  const { vortex, swirling } = useVortex(holding, originalPage, onVortexDone);
+  const { latched, buttonProps: holdProps } = useCompareHold({
+    holding,
+    onHoldChange,
+    canLatch: originalPage === null,
+    inkIndex,
+    currentPage,
+  });
 
   // Esc closes the after-print reminder.
   useEffect(() => {
@@ -193,135 +106,6 @@ export function PreviewState({
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [showReminder, onDismissReminder]);
-
-  // The compare button. Held, it shows the original until it is let go. Pressed and let go within LATCH_MS,
-  // the original stays until the next press: a click, a tap, Enter, a switch or a voice command cannot hold.
-  // Not on the certificate: there the hold runs the vortex, which stays a hold.
-  const [latched, setLatched] = useState(false);
-  const latchedRef = useRef(false);
-  latchedRef.current = latched;
-  const press = useRef<{ at: number; unlatches: boolean; mayLatch: boolean } | null>(null);
-  const lastPressAt = useRef(0);
-  const canLatch = originalPage === null;
-
-  function pressStart() {
-    if (press.current) return;
-    const at = performance.now();
-    lastPressAt.current = at;
-    if (latched) {
-      // the press that ends a latch: its release does nothing more
-      press.current = { at, unlatches: true, mayLatch: false };
-      setLatched(false);
-      onHoldChange(false);
-      return;
-    }
-    // decided as the press starts: one that began on the certificate brings the original back and must not latch on it
-    press.current = { at, unlatches: false, mayLatch: canLatch };
-    onHoldChange(true);
-  }
-
-  /** `mayLatch`: the press ended on the button (let go), not by leaving it. */
-  function pressEnd(mayLatch: boolean) {
-    const p = press.current;
-    press.current = null;
-    if (!p) {
-      // a hold nobody is pressing (the vortex hands the original back held): any release ends it
-      if (holding && !latched) onHoldChange(false);
-      return;
-    }
-    const now = performance.now();
-    lastPressAt.current = now;
-    if (p.unlatches) return;
-    if (mayLatch && p.mayLatch && now - p.at < LATCH_MS) setLatched(true);
-    else onHoldChange(false);
-  }
-
-  // A click no pointer or key press produced (a screen reader, voice control, a switch) toggles the latch.
-  function holdClick(e: MouseEvent<HTMLButtonElement>) {
-    if (e.detail !== 0 || performance.now() - lastPressAt.current < CLICK_AFTER_PRESS_MS) return;
-    if (latched) {
-      setLatched(false);
-      onHoldChange(false);
-    } else if (canLatch) {
-      setLatched(true);
-      onHoldChange(true);
-    }
-  }
-
-  // The hold ended from outside (a new document, Prntr): the latch goes with it.
-  useEffect(() => {
-    if (!holding) setLatched(false);
-  }, [holding]);
-
-  // Another ink or another page ends a latch: what is shown next is the recolored page.
-  const onHoldChangeRef = useRef(onHoldChange);
-  onHoldChangeRef.current = onHoldChange;
-  useEffect(() => {
-    if (!latchedRef.current) return;
-    setLatched(false);
-    onHoldChangeRef.current(false);
-  }, [inkIndex, currentPage]);
-
-  // The pager's keys, wherever the focus is: ← and → turn the page, Home and End reach the ends. Not with a
-  // modifier (the browser's own shortcuts), nor while typing in a field.
-  const pager = useRef({ currentPage, pageCount, onPageChange });
-  pager.current = { currentPage, pageCount, onPageChange };
-  const paged = pageCount > 1;
-  useEffect(() => {
-    if (!paged) return;
-    const onKey = (e: globalThis.KeyboardEvent) => {
-      if (e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
-      if ((e.target as HTMLElement | null)?.closest?.('input, textarea, select, [contenteditable]')) return;
-      const { currentPage, pageCount, onPageChange } = pager.current;
-      const to =
-        e.key === 'ArrowLeft' ? currentPage - 1
-        : e.key === 'ArrowRight' ? currentPage + 1
-        : e.key === 'Home' ? 0
-        : e.key === 'End' ? pageCount - 1
-        : null;
-      if (to === null) return;
-      e.preventDefault();
-      onPageChange(to);
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [paged]);
-
-  // The page field: a click on "Page 3 of 40" swaps it for a number field. Enter goes to that page (the
-  // pager clamps it), Esc or leaving the field closes it. The focus goes back to the label after the keys.
-  const [pageField, setPageField] = useState<string | null>(null);
-  const pagerLabel = useRef<HTMLButtonElement>(null);
-  const refocusLabel = useRef(false);
-  useEffect(() => {
-    if (pageField === null && refocusLabel.current) {
-      refocusLabel.current = false;
-      pagerLabel.current?.focus({ preventScroll: true });
-    }
-  }, [pageField]);
-
-  function pageFieldKeyDown(e: KeyboardEvent<HTMLInputElement>) {
-    if (e.key !== 'Enter' && e.key !== 'Escape') return;
-    e.preventDefault();
-    if (e.key === 'Enter' && pageField) onPageChange(Number(pageField) - 1);
-    refocusLabel.current = true;
-    setPageField(null);
-  }
-
-  function holdKeyDown(e: KeyboardEvent<HTMLButtonElement>) {
-    if ((e.key === ' ' || e.key === 'Enter') && !e.repeat) {
-      e.preventDefault();
-      pressStart();
-    }
-  }
-
-  function holdKeyUp(e: KeyboardEvent<HTMLButtonElement>) {
-    if (e.key === ' ' || e.key === 'Enter') {
-      e.preventDefault();
-      pressEnd(true);
-    }
-  }
-
-  const swirling = vortex !== null && vortex.releasedAt === null;
 
   return (
     <>
@@ -391,50 +175,7 @@ export function PreviewState({
                 ? t('preview.captionInked', { ink: t(inks[inkIndex].nameKey) })
                 : t('preview.captionDefault')}
           </span>
-          {pageCount > 1 && (
-            <div className="pager">
-              <button
-                className="pager-btn"
-                aria-label={t('preview.prevPage')}
-                disabled={currentPage === 0}
-                onClick={() => onPageChange(currentPage - 1)}
-              >
-                ‹
-              </button>
-              {pageField === null ? (
-                <button
-                  type="button"
-                  className="pager-label"
-                  ref={pagerLabel}
-                  title={t('preview.goToPage')}
-                  onClick={() => setPageField(String(currentPage + 1))}
-                >
-                  {t('preview.pageOf', { page: currentPage + 1, total: pageCount })}
-                </button>
-              ) : (
-                <input
-                  className="pager-input"
-                  type="text"
-                  inputMode="numeric"
-                  aria-label={t('preview.pageInput')}
-                  autoFocus
-                  value={pageField}
-                  onChange={(e) => setPageField(e.target.value.replace(/\D/g, '').slice(0, 5))}
-                  onFocus={(e) => e.target.select()}
-                  onKeyDown={pageFieldKeyDown}
-                  onBlur={() => setPageField(null)}
-                />
-              )}
-              <button
-                className="pager-btn"
-                aria-label={t('preview.nextPage')}
-                disabled={currentPage >= pageCount - 1}
-                onClick={() => onPageChange(currentPage + 1)}
-              >
-                ›
-              </button>
-            </div>
-          )}
+          {pageCount > 1 && <Pager currentPage={currentPage} pageCount={pageCount} onPageChange={onPageChange} />}
           {/* The rest of a long document is still rendering: say so, as Print and Download
               wait for it. Kept in the layout once done so the page does not jump; not a live
               region, which would read out every page. */}
@@ -480,47 +221,14 @@ export function PreviewState({
             className="pill-btn"
             disabled={!pageReady}
             aria-pressed={holding}
-            onPointerDown={(e) => {
-              e.preventDefault();
-              pressStart();
-            }}
-            onPointerUp={() => pressEnd(true)}
-            onPointerLeave={() => pressEnd(false)}
-            onPointerCancel={() => pressEnd(false)}
-            onKeyDown={holdKeyDown}
-            onKeyUp={holdKeyUp}
-            onClick={holdClick}
-            onBlur={() => pressEnd(false)}
-            onContextMenu={(e) => e.preventDefault()}
+            {...holdProps}
           >
             {t(latched ? 'preview.holdLatched' : 'preview.hold')}
           </button>
         </div>
 
         <aside className="sidebar">
-          <div className="ink-block">
-            <div className="side-label">{t('preview.inkLabel')}</div>
-            <div className="swatch-row">
-              {inks.map((ink, i) => (
-                <button
-                  key={ink.hex}
-                  className="swatch"
-                  aria-label={t(ink.nameKey)}
-                  title={t(ink.nameKey)}
-                  aria-pressed={i === inkIndex}
-                  style={{
-                    background: ink.swatch ?? ink.hex,
-                    boxShadow:
-                      i === inkIndex
-                        ? `0 0 0 2px #ffffff, 0 0 0 4px ${ink.hex}`
-                        : '0 0 0 1px rgba(0,0,0,.15)',
-                  }}
-                  onClick={() => onSelectInk(i)}
-                />
-              ))}
-            </div>
-            <div className="ink-name">{t(inks[inkIndex].nameKey)}</div>
-          </div>
+          <InkPicker inks={inks} inkIndex={inkIndex} onSelectInk={onSelectInk} />
 
           <p className="side-note">{t('preview.sideNote')}</p>
 
@@ -532,43 +240,7 @@ export function PreviewState({
                 <div className="help-body">{t(tip.tipKey)}</div>
               </details>
             ))}
-            {/* Cross-brand advice, and the way into Prntr (PRNTR-TRIGGER.md). English
-                only, so not in PRINTER_TIPS (shared with the landing page) nor localized.
-                Hidden on touch screens until Prntr's touch form is done (.help-other). */}
-            {locale.code === 'en' && (
-              <details
-                className="help-item help-other"
-                onToggle={(e) => {
-                  if (e.currentTarget.open) onPrefetchPrntr();
-                }}
-              >
-                <summary>{OTHER_TIP.label}</summary>
-                <div className="help-body">
-                  <p>{OTHER_TIP.body1}</p>
-                  <p>{OTHER_TIP.body2}</p>
-                  <p>
-                    {OTHER_TIP.lead}
-                    {/* The link reads as plain text until it has the pointer or the focus; then glyphs
-                        rise above and sink below it (RisingGlyphs) and stop when it loses them. */}
-                    <span className="help-omen" style={{ color: inkHex }}>
-                      <button
-                        type="button"
-                        className="help-link"
-                        onClick={onOpenPrntr}
-                        onPointerEnter={() => setOmenHover(true)}
-                        onPointerLeave={() => setOmenHover(false)}
-                        onFocus={() => setOmenFocus(true)}
-                        onBlur={() => setOmenFocus(false)}
-                      >
-                        {OTHER_TIP.link}
-                      </button>
-                      <RisingGlyphs active={omenHover || omenFocus} />
-                    </span>
-                    {OTHER_TIP.tail}
-                  </p>
-                </div>
-              </details>
-            )}
+            {locale.code === 'en' && <PrntrTip inkHex={inkHex} onOpen={onOpenPrntr} onPrefetch={onPrefetchPrntr} />}
           </div>
         </aside>
       </div>
