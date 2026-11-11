@@ -44,6 +44,52 @@ export function localeForPath(pathname: string): Locale {
   return LOCALES.find((l) => l.path === segment) ?? DEFAULT_LOCALE;
 }
 
+/** The locale a browser language tag (navigator.languages) reads in: the same tag, else the same language.
+ * Chinese only where the script is Simplified: a zh-TW reader is not offered zh-CN. */
+function localeForTag(tag: string): Locale | null {
+  const lower = tag.toLowerCase();
+  const exact = LOCALES.find((l) => l.code.toLowerCase() === lower);
+  if (exact) return exact;
+  const [language, ...rest] = lower.split('-');
+  if (language === 'zh' && rest.length > 0 && !rest.some((part) => part === 'hans' || part === 'cn' || part === 'sg')) return null;
+  return LOCALES.find((l) => l.code.toLowerCase().split('-')[0] === language) ?? null;
+}
+
+/** Set once the visitor has picked a language or turned the offer down: no offer after that. */
+const LANGUAGE_CHOSEN_KEY = 'pa-lang';
+
+/** Storage can be blocked (private windows, site data off): the offer then shows again, nothing breaks. */
+export function rememberLanguageChoice(): void {
+  try {
+    localStorage.setItem(LANGUAGE_CHOSEN_KEY, '1');
+  } catch {
+    // not remembered
+  }
+}
+
+/**
+ * The language to offer a visitor reading `current`: the first of the browser's languages the site
+ * ships in, when that is another one. Null when it is this one, when none matches, or once the
+ * visitor has chosen.
+ */
+export function offeredLocale(current: Locale): Locale | null {
+  try {
+    if (localStorage.getItem(LANGUAGE_CHOSEN_KEY) !== null) return null;
+  } catch {
+    // no storage: offer
+  }
+  for (const tag of navigator.languages ?? [navigator.language]) {
+    const match = localeForTag(tag);
+    if (match) return match === current ? null : match;
+  }
+  return null;
+}
+
+/** A string in a locale other than the current one (the offer is written in the language it offers). */
+export function stringIn(l: Locale, key: string): string {
+  return files[`./${l.code}.properties`]?.[key] ?? key;
+}
+
 // Back/forward between language URLs pushed by the picker.
 window.addEventListener('popstate', () => setLocale(localeForPath(location.pathname)));
 

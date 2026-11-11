@@ -1,4 +1,4 @@
-import { BrowserTooOldError, EmptyPdfError, HeicDecodeError, ImageDecodeError, UnsupportedFileError } from './errors';
+import { BrowserTooOldError, EmptyPdfError, HeicDecodeError, ImageDecodeError, OfficeFileError, UnsupportedFileError } from './errors';
 
 // pdf.js's modern build calls built-ins only the newest browsers have
 // (Map#getOrInsertComputed, Math.sumPrecise, Uint8Array#toHex, …) without
@@ -111,7 +111,7 @@ export interface SourceDocument {
 
 export type FileKind = 'pdf' | 'png' | 'jpg' | 'heic';
 
-/** The supported format of `file`, from its MIME type or extension. */
+/** The supported format `file` claims to be, from its MIME type or extension. */
 export function fileKind(file: File): FileKind | null {
   const name = file.name.toLowerCase();
   if (file.type === 'application/pdf' || name.endsWith('.pdf')) return 'pdf';
@@ -122,12 +122,54 @@ export function fileKind(file: File): FileKind | null {
   return null;
 }
 
-export async function loadDocument(file: File): Promise<SourceDocument> {
-  const kind = fileKind(file);
+/** HEIF brands that hold a HEVC-coded photo (ISO 23008-12); the file names it at byte 8, after "ftyp". */
+const HEIC_BRANDS = ['heic', 'heix', 'hevc', 'hevx', 'heim', 'heis', 'hevm', 'hevs', 'mif1', 'msf1'];
+/** A PDF's "%PDF-" may follow junk; readers look for it in the first kilobyte. */
+const SNIFF_BYTES = 1024;
+
+/** The format the file's first bytes say it is, whatever its name says; null when they say nothing known. */
+export async function sniffKind(file: Blob): Promise<FileKind | null> {
+  let head: Uint8Array;
+  try {
+    head = new Uint8Array(await file.slice(0, SNIFF_BYTES).arrayBuffer());
+  } catch {
+    return null; // unreadable now: the load reports it
+  }
+  if (head[0] === 0x89 && head[1] === 0x50 && head[2] === 0x4e && head[3] === 0x47) return 'png';
+  if (head[0] === 0xff && head[1] === 0xd8 && head[2] === 0xff) return 'jpg';
+  const ascii = String.fromCharCode(...head);
+  if (ascii.slice(4, 8) === 'ftyp' && HEIC_BRANDS.includes(ascii.slice(8, 12))) return 'heic';
+  if (ascii.includes('%PDF-')) return 'pdf';
+  return null;
+}
+
+/**
+ * The file's format: what its bytes say (a PNG named .pdf is a PNG), else what its name and MIME type claim
+ * (a damaged PDF is still a PDF, and is reported as one).
+ */
+export async function detectKind(file: File): Promise<FileKind | null> {
+  return (await sniffKind(file)) ?? fileKind(file);
+}
+
+const OFFICE_EXTENSIONS = /\.(docx?|odt|rtf|txt|pages|xlsx?|ods|numbers|pptx?|odp|key)$/;
+const OFFICE_MIME = /^(application\/(msword|rtf|vnd\.openxmlformats-officedocument|vnd\.oasis\.opendocument|vnd\.ms-)|text\/(plain|rtf))/;
+
+/** A word processor, spreadsheet, presentation or text file: every app that makes one can save it as a PDF. */
+export function isOfficeFile(file: File): boolean {
+  return OFFICE_EXTENSIONS.test(file.name.toLowerCase()) || OFFICE_MIME.test(file.type);
+}
+
+/** The error for a file that is none of the formats: its own for an office file, which has a way forward. */
+export function unsupportedError(file: File): Error {
+  return isOfficeFile(file) ? new OfficeFileError() : new UnsupportedFileError();
+}
+
+/** `kind` is detectKind's answer for the file. */
+export async function loadDocument(file: File, kind: FileKind | null): Promise<SourceDocument> {
   if (kind === 'pdf') return loadPdf(file);
   if (kind === 'heic') return fromBitmap(await decodeHeic(file));
   if (kind === 'png' || kind === 'jpg') return loadImage(file);
-  throw new UnsupportedFileError();
+  throw unsupportedError(file);
 }
 
 // Safari decodes HEIC itself, and iPhones, where most HEIC files come from,
