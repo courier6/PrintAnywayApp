@@ -142,7 +142,8 @@ async function decodeHeic(file: File): Promise<ImageBitmap> {
   }
   // Outside the try: a decoder that fails to load (offline, or a deploy since
   // the page opened) is PA-100, worth a retry, not a damaged photo.
-  const { heicTo } = await import('heic-to');
+  // The csp build: the default one compiles code from strings, which the page's Content-Security-Policy refuses.
+  const { heicTo } = await import('heic-to/csp');
   try {
     return await heicTo({ blob: file, type: 'bitmap' });
   } catch (err) {

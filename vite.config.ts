@@ -352,6 +352,37 @@ function devScreenshots(): Plugin {
   };
 }
 
+/**
+ * What the built page may load and contact, enforced by the browser: scripts, styles, fonts and requests
+ * from this site only, so nothing a dependency or a hostile file does can send a document elsewhere in the
+ * background. A <meta> tag because GitHub Pages sets no headers.
+ *
+ * Prntr's global leaderboard (PRNTR-BOARD.md, phase 2) will call a server for its data: that server's origin
+ * has to be added to connect-src then, or the board fails on the built site while working on the dev server.
+ */
+const CONTENT_SECURITY_POLICY = [
+  "default-src 'none'",
+  "script-src 'self' 'wasm-unsafe-eval'", // pdf.js's image decoders are WebAssembly
+  "worker-src 'self' blob:", // heic-to starts its worker from a blob
+  "style-src 'self' 'unsafe-inline'", // index.html's style attribute
+  "img-src 'self' blob: data:", // the print pages are object URLs, the favicon a data URL
+  "font-src 'self'",
+  "connect-src 'self'", // pdf.js's decoders, CMaps and fonts, fetched when a document needs them
+  "base-uri 'none'",
+  "form-action 'none'",
+].join('; ');
+
+/** Build only: the dev server's hot reload needs inline script and a websocket. */
+function contentSecurityPolicy(): Plugin {
+  return {
+    name: 'content-security-policy',
+    apply: 'build',
+    transformIndexHtml: () => [
+      { tag: 'meta', attrs: { 'http-equiv': 'Content-Security-Policy', content: CONTENT_SECURITY_POLICY }, injectTo: 'head-prepend' },
+    ],
+  };
+}
+
 /** Prntr ships as its own lazy chunk; its dev-only code (entrance, harness hooks) must not ship at all. */
 function prntrGuard(): Plugin {
   let outDir = '';
@@ -383,5 +414,5 @@ function prntrGuard(): Plugin {
 export default defineConfig({
   // Served from https://printanyway.app/
   base: '/',
-  plugins: [i18nPlugin(), pdfjsData(), prntrGuard(), devScreenshots(), react()],
+  plugins: [i18nPlugin(), pdfjsData(), prntrGuard(), contentSecurityPolicy(), devScreenshots(), react()],
 });
