@@ -1,3 +1,4 @@
+import { get2d } from './canvas2d';
 import { BrowserTooOldError, EmptyPdfError, HeicDecodeError, ImageDecodeError, OfficeFileError, UnsupportedFileError } from './errors';
 
 // pdf.js's modern build calls built-ins only the newest browsers have
@@ -232,8 +233,7 @@ async function loadPdf(file: File): Promise<SourceDocument> {
       const canvas = document.createElement('canvas');
       canvas.width = Math.ceil(viewport.width);
       canvas.height = Math.ceil(viewport.height);
-      const ctx = canvas.getContext('2d', { willReadFrequently: true });
-      if (!ctx) throw new Error('Canvas 2D context unavailable');
+      const ctx = get2d(canvas, { willReadFrequently: true });
       // PDF pages may not paint their own background; force paper white.
       ctx.fillStyle = '#ffffff';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -265,8 +265,7 @@ function fromBitmap(bitmap: ImageBitmap): SourceDocument {
   const canvas = document.createElement('canvas');
   canvas.width = Math.round(bitmap.width * scale);
   canvas.height = Math.round(bitmap.height * scale);
-  const ctx = canvas.getContext('2d', { willReadFrequently: true });
-  if (!ctx) throw new Error('Canvas 2D context unavailable');
+  const ctx = get2d(canvas, { willReadFrequently: true });
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);

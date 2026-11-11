@@ -4,6 +4,7 @@
 // near-white clamps to pure paper white so scanned documents don't print a
 // faint tint wash, near-black clamps to full ink so photo shadows don't wash out.
 
+import { get2d } from './canvas2d';
 import { GOLD_INK } from './inks';
 
 const WHITE_CLAMP = 0.94;
@@ -18,8 +19,7 @@ const CONTRAST = 0.75;
 
 /** One-time pass per page: 8-bit relative luminance for every pixel. */
 export function luminanceMap(canvas: HTMLCanvasElement): Uint8Array {
-  const ctx = canvas.getContext('2d', { willReadFrequently: true });
-  if (!ctx) throw new Error('Canvas 2D context unavailable');
+  const ctx = get2d(canvas, { willReadFrequently: true });
   const { width, height } = canvas;
   const data = ctx.getImageData(0, 0, width, height).data;
   const lum = new Uint8Array(width * height);
@@ -117,8 +117,7 @@ export function recolorToCanvas(
   // Assigning a size, even the same one, reallocates and clears the canvas.
   if (canvas.width !== width) canvas.width = width;
   if (canvas.height !== height) canvas.height = height;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) throw new Error('Canvas 2D context unavailable');
+  const ctx = get2d(canvas);
   const img = ctx.createImageData(width, height);
   const d = img.data;
   if (inkHex === GOLD_INK.hex) {
