@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type MouseEvent } from 'react';
 import { t, tPlural, useLocale } from '../i18n';
+import { kindOf } from '../lib/errors';
 import type { ExportFormat } from '../lib/exportFile';
 import type { Ink } from '../lib/inks';
 import { OTHER_TIP, PRINTER_TIPS } from '../lib/printerTips';
@@ -364,7 +365,7 @@ export function PreviewState({
               <div className="print-reminder-text">
                 {notice.kind === 'error' ? (
                   <>
-                    <strong>{t(`error.${notice.errorKind}.title`)}</strong> {t(`error.${notice.errorKind}.body`)}
+                    <strong>{t(`error.${kindOf(notice.code)}.title`)}</strong> {t(`error.${kindOf(notice.code)}.body`)}
                     <span className="export-error-code">{t('error.code', { code: notice.code })}</span>
                   </>
                 ) : (

@@ -13,6 +13,35 @@ export type ErrorCode =
   | 'PA-107' // browser too old for pdf.js
   | 'PA-108'; // an office or text document: it has to be saved as a PDF first
 
+/** Which message the error card and the notices show: error.<kind>.title / .body in the .properties files. */
+export type ErrorKind =
+  | 'unsupported'
+  | 'password'
+  | 'damaged-pdf'
+  | 'heic'
+  | 'image'
+  | 'memory'
+  | 'old-browser'
+  | 'office'
+  | 'processing';
+
+const KIND_BY_CODE: Record<ErrorCode, ErrorKind> = {
+  'PA-100': 'processing',
+  'PA-101': 'unsupported',
+  'PA-102': 'password',
+  'PA-103': 'damaged-pdf',
+  'PA-104': 'heic',
+  'PA-105': 'image',
+  'PA-106': 'memory',
+  'PA-107': 'old-browser',
+  'PA-108': 'office',
+};
+
+/** The message for a code: each code has exactly one, so only the code is ever stored. */
+export function kindOf(code: ErrorCode): ErrorKind {
+  return KIND_BY_CODE[code];
+}
+
 export class UnsupportedFileError extends Error {
   constructor() {
     super('Unsupported file type');
