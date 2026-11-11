@@ -1,5 +1,5 @@
 import { canvasBlob } from './canvasBlob';
-import type { FileKind, PageSize } from './loadDocument';
+import type { PageSize } from './loadDocument';
 
 const PHOTO_WIDTH_PT = 612; // a photo has no page size: US Letter wide, height by its aspect
 /** File systems cap a name at 255 bytes; the source's stem is cut so the download's name stays well under. */
@@ -12,11 +12,6 @@ export type ExportFormat = 'pdf' | 'png' | 'jpg';
 export interface ExportPage {
   canvas: HTMLCanvasElement;
   sizePt: PageSize | null;
-}
-
-/** HEIC downloads as JPG: browsers can't encode HEIC. */
-export function exportFormat(kind: FileKind): ExportFormat {
-  return kind === 'heic' ? 'jpg' : kind;
 }
 
 /** Saves the recolored pages as `format` and triggers a download. */
