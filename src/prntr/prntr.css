@@ -1685,7 +1685,7 @@
   color: #BDBDBD;
 }
 
-/* The name asked for a cleared run the badge left NULL (PRNTR-BOARD.md §15.3): a row-shaped line in the out line's
+/* The name asked for a ranking run the badge left NULL (PRNTR-BOARD.md §15.3): a row-shaped line in the out line's
    place, three blanks for the rank, the field twelve glyphs wide in the rows' type, the score after it; OK as CONTINUE. */
 .prntr-board-run.is-name {
   margin-top: -0.4em;

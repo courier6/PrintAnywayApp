@@ -1,7 +1,7 @@
 /**
  * The board (PRNTR-BOARD.md): the player's own top ten, kept in this browser's localStorage under
- * one key, written only when the player pins a run and removed when they clear it. Nothing here
- * touches the network. Every storage access is guarded: private browsing, a full quota or storage
+ * one key, written when a finished run ranks (cleared or a game over) and removed when they clear
+ * it. Nothing here touches the network. Every storage access is guarded: private browsing, a full quota or storage
  * switched off throw, and the board then simply reads as empty or refuses to keep a row.
  */
 
@@ -69,8 +69,9 @@ export function readBoard(): BoardRow[] {
 }
 
 /** Where `score` would go on `rows` (0-based; a tie goes above the rows it ties: newest first), or -1 when it would not
- * make the board. */
+ * make the board: ten better rows, or a run without a point. */
 export function rankOf(rows: BoardRow[], score: number): number {
+  if (score <= 0) return -1;
   const i = rows.findIndex((r) => r.score <= score);
   const at = i === -1 ? rows.length : i;
   return at < BOARD_MAX ? at : -1;
@@ -83,7 +84,7 @@ export function today(now = new Date()): string {
 }
 
 /**
- * What became of a cleared run when the room ended (settleRun), carried to the board over the app: written at `rank`,
+ * What became of a finished run when the room ended (settleRun), carried to the board over the app: written at `rank`,
  * refused by the browser, not ranking, or still unnamed (NULL: the board asks the name and writes the row itself).
  */
 export type BoardWrite = { kind: 'kept'; rank: number } | { kind: 'refused' } | { kind: 'unranked' } | { kind: 'unnamed' };
@@ -107,11 +108,11 @@ export function pinRow(row: BoardRow): { rows: BoardRow[]; rank: number } | null
 }
 
 /**
- * A run the room has just ended with, settled once: only a cleared run that ranks gets on the board, and with a name
- * it is written now; without one (NULL) it waits for the name. A game over is never written.
+ * A run the room has just ended with, cleared or a game over, settled once: one that ranks gets on the board, and
+ * with a name it is written now; without one (NULL) it waits for the name.
  */
 export function settleRun(run: BoardRow): BoardWrite {
-  if (!run.won || rankOf(readBoard(), run.score) === -1) return { kind: 'unranked' };
+  if (rankOf(readBoard(), run.score) === -1) return { kind: 'unranked' };
   if (run.name === 'NULL') return { kind: 'unnamed' };
   const kept = pinRow(run);
   return kept ? { kind: 'kept', rank: kept.rank } : { kind: 'refused' };

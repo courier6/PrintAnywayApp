@@ -59,7 +59,7 @@ export function buildBoardCard(): BoardCard {
   const sureEl = el('div', 'prntr-board-sure', 'YOU SURE?');
   const yesBtn = button('prntr-board-yes', 'YES');
   const cancelBtn = button('prntr-board-cancel', 'CANCEL');
-  // the name asked for a cleared run the badge left NULL: a field in a row's place, the score after it, and OK
+  // the name asked for a ranking run the badge left NULL: a field in a row's place, the score after it, and OK
   const nameEl = el('div', 'prntr-board-run is-name');
   const nameInput = document.createElement('input');
   nameInput.className = 'prntr-board-name';

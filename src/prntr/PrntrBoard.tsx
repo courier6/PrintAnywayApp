@@ -4,13 +4,13 @@ import { cleanName, clearBoard, pinRow, rankOf, readBoard, today, type BoardRow,
 import { NOTE_NOT_CLEARED, NOTE_REFUSED, buildBoardCard, outLine } from './boardCard';
 import { BOARD_FRAME_BAND, paintBoardFrame } from './boardFrame';
 
-/** A finished run as the app side gets it: won or lost, its score, the badge's name (NULL when none was given), and for
- * a win what became of it on the board when the room ended (`board`, from settleRun). */
+/** A finished run as the app side gets it: won or lost, its score, the badge's name (NULL when none was given), and
+ * what became of it on the board when the room ended (`board`, from settleRun). */
 export interface BoardRun {
   won: boolean;
   score: number;
   player: string;
-  board?: BoardWrite;
+  board: BoardWrite;
 }
 
 /** A frame cell is this many CSS px on a desktop, and on a narrow viewport (under NARROW_PX wide). */
@@ -29,7 +29,7 @@ interface Props {
 /**
  * The board over the app (PRNTR-BOARD.md §15.2, §16), after the app has dropped in under the jingle: the local leader
  * board's card in a gilded pixel frame in the ink (the board-frame sheet's #5), no dim, so the certificate and the
- * gold swatch stay in sight around it. A cleared run the room has not written (the badge left
+ * gold swatch stay in sight around it. A ranking run the room has not written (the badge left
  * it NULL) asks for the name first (§15.3): OK or Enter writes it, with NULL for an empty field. CONTINUE, a press
  * outside the card or Esc closes it (unanswered, the name's run is not written); CLEAR THE BOARD asks YOU SURE?, YES
  * clears and closes, CANCEL is the board again. Silent: the run's audio has gone with Prntr.
@@ -81,11 +81,12 @@ export function PrntrBoard({ run, inkHex, onClose }: Props) {
     // the name: written once, with the rank it gets; then the board as after any write
     const answer = () => {
       if (!shownRef.current?.ask) return;
-      const row: BoardRow = { name: cleanName(c.nameInput.value) || 'NULL', score: run.score, at: today(), won: true };
+      const row: BoardRow = { name: cleanName(c.nameInput.value) || 'NULL', score: run.score, at: today(), won: run.won };
       const kept = pinRow(row);
+      const how = run.won ? '' : ', game over';
       shownRef.current = kept
-        ? { rows: kept.rows, rank: kept.rank, out: '', note: '', say: `${row.name}, ${row.score}, number ${kept.rank + 1}.`, ask: false }
-        : { rows: readBoard(), rank: -1, out: outLine(row, 'NOT KEPT.'), note: NOTE_REFUSED, say: `${row.name}, ${row.score}. ${NOTE_REFUSED}`, ask: false };
+        ? { rows: kept.rows, rank: kept.rank, out: '', note: '', say: `${row.name}, ${row.score}${how}, number ${kept.rank + 1}.`, ask: false }
+        : { rows: readBoard(), rank: -1, out: outLine(row, 'NOT KEPT.'), note: NOTE_REFUSED, say: `${row.name}, ${row.score}${how}. ${NOTE_REFUSED}`, ask: false };
       show(shownRef.current);
     };
     c.okBtn.addEventListener('click', answer, { signal });
@@ -172,7 +173,7 @@ interface Paint {
   out: string;
   note: string;
   say: string;
-  /** A cleared run the room left unwritten (NULL) that ranks: the name is asked before it is written. */
+  /** A run the room left unwritten (NULL) that ranks: the name is asked before it is written. */
   ask: boolean;
 }
 
@@ -182,16 +183,16 @@ function firstPaint(run: BoardRun): Paint {
   const rows = readBoard();
   const said = (s: string) => `Local leader board. ${s}`;
   const row: BoardRow = { name: run.player, score: run.score, at: today(), won: run.won };
-  if (!run.won) return { rows, rank: -1, out: outLine(row, 'NOT ON IT.'), note: '', say: said(`${row.name}, ${row.score}, game over, not on it.`), ask: false };
+  const how = run.won ? '' : ', game over';
   if (run.player === 'NULL') {
     const rank = rankOf(rows, run.score);
-    if (rank === -1) return { rows, rank: -1, out: outLine(row, 'NOT ON IT.'), note: '', say: said(`${row.score}, not on it.`), ask: false };
-    return { rows, rank: -1, out: '', note: '', say: said(`${row.score}, number ${rank + 1}. Your name?`), ask: true };
+    if (rank === -1) return { rows, rank: -1, out: outLine(row, 'NOT ON IT.'), note: '', say: said(`${row.score}${how}, not on it.`), ask: false };
+    return { rows, rank: -1, out: '', note: '', say: said(`${row.score}${how}, number ${rank + 1}. Your name?`), ask: true };
   }
   // it was written as the room ended, or not, and `board` says which (the row is not looked up again: its date stamp
   // could differ from today's across midnight)
-  const write: BoardWrite = run.board ?? { kind: 'unranked' };
-  if (write.kind === 'kept') return { rows, rank: write.rank, out: '', note: '', say: said(`${row.name}, ${row.score}, number ${write.rank + 1}.`), ask: false };
-  if (write.kind === 'refused') return { rows, rank: -1, out: outLine(row, 'NOT KEPT.'), note: NOTE_REFUSED, say: said(`${row.name}, ${row.score}. ${NOTE_REFUSED}`), ask: false };
-  return { rows, rank: -1, out: outLine(row, 'NOT ON IT.'), note: '', say: said(`${row.name}, ${row.score}, not on it.`), ask: false };
+  const write = run.board;
+  if (write.kind === 'kept') return { rows, rank: write.rank, out: '', note: '', say: said(`${row.name}, ${row.score}${how}, number ${write.rank + 1}.`), ask: false };
+  if (write.kind === 'refused') return { rows, rank: -1, out: outLine(row, 'NOT KEPT.'), note: NOTE_REFUSED, say: said(`${row.name}, ${row.score}${how}. ${NOTE_REFUSED}`), ask: false };
+  return { rows, rank: -1, out: outLine(row, 'NOT ON IT.'), note: '', say: said(`${row.name}, ${row.score}${how}, not on it.`), ask: false };
 }

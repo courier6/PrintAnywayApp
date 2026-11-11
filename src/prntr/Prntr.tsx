@@ -160,7 +160,7 @@ export default function Prntr({ source, recolored, inkHex, stage, audioContext, 
           won,
           score: handoff.score,
           player: handoff.player,
-          board: won ? settleRun({ name: handoff.player, score: handoff.score, at: today(), won: true }) : undefined,
+          board: settleRun({ name: handoff.player, score: handoff.score, at: today(), won }),
         };
         setDone(true);
         if (certificate) onDoneRef.current('cleared', certificate, run);
