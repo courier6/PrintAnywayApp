@@ -350,6 +350,8 @@ export default function App() {
         logAppError(classifyError(err), err, lastFile.current);
         store.truncate(i);
         setPageCount(i);
+        // The pager reaches pages still on their way: one opened past the cut no longer exists.
+        setCurrentPage((p) => Math.min(p, i - 1));
         setNotice({ kind: 'partial', rendered: i, total: doc.pageCount });
         return;
       }
