@@ -5,9 +5,8 @@ import { EmptyState } from './components/EmptyState';
 import { ProcessingState } from './components/ProcessingState';
 import { PreviewState } from './components/PreviewState';
 import { PrntrHost, prefetchPrntr } from './components/PrntrHost';
-import { prntrAudioContext } from './components/prntrAudio';
 import type { Certificate } from './prntr/types';
-import { reducedMotion } from './prntr/anim';
+import { usePrntrSession } from './usePrntrSession';
 import { ErrorState, type ErrorKind } from './components/ErrorState';
 import { t, tPlural, useLocale } from './i18n';
 import { GOLD_INK, INKS } from './lib/inks';
@@ -17,7 +16,7 @@ import { DocumentReplacedError, PageStore, type PageSnapshot } from './lib/pageS
 import { exportFormat, exportRecolored, type ExportFormat, type ExportPage } from './lib/exportFile';
 import { canvasBlob } from './lib/canvasBlob';
 
-type AppState = 'empty' | 'processing' | 'preview' | 'error' | 'prntr';
+export type AppState = 'empty' | 'processing' | 'preview' | 'error' | 'prntr';
 
 const KIND_BY_CODE: Record<ErrorCode, ErrorKind> = {
   'PA-100': 'processing',
@@ -49,8 +48,6 @@ interface OriginalDocument {
 
 /** Print waits this long at most for the print pages to decode, then prints what has. */
 const PRINT_DECODE_MS = 5000;
-/** Under reduced motion, how long the GAME OVER card stays up before the plain cut back to the app. */
-const REDUCED_OVER_HOLD_MS = 2000;
 
 /** A page as a PNG object URL for the print root, encoded off the main thread (toDataURL would hold it
  * for every page at once: a 20-page print froze it for 0.3–2 s). */
@@ -114,14 +111,6 @@ export default function App() {
   // What a screen reader is told when a document's preview is ready (a live region kept mounted).
   const [status, setStatus] = useState('');
   const [, setPagesVersion] = useState(0);
-  const [prntrStage, setPrntrStage] = useState(0);
-  const prntrPage = useRef<{ source: HTMLCanvasElement; recolored: HTMLCanvasElement } | null>(null);
-  const prntrAudio = useRef<AudioContext | null>(null);
-  const prntrReturn = useRef<AppState>('preview');
-  const overHold = useRef<number | null>(null); // the reduced-motion GAME OVER hold before the cut
-  // Set while the app's UI falls back into place over Prntr's last frame: the sky
-  // drop after the room is cleared, the Tetris drop after a game over.
-  const [prntrDrop, setPrntrDrop] = useState<'sky' | 'tetris' | null>(null);
   // The document the certificate replaced, kept so the vortex can bring it back (PRNTR-VORTEX.md):
   // its rendered pages, name, format and the page that was open. Dropped by the next document.
   const [vortexOriginal, setVortexOriginal] = useState<OriginalDocument | null>(null);
@@ -140,11 +129,29 @@ export default function App() {
   const printRoot = useRef<HTMLDivElement>(null);
   const handleFileRef = useRef<(file: File) => void>(() => {});
   handleFileRef.current = (file) => void handleFile(file);
+  // The easter egg's run: entered from the preview's help, it hands the app back with or without a certificate.
+  const prntr = usePrntrSession({
+    appState,
+    setAppState,
+    firstPage: () => {
+      const recolored = store.ensureRecolored(0, inkRef.current);
+      const source = store.getSource(0);
+      return recolored && source ? { source, recolored } : null;
+    },
+    onEnter: () => setHolding(false),
+    onCertificate: loadCertificate,
+    onError: (err) => {
+      const code = classifyError(err);
+      logAppError(code, err, null);
+      setErrorInfo({ code, kind: KIND_BY_CODE[code] });
+      setAppState('error');
+    },
+  });
   // Prntr has the screen: a file dragged over it is not taken (it would end the game
   // and replace the document unseen). Nor while the app's UI is still dropping back in
   // over its last frame: the state is back already, but Prntr is still mounted.
   const inPrntr = useRef(false);
-  inPrntr.current = appState === 'prntr' || prntrDrop !== null;
+  inPrntr.current = prntr.active;
 
   // Window-level drag-and-drop: dropping a file anywhere, in any state but
   // Prntr, replaces the loaded document without confirmation. The depth counter
@@ -198,7 +205,7 @@ export default function App() {
   // lives only in memory, so leaving drops it. The browser shows its own
   // wording. iOS Safari never fires beforeunload, so this covers desktop only.
   const hasDocument =
-    appState === 'processing' || appState === 'preview' || (appState === 'prntr' && prntrReturn.current === 'preview');
+    appState === 'processing' || appState === 'preview' || (appState === 'prntr' && prntr.returnsToPreview);
   useEffect(() => {
     if (!hasDocument) return;
     const onBeforeUnload = (e: BeforeUnloadEvent) => {
@@ -239,7 +246,7 @@ export default function App() {
       if (!Number.isInteger(n) || n < 0) return;
       devSkipUsed.current = true;
       console.info('prntr-dev-skip', n);
-      enterPrntr(n, { source: devStandIn('#000000'), recolored: devStandIn(inkRef.current) });
+      prntr.enter(n, { source: devStandIn('#000000'), recolored: devStandIn(inkRef.current) });
     }
   }, [appState]);
 
@@ -261,7 +268,7 @@ export default function App() {
           setPagesVersion((v) => v + 1);
           setAppState('preview');
         },
-        enter: (stage: number) => enterPrntr(stage),
+        enter: (stage: number) => prntr.enter(stage),
       };
     }
   });
@@ -289,7 +296,7 @@ export default function App() {
   // for the old one (the token tells it to stop), its parsed file, its print pages.
   function startDocument(name: string, exportAs: ExportFormat | null): number {
     const token = ++runToken.current;
-    clearOverHold();
+    prntr.clearOverHold();
     if (idleHandle.current !== null) {
       cancelIdle(idleHandle.current);
       idleHandle.current = null;
@@ -462,86 +469,11 @@ export default function App() {
     if (clamped !== currentPage) setStatus(t('preview.pageOf', { page: clamped + 1, total: pageCount }));
   }
 
-  // Prntr takes over the viewport with the document's first page, whatever page is shown (or a page it is
-  // handed, which only the dev entrance does); see PRNTR-ARCHITECTURE.md. The room prints it (PRNTR-FIRE.md §14).
-  function enterPrntr(stage: number, page?: { source: HTMLCanvasElement; recolored: HTMLCanvasElement }) {
-    if (!page) {
-      if (appState !== 'preview') return;
-      const recolored = store.ensureRecolored(0, inkRef.current);
-      const source = store.getSource(0);
-      if (!recolored || !source) return;
-      page = { source, recolored };
-    }
-    clearOverHold();
-    prntrReturn.current = appState;
-    prntrAudio.current = prntrAudioContext();
-    setHolding(false);
-    prntrPage.current = page;
-    setPrntrStage(stage);
-    setAppState('prntr');
-  }
-
-  function exitPrntr() {
-    clearOverHold();
-    prntrPage.current = null; // the page it was handed goes with it
-    setAppState(prntrReturn.current);
-  }
-
-  function clearOverHold() {
-    if (overHold.current === null) return;
-    window.clearTimeout(overHold.current);
-    overHold.current = null;
-  }
-
-  // The drop has landed (or its safety net fired): Prntr unmounts, and its page goes.
-  function landPrntrDrop() {
-    prntrPage.current = null;
-    setPrntrDrop(null);
-  }
-
-  // The drops (PRNTR-STAGE-1.md §4.10): after the room is cleared the app's UI falls
-  // into place from the sky in one piece; after a game over its blocks fall in one by
-  // one like Tetris pieces. Either way over the frozen last frame of Prntr, which stays
-  // mounted until the drop has landed. Reduced motion is a plain cut, as is any exit.
-  // The room cleared, the page the app comes back to is the certificate of completion,
-  // in place of whatever document it had.
-  function finishPrntr(outcome: 'cleared' | 'over', certificate?: Certificate) {
-    if (certificate) {
-      try {
-        loadCertificate(certificate);
-      } catch (err) {
-        // The old document is already gone: say so on the error card rather than
-        // drop back onto an empty preview.
-        const code = classifyError(err);
-        logAppError(code, err, null);
-        setErrorInfo({ code, kind: KIND_BY_CODE[code] });
-        setAppState('error');
-        return;
-      }
-    }
-    if (reducedMotion()) {
-      if (outcome === 'over') {
-        // a plain cut, but not on the very frame the card went up: the GAME OVER card is held for a moment first (an Esc
-        // in that moment, a new document or a new run clears the hold, so it never cuts away from what came after)
-        overHold.current = window.setTimeout(() => {
-          overHold.current = null;
-          prntrPage.current = null;
-          setAppState((s) => (s === 'prntr' ? prntrReturn.current : s));
-        }, REDUCED_OVER_HOLD_MS);
-        return;
-      }
-      exitPrntr();
-      return;
-    }
-    setPrntrDrop(outcome === 'over' ? 'tetris' : 'sky');
-    setAppState(prntrReturn.current);
-  }
-
   // The certificate becomes the loaded document: one page, a PDF to download, recoloured
   // in the chosen ink like any other. A document still processing is dropped (only its
   // rendered pages are kept for the vortex); one entered from nothing (the dev entrance) has
   // nothing to keep. A win from a certificate keeps the document the first win replaced, so the
-  // vortex never brings back a certificate.
+  // vortex never brings back a certificate. The run then returns to the preview (usePrntrSession).
   function loadCertificate({ id, page }: Certificate) {
     const original: OriginalDocument | null =
       vortexOriginal ??
@@ -561,7 +493,6 @@ export default function App() {
     setProcessedCount(1);
     setPagesVersion((v) => v + 1);
     setVortexOriginal(original);
-    prntrReturn.current = 'preview';
   }
 
   // The vortex has swallowed the certificate: the original document comes back in its place, the
@@ -585,13 +516,6 @@ export default function App() {
     queueBackgroundRecolor(inkRef.current);
     if (whole > original.pages.length) void resumeDocument(original, token);
   }
-
-  // Safety net: Prntr never stays mounted if the drop's animationend does not arrive.
-  useEffect(() => {
-    if (!prntrDrop) return;
-    const id = window.setTimeout(landPrntrDrop, prntrDrop === 'tetris' ? 2000 : 1200);
-    return () => window.clearTimeout(id);
-  }, [prntrDrop]);
 
   // Throws DocumentReplacedError once the document it started on is replaced.
   async function collectAllRecolored(token: number): Promise<ExportPage[]> {
@@ -678,11 +602,11 @@ export default function App() {
       style={{ '--ink': INKS[0].hex } as CSSProperties}
     >
       <div
-        className={'no-print' + (prntrDrop === 'sky' ? ' is-sky-drop' : prntrDrop === 'tetris' ? ' is-tetris-drop' : '')}
+        className={'no-print' + (prntr.drop === 'sky' ? ' is-sky-drop' : prntr.drop === 'tetris' ? ' is-tetris-drop' : '')}
         onAnimationEnd={(e) => {
           // The sky drop animates .no-print itself; the Tetris drop's last piece is the header.
-          const landed = prntrDrop === 'tetris' ? (e.target as HTMLElement).classList.contains('header') : e.target === e.currentTarget;
-          if (landed) landPrntrDrop();
+          const landed = prntr.drop === 'tetris' ? (e.target as HTMLElement).classList.contains('header') : e.target === e.currentTarget;
+          if (landed) prntr.land();
         }}
       >
         <Header />
@@ -720,7 +644,7 @@ export default function App() {
             onDismissNotice={() => setNotice(null)}
             showReminder={showPrintReminder}
             onDismissReminder={() => setShowPrintReminder(false)}
-            onOpenPrntr={() => enterPrntr(0)}
+            onOpenPrntr={() => prntr.enter(0)}
             onPrefetchPrntr={prefetchPrntr}
           />
         )}
@@ -745,15 +669,15 @@ export default function App() {
       </div>
       {/* Outside .no-print: the sky drop transforms .no-print, which would carry the fixed
           Prntr layer along with it. */}
-      {(appState === 'prntr' || prntrDrop !== null) && prntrPage.current && (
+      {prntr.active && prntr.page && (
         <PrntrHost
-          source={prntrPage.current.source}
-          recolored={prntrPage.current.recolored}
+          source={prntr.page.source}
+          recolored={prntr.page.recolored}
           inkHex={inkHex}
-          stage={prntrStage}
-          audioContext={prntrAudio.current}
-          onExit={exitPrntr}
-          onDone={finishPrntr}
+          stage={prntr.stage}
+          audioContext={prntr.audio}
+          onExit={prntr.exit}
+          onDone={prntr.finish}
         />
       )}
       {import.meta.env.DEV && DevPanel && (
