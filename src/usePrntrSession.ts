@@ -24,8 +24,8 @@ interface Options {
   /** The room was cleared: the certificate becomes the document. May throw. */
   onCertificate: (certificate: Certificate) => void;
   /** Prntr has gone after a finished run (the drop landed, or the reduced-motion cut was made): the board comes up
-   * over the app with that run, null for a chain started past the room. */
-  onGone: (run: BoardRun | null) => void;
+   * over the app with that run. */
+  onGone: (run: BoardRun) => void;
   /** onCertificate threw: the old document is gone, so the app shows the error card. */
   onError: (err: unknown) => void;
 }
@@ -39,9 +39,9 @@ export function usePrntrSession({ appState, setAppState, firstPage, onEnter, onC
   const page = useRef<PrntrPage | null>(null);
   const audio = useRef<AudioContext | null>(null);
   const returnTo = useRef<AppState>('preview');
-  // The run Prntr finished with, kept from its end until the board comes up over the app (PRNTR-BOARD.md §15.2):
-  // undefined when there is none to show, null for a chain started past the room (the dev entrance)
-  const run = useRef<BoardRun | null | undefined>(undefined);
+  // The run Prntr finished with, kept from its end until the board comes up over the app (PRNTR-BOARD.md §15.2);
+  // undefined when there is none to show
+  const run = useRef<BoardRun | undefined>(undefined);
   const overHold = useRef<number | null>(null); // the reduced-motion GAME OVER hold before the cut
   // Set while the app's UI falls back into place over Prntr's last frame: the sky
   // drop after the room is cleared, the Tetris drop after a game over.
@@ -99,7 +99,7 @@ export function usePrntrSession({ appState, setAppState, firstPage, onEnter, onC
   // mounted until the drop has landed. Reduced motion is a plain cut, as is any exit.
   // The room cleared, the page the app comes back to is the certificate of completion,
   // in place of whatever document it had.
-  function finish(outcome: 'cleared' | 'over', certificate: Certificate | undefined, finished: BoardRun | null) {
+  function finish(outcome: 'cleared' | 'over', certificate: Certificate | undefined, finished: BoardRun) {
     if (certificate) {
       try {
         onCertificate(certificate);

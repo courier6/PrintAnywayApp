@@ -5,7 +5,7 @@ import { reducedMotion } from './anim';
 import { createPrntrAudio, type PrntrAudio } from './audio';
 import { playPop, playWrongAnswer, POP_DELAY_MS, POP_MS, REFUSE_MS, touchOnly } from './refusal';
 import { makeCertificate } from './certificate';
-import { readBoard } from './board';
+import { readBoard, settleRun, today } from './board';
 import { capturePage } from './page';
 import type { BoardRun } from './PrntrBoard';
 import { runChain } from './runner';
@@ -48,9 +48,9 @@ interface Props {
    * (the sky drop, with the certificate of completion as the page the app comes back
    * to), `over` a game over (the Tetris drop). Either way the host
    * drops its UI over the last frame, then unmounts Prntr and puts the board up over the app
-   * with `run` (null when the chain was started past the room, as the dev entrance does).
+   * with `run`.
    */
-  onDone: (outcome: 'cleared' | 'over', certificate: Certificate | undefined, run: BoardRun | null) => void;
+  onDone: (outcome: 'cleared' | 'over', certificate: Certificate | undefined, run: BoardRun) => void;
 }
 
 export default function Prntr({ source, recolored, inkHex, stage, audioContext, onExit, onDone }: Props) {
@@ -148,13 +148,20 @@ export default function Prntr({ source, recolored, inkHex, stage, audioContext, 
     runChain(ctx, STAGES, startAt)
       .then((handoff) => {
         if (!handoff) return;
+        // no stage ran to an end: leave as ✕ would
+        if (handoff.kind === 'start') return onExitRef.current();
         finished = true;
         // Made before ✕ goes: if it throws, the way out must still be there.
         const certificate = handoff.kind === 'cleared' ? makeCertificate(handoff.player, handoff.score, Math.max(readBoard()[0]?.score ?? 0, handoff.score), handoff.stats) : undefined;
-        const run: BoardRun | null =
-          handoff.kind === 'start'
-            ? null
-            : { won: handoff.kind === 'cleared', score: handoff.score, player: handoff.player, board: handoff.kind === 'cleared' ? handoff.board : undefined };
+        // The run goes on the board here, once, after the certificate has read the best before it (PRNTR-BOARD.md §16):
+        // the board over the app shows what became of it.
+        const won = handoff.kind === 'cleared';
+        const run: BoardRun = {
+          won,
+          score: handoff.score,
+          player: handoff.player,
+          board: won ? settleRun({ name: handoff.player, score: handoff.score, at: today(), won: true }) : undefined,
+        };
         setDone(true);
         if (certificate) onDoneRef.current('cleared', certificate, run);
         else onDoneRef.current('over', undefined, run);

@@ -49,7 +49,7 @@ export interface PrntrHostProps {
   audioContext: AudioContext | null;
   onExit: () => void;
   /** The chain finished: the room was cleared (with the certificate to load as the page), or it was a game over. */
-  onDone: (outcome: 'cleared' | 'over', certificate: Certificate | undefined, run: BoardRun | null) => void;
+  onDone: (outcome: 'cleared' | 'over', certificate: Certificate | undefined, run: BoardRun) => void;
 }
 
 /** Whatever breaks inside Prntr, the user lands back on the preview. */
@@ -84,7 +84,7 @@ export function PrntrHost(props: PrntrHostProps) {
 }
 
 export interface PrntrBoardHostProps {
-  run: BoardRun | null;
+  run: BoardRun;
   inkHex: string;
   onClose: () => void;
 }

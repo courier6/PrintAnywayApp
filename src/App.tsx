@@ -82,9 +82,8 @@ export default function App() {
   // What a screen reader is told when a document's preview is ready (a live region kept mounted).
   const [status, setStatus] = useState('');
   const [, setPagesVersion] = useState(0);
-  // The board over the app after a run (PRNTR-BOARD.md §15.2), with the run Prntr finished with: null for a
-  // chain started past the room (the dev entrance)
-  const [prntrBoard, setPrntrBoard] = useState<{ run: BoardRun | null; inkHex: string } | null>(null);
+  // The board over the app after a run (PRNTR-BOARD.md §15.2), with the run Prntr finished with
+  const [prntrBoard, setPrntrBoard] = useState<{ run: BoardRun; inkHex: string } | null>(null);
   // The document the certificate replaced, kept so the vortex can bring it back (PRNTR-VORTEX.md):
   // its rendered pages, name, format and the page that was open. Dropped by the next document.
   const [vortexOriginal, setVortexOriginal] = useState<OriginalDocument | null>(null);
@@ -119,7 +118,7 @@ export default function App() {
     onCertificate: loadCertificate,
     // The board comes up over the app once Prntr has gone: in the ink the app landed on after a win (the
     // certificate's), in gold after a game over, which leaves no certificate.
-    onGone: (run) => setPrntrBoard({ run, inkHex: run?.won ? inkRef.current : GOLD_INK.hex }),
+    onGone: (run) => setPrntrBoard({ run, inkHex: run.won ? inkRef.current : GOLD_INK.hex }),
     onError: (err) => failTo(err, null),
   });
   // Prntr has the screen: a file dragged over it is not taken (it would end the game

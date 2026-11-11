@@ -83,8 +83,8 @@ export function today(now = new Date()): string {
 }
 
 /**
- * What the board stage did with a cleared run, carried to the app side's board in the handoff: written at `rank`,
- * refused by the browser, not ranking, or still unnamed (NULL: the app side asks the name and writes the row itself).
+ * What became of a cleared run when the room ended (settleRun), carried to the board over the app: written at `rank`,
+ * refused by the browser, not ranking, or still unnamed (NULL: the board asks the name and writes the row itself).
  */
 export type BoardWrite = { kind: 'kept'; rank: number } | { kind: 'refused' } | { kind: 'unranked' } | { kind: 'unnamed' };
 
@@ -104,6 +104,17 @@ export function pinRow(row: BoardRow): { rows: BoardRow[]; rank: number } | null
     return null;
   }
   return { rows, rank };
+}
+
+/**
+ * A run the room has just ended with, settled once: only a cleared run that ranks gets on the board, and with a name
+ * it is written now; without one (NULL) it waits for the name. A game over is never written.
+ */
+export function settleRun(run: BoardRow): BoardWrite {
+  if (!run.won || rankOf(readBoard(), run.score) === -1) return { kind: 'unranked' };
+  if (run.name === 'NULL') return { kind: 'unnamed' };
+  const kept = pinRow(run);
+  return kept ? { kind: 'kept', rank: kept.rank } : { kind: 'refused' };
 }
 
 /** Takes the board down: the key is removed. True when it is gone (or was never there). */
