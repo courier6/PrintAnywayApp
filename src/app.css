@@ -64,10 +64,6 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
 .app {
   --ink-75: color-mix(in oklab, var(--ink) 75%, white);
   --ink-70: color-mix(in oklab, var(--ink) 70%, white);
-  --ink-65: color-mix(in oklab, var(--ink) 65%, white);
-  --ink-60: color-mix(in oklab, var(--ink) 60%, white);
-  --ink-55: color-mix(in oklab, var(--ink) 55%, white);
-  --ink-50: color-mix(in oklab, var(--ink) 50%, white);
   --ink-40: color-mix(in oklab, var(--ink) 40%, white);
   --ink-38: color-mix(in oklab, var(--ink) 38%, white);
   --ink-35: color-mix(in oklab, var(--ink) 35%, white);

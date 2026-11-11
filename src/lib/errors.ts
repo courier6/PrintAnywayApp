@@ -1,6 +1,7 @@
 // Error codes surface subtly in the error card so a user report ("it said
 // PA-102") is enough for the owner to know what failed. Diagnostics stay in
-// the browser console — this app makes no network calls.
+// the browser console — this app makes no network calls. (Prntr's global
+// leaderboard, once built, will be the first: see CONTENT_SECURITY_POLICY in vite.config.ts.)
 export type ErrorCode =
   | 'PA-100' // unknown / unclassified
   | 'PA-101' // unsupported file type
@@ -8,7 +9,8 @@ export type ErrorCode =
   | 'PA-103' // damaged / unreadable PDF
   | 'PA-104' // HEIC decode failure
   | 'PA-105' // image decode failure
-  | 'PA-106'; // out of memory / canvas unavailable
+  | 'PA-106' // out of memory / canvas unavailable
+  | 'PA-107'; // browser too old for pdf.js
 
 export class UnsupportedFileError extends Error {
   constructor() {
@@ -39,12 +41,21 @@ export class EmptyPdfError extends Error {
   }
 }
 
+/** The browser lacks what pdf.js needs: no PDF will open in it, whatever the file. */
+export class BrowserTooOldError extends Error {
+  constructor(message = 'Browser too old for pdf.js') {
+    super(message);
+    this.name = 'BrowserTooOldError';
+  }
+}
+
 // pdf.js rejections are matched by name rather than instanceof so its
 // exception classes never need to be imported on the happy path.
 export function classifyError(err: unknown): ErrorCode {
   if (err instanceof UnsupportedFileError) return 'PA-101';
   if (err instanceof HeicDecodeError) return 'PA-104';
   if (err instanceof ImageDecodeError) return 'PA-105';
+  if (err instanceof BrowserTooOldError) return 'PA-107';
   // pdf.js's BaseException doesn't reliably extend Error, so match by name
   // on anything object-shaped.
   const name = (err as { name?: unknown } | null)?.name;

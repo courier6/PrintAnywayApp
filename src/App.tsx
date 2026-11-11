@@ -27,6 +27,7 @@ const KIND_BY_CODE: Record<ErrorCode, ErrorKind> = {
   'PA-104': 'heic',
   'PA-105': 'image',
   'PA-106': 'memory',
+  'PA-107': 'old-browser',
 };
 
 /** A notice over the preview: a print or download that failed (not one stopped by a new document), an
@@ -334,6 +335,10 @@ export default function App() {
       logAppError(code, err, lastFile.current);
       setErrorInfo({ code, kind: KIND_BY_CODE[code] });
       setAppState('error');
+    } finally {
+      // Every page is a canvas in the store now (or the file failed): the parsed file, which pdf.js's
+      // worker holds whole, has no further use. A newer document has released this one already.
+      if (token === runToken.current) releaseDocument();
     }
   }
 
@@ -350,6 +355,8 @@ export default function App() {
         logAppError(classifyError(err), err, lastFile.current);
         store.truncate(i);
         setPageCount(i);
+        // The pager reaches pages still on their way: one opened past the cut no longer exists.
+        setCurrentPage((p) => Math.min(p, i - 1));
         setNotice({ kind: 'partial', rendered: i, total: doc.pageCount });
         return;
       }
@@ -387,15 +394,22 @@ export default function App() {
       store.restore(original.pages);
       setPageCount(original.pages.length);
       setPagesVersion((v) => v + 1);
+    } finally {
+      if (token === runToken.current) releaseDocument();
     }
   }
 
-  // The print root's object URLs go with the pages they showed (a new document, a new ink).
-  function clearPrintImages() {
+  // The print root's object URLs go with the pages they showed: replaced by the next Print's, or
+  // cleared by a new document or a new ink. Each holds its page's PNG until revoked.
+  function replacePrintImages(next: { src: string; landscape: boolean }[]) {
     setPrintImages((pages) => {
       pages.forEach((p) => URL.revokeObjectURL(p.src));
-      return pages.length ? [] : pages;
+      return next.length || pages.length ? next : pages;
     });
+  }
+
+  function clearPrintImages() {
+    replacePrintImages([]);
   }
 
   // The pages already rendered stay in the store; only the parsed file goes.
@@ -593,7 +607,7 @@ export default function App() {
         urls.forEach((u) => URL.revokeObjectURL(u));
         return;
       }
-      flushSync(() => setPrintImages(urls.map((src, i) => ({ src, landscape: pages[i].canvas.width > pages[i].canvas.height }))));
+      flushSync(() => replacePrintImages(urls.map((src, i) => ({ src, landscape: pages[i].canvas.width > pages[i].canvas.height }))));
       // The dialog snapshots the page: every image must be decoded by then, or it prints blank.
       // A decode that never settles would otherwise hold both buttons until the next file.
       const images = Array.from(printRoot.current?.querySelectorAll('img') ?? []);

@@ -23,3 +23,6 @@ design_handoff_printanything-new/
 
 # Local DNS zone files for manual import
 dns/
+
+# TypeScript incremental-build cache
+*.tsbuildinfo
