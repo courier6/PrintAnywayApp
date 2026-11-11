@@ -262,12 +262,6 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
   background: linear-gradient(
     105deg,
     transparent 25%,
-    rgba(0, 0, 0, 0.08) 50%,
-    transparent 75%
-  );
-  background: linear-gradient(
-    105deg,
-    transparent 25%,
     color-mix(in srgb, var(--ink) 16%, transparent) 50%,
     transparent 75%
   );
@@ -513,7 +507,11 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
 .toolbar-file {
   justify-self: center;
   max-width: 100%;
+  min-width: 0;
   padding: 0 26px;
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
 }
 
 .toolbar-actions {
@@ -521,13 +519,6 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
   padding-right: 26px;
   display: flex;
   gap: 10px;
-}
-
-.toolbar-file {
-  display: flex;
-  align-items: baseline;
-  gap: 12px;
-  min-width: 0;
 }
 
 /* Quiet text button — same phrase as the error state's primary action:
@@ -563,6 +554,26 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
 
 .file-pages {
   flex: none;
+}
+
+/* ---------- Preview stage ---------- */
+
+.preview-grid {
+  flex: 1;
+  display: grid;
+  /* minmax(0, …): let the page shrink instead of widening the column. */
+  grid-template-columns: minmax(0, 1fr) 300px;
+}
+
+.preview-stage {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 30px;
+  background: var(--ink-5);
 }
 
 .pager {
@@ -619,26 +630,6 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
   font: 700 13px Helvetica, Arial, sans-serif;
   color: var(--ink);
   text-align: center;
-}
-
-/* ---------- Preview stage ---------- */
-
-.preview-grid {
-  flex: 1;
-  display: grid;
-  /* minmax(0, …): let the page shrink instead of widening the column. */
-  grid-template-columns: minmax(0, 1fr) 300px;
-}
-
-.preview-stage {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 14px;
-  padding: 30px;
-  background: var(--ink-5);
 }
 
 .compare-caption {
