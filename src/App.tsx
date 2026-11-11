@@ -11,8 +11,8 @@ import { reducedMotion } from './prntr/anim';
 import { ErrorState, type ErrorKind } from './components/ErrorState';
 import { t, tPlural, useLocale } from './i18n';
 import { GOLD_INK, INKS } from './lib/inks';
-import { fileKind, loadDocument, prefetchPdfjs, type SourceDocument } from './lib/loadDocument';
-import { classifyError, logAppError, UnsupportedFileError, type ErrorCode } from './lib/errors';
+import { detectKind, loadDocument, prefetchPdfjs, unsupportedError, type SourceDocument } from './lib/loadDocument';
+import { classifyError, logAppError, type ErrorCode } from './lib/errors';
 import { DocumentReplacedError, PageStore, type PageSnapshot } from './lib/pageStore';
 import { exportFormat, exportRecolored, type ExportFormat, type ExportPage } from './lib/exportFile';
 import { canvasBlob } from './lib/canvasBlob';
@@ -28,6 +28,7 @@ const KIND_BY_CODE: Record<ErrorCode, ErrorKind> = {
   'PA-105': 'image',
   'PA-106': 'memory',
   'PA-107': 'old-browser',
+  'PA-108': 'office',
 };
 
 /** A notice over the preview: a print or download that failed (not one stopped by a new document), an
@@ -129,6 +130,9 @@ export default function App() {
   const store = storeRef.current;
   const inkRef = useRef(INKS[0].hex);
   const runToken = useRef(0);
+  const pickToken = useRef(0);
+  const appStateRef = useRef(appState);
+  appStateRef.current = appState;
   const lastFile = useRef<File | null>(null);
   const docRef = useRef<SourceDocument | null>(null);
   const idleHandle = useRef<number | null>(null);
@@ -305,11 +309,16 @@ export default function App() {
   }
 
   async function handleFile(file: File) {
-    const kind = fileKind(file);
-    if (kind === null && appState === 'preview') {
+    // The kind is read from the file's first bytes, which takes a moment: a file picked meanwhile wins.
+    const pick = ++pickToken.current;
+    const kind = await detectKind(file);
+    if (pick !== pickToken.current) return;
+    if (kind === null && appStateRef.current === 'preview') {
       // A document is open: an unsupported file is a notice over it, not the end of it.
-      logAppError('PA-101', new UnsupportedFileError(), file);
-      setNotice({ kind: 'error', code: 'PA-101', errorKind: KIND_BY_CODE['PA-101'] });
+      const err = unsupportedError(file);
+      const code = classifyError(err);
+      logAppError(code, err, file);
+      setNotice({ kind: 'error', code, errorKind: KIND_BY_CODE[code] });
       return;
     }
     lastFile.current = file;
@@ -318,7 +327,7 @@ export default function App() {
     setProcessedCount(0);
     setAppState('processing');
     try {
-      const doc = await loadDocument(file);
+      const doc = await loadDocument(file, kind);
       if (token !== runToken.current) {
         doc.destroy();
         return;
@@ -381,7 +390,7 @@ export default function App() {
   async function resumeDocument(original: OriginalDocument, token: number) {
     if (!original.file) return;
     try {
-      const doc = await loadDocument(original.file);
+      const doc = await loadDocument(original.file, await detectKind(original.file));
       if (token !== runToken.current) {
         doc.destroy();
         return;

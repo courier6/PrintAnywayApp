@@ -11,6 +11,7 @@ export type ErrorKind =
   | 'image'
   | 'memory'
   | 'old-browser'
+  | 'office'
   | 'processing';
 
 interface Props {
@@ -31,6 +32,7 @@ const RETRY: Record<ErrorKind, boolean> = {
   image: true,
   memory: true,
   'old-browser': false,
+  office: false,
   processing: true,
 };
 

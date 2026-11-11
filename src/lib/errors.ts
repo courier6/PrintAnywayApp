@@ -10,12 +10,21 @@ export type ErrorCode =
   | 'PA-104' // HEIC decode failure
   | 'PA-105' // image decode failure
   | 'PA-106' // out of memory / canvas unavailable
-  | 'PA-107'; // browser too old for pdf.js
+  | 'PA-107' // browser too old for pdf.js
+  | 'PA-108'; // an office or text document: it has to be saved as a PDF first
 
 export class UnsupportedFileError extends Error {
   constructor() {
     super('Unsupported file type');
     this.name = 'UnsupportedFileError';
+  }
+}
+
+/** A Word, Excel, PowerPoint, OpenDocument, iWork or text file: not opened here, but one "Save as PDF" away. */
+export class OfficeFileError extends Error {
+  constructor() {
+    super('Office or text document');
+    this.name = 'OfficeFileError';
   }
 }
 
@@ -53,6 +62,7 @@ export class BrowserTooOldError extends Error {
 // exception classes never need to be imported on the happy path.
 export function classifyError(err: unknown): ErrorCode {
   if (err instanceof UnsupportedFileError) return 'PA-101';
+  if (err instanceof OfficeFileError) return 'PA-108';
   if (err instanceof HeicDecodeError) return 'PA-104';
   if (err instanceof ImageDecodeError) return 'PA-105';
   if (err instanceof BrowserTooOldError) return 'PA-107';
