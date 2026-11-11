@@ -390,12 +390,17 @@ export default function App() {
     }
   }
 
-  // The print root's object URLs go with the pages they showed (a new document, a new ink).
-  function clearPrintImages() {
+  // The print root's object URLs go with the pages they showed: replaced by the next Print's, or
+  // cleared by a new document or a new ink. Each holds its page's PNG until revoked.
+  function replacePrintImages(next: { src: string; landscape: boolean }[]) {
     setPrintImages((pages) => {
       pages.forEach((p) => URL.revokeObjectURL(p.src));
-      return pages.length ? [] : pages;
+      return next.length || pages.length ? next : pages;
     });
+  }
+
+  function clearPrintImages() {
+    replacePrintImages([]);
   }
 
   // The pages already rendered stay in the store; only the parsed file goes.
@@ -593,7 +598,7 @@ export default function App() {
         urls.forEach((u) => URL.revokeObjectURL(u));
         return;
       }
-      flushSync(() => setPrintImages(urls.map((src, i) => ({ src, landscape: pages[i].canvas.width > pages[i].canvas.height }))));
+      flushSync(() => replacePrintImages(urls.map((src, i) => ({ src, landscape: pages[i].canvas.width > pages[i].canvas.height }))));
       // The dialog snapshots the page: every image must be decoded by then, or it prints blank.
       // A decode that never settles would otherwise hold both buttons until the next file.
       const images = Array.from(printRoot.current?.querySelectorAll('img') ?? []);
