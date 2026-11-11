@@ -110,12 +110,7 @@ export default function App() {
     },
     onEnter: () => setHolding(false),
     onCertificate: loadCertificate,
-    onError: (err) => {
-      const code = classifyError(err);
-      logAppError(code, err, null);
-      setErrorCode(code);
-      setAppState('error');
-    },
+    onError: (err) => failTo(err, null),
   });
   // Prntr has the screen: a file dragged over it is not taken (it would end the game
   // and replace the document unseen). Nor while the app's UI is still dropping back in
@@ -290,15 +285,21 @@ export default function App() {
       if (token !== runToken.current) return;
       // A print or download waiting on the pages that will never come gives up.
       store.reset(0);
-      const code = classifyError(err);
-      logAppError(code, err, lastFile.current);
-      setErrorCode(code);
-      setAppState('error');
+      failTo(err, lastFile.current);
     } finally {
       // Every page is a canvas in the store now (or the file failed): the parsed file, which pdf.js's
       // worker holds whole, has no further use. A newer document has released this one already.
       if (token === runToken.current) releaseDocument();
     }
+  }
+
+  // The document could not be opened (or the certificate could not replace it): the error card, with the
+  // code that says why, and the details in the console.
+  function failTo(err: unknown, file: File | null) {
+    const code = classifyError(err);
+    logAppError(code, err, file);
+    setErrorCode(code);
+    setAppState('error');
   }
 
   // Pages `from` to the end, in order, into the store; the first one shows the preview. Stops when a newer document starts.
