@@ -1126,6 +1126,37 @@ html[lang='ja'] :is(.hero-headline, .hero-subline) {
   }
 }
 
+/* Windows High Contrast and other forced palettes paint every background in the system's colours and
+   drop box shadows: the swatches would be five empty circles. They keep their own colours (and their
+   inline selected ring), the selected one gets a thick edge in the system's highlight, and what was
+   told apart by a background alone (the progress bar, the primary button, the brand square) gets an edge. */
+@media (forced-colors: active) {
+  .swatch {
+    forced-color-adjust: none;
+    border: 1px solid CanvasText;
+  }
+
+  .swatch[aria-pressed='true'] {
+    border: 3px solid Highlight;
+  }
+
+  .progress-track {
+    border: 1px solid CanvasText;
+  }
+
+  .progress-fill {
+    background: Highlight;
+  }
+
+  .btn-primary {
+    border: 1px solid ButtonText;
+  }
+
+  .brand-square {
+    background: CanvasText;
+  }
+}
+
 @media (max-width: 900px) {
   .tagline,
   .header-formats {
