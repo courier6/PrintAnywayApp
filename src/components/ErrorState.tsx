@@ -1,21 +1,9 @@
 import { useEffect, useRef } from 'react';
 import { t } from '../i18n';
 import { DropZone } from './DropZone';
-import type { ErrorCode } from '../lib/errors';
-
-export type ErrorKind =
-  | 'unsupported'
-  | 'password'
-  | 'damaged-pdf'
-  | 'heic'
-  | 'image'
-  | 'memory'
-  | 'old-browser'
-  | 'office'
-  | 'processing';
+import { kindOf, type ErrorCode, type ErrorKind } from '../lib/errors';
 
 interface Props {
-  kind: ErrorKind;
   code: ErrorCode;
   onFile: (file: File) => void;
   onChoose: () => void;
@@ -36,14 +24,15 @@ const RETRY: Record<ErrorKind, boolean> = {
   processing: true,
 };
 
-export function ErrorState({ kind, code, onFile, onChoose, onRetry }: Props) {
+export function ErrorState({ code, onFile, onChoose, onRetry }: Props) {
+  const kind = kindOf(code);
   const retry = RETRY[kind];
   // The control that had focus (the picker's button, the preview) is gone: bring
   // keyboard users to the card's first action. role="alert" reads the card out.
   const firstAction = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     firstAction.current?.focus({ preventScroll: true });
-  }, [kind, code]);
+  }, [code]);
   return (
     <div className="state-pad">
       <DropZone onFile={onFile} onChoose={onChoose}>

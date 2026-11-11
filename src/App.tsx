@@ -8,7 +8,7 @@ import { PrntrHost, prefetchPrntr } from './components/PrntrHost';
 import type { Certificate } from './prntr/types';
 import { usePrntrSession } from './usePrntrSession';
 import { useDevHooks } from './devHooks';
-import { ErrorState, type ErrorKind } from './components/ErrorState';
+import { ErrorState } from './components/ErrorState';
 import { t, tPlural, useLocale } from './i18n';
 import { GOLD_INK, INKS } from './lib/inks';
 import { detectKind, loadDocument, prefetchPdfjs, unsupportedError, type SourceDocument } from './lib/loadDocument';
@@ -19,22 +19,10 @@ import { canvasBlob } from './lib/canvasBlob';
 
 export type AppState = 'empty' | 'processing' | 'preview' | 'error' | 'prntr';
 
-const KIND_BY_CODE: Record<ErrorCode, ErrorKind> = {
-  'PA-100': 'processing',
-  'PA-101': 'unsupported',
-  'PA-102': 'password',
-  'PA-103': 'damaged-pdf',
-  'PA-104': 'heic',
-  'PA-105': 'image',
-  'PA-106': 'memory',
-  'PA-107': 'old-browser',
-  'PA-108': 'office',
-};
-
 /** A notice over the preview: a print or download that failed (not one stopped by a new document), an
  * unsupported file dropped on the document, or a document cut short by a page that would not render. */
 export type Notice =
-  | { kind: 'error'; code: ErrorCode; errorKind: ErrorKind }
+  | { kind: 'error'; code: ErrorCode }
   | { kind: 'partial'; rendered: number; total: number };
 
 /** The document the certificate replaced, as the vortex brings it back (PRNTR-VORTEX.md). */
@@ -73,10 +61,7 @@ export default function App() {
   // Re-render everything when the language picker switches locale.
   useLocale();
   const [appState, setAppState] = useState<AppState>('empty');
-  const [errorInfo, setErrorInfo] = useState<{ code: ErrorCode; kind: ErrorKind }>({
-    code: 'PA-100',
-    kind: 'processing',
-  });
+  const [errorCode, setErrorCode] = useState<ErrorCode>('PA-100');
   const [inkIndex, setInkIndex] = useState(0);
   // Gold, the secret ink, is on offer once Prntr's room has been won, until the page is reloaded.
   const [goldUnlocked, setGoldUnlocked] = useState(false);
@@ -128,7 +113,7 @@ export default function App() {
     onError: (err) => {
       const code = classifyError(err);
       logAppError(code, err, null);
-      setErrorInfo({ code, kind: KIND_BY_CODE[code] });
+      setErrorCode(code);
       setAppState('error');
     },
   });
@@ -283,7 +268,7 @@ export default function App() {
       const err = unsupportedError(file);
       const code = classifyError(err);
       logAppError(code, err, file);
-      setNotice({ kind: 'error', code, errorKind: KIND_BY_CODE[code] });
+      setNotice({ kind: 'error', code });
       return;
     }
     lastFile.current = file;
@@ -307,7 +292,7 @@ export default function App() {
       store.reset(0);
       const code = classifyError(err);
       logAppError(code, err, lastFile.current);
-      setErrorInfo({ code, kind: KIND_BY_CODE[code] });
+      setErrorCode(code);
       setAppState('error');
     } finally {
       // Every page is a canvas in the store now (or the file failed): the parsed file, which pdf.js's
@@ -542,7 +527,7 @@ export default function App() {
   function reportExportError(err: unknown) {
     const code = classifyError(err);
     logAppError(code, err, lastFile.current);
-    setNotice({ kind: 'error', code, errorKind: KIND_BY_CODE[code] });
+    setNotice({ kind: 'error', code });
   }
 
   function handleRetry() {
@@ -608,8 +593,7 @@ export default function App() {
         )}
         {appState === 'error' && (
           <ErrorState
-            kind={errorInfo.kind}
-            code={errorInfo.code}
+            code={errorCode}
             onFile={(f) => void handleFile(f)}
             onChoose={openPicker}
             onRetry={handleRetry}
