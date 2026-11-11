@@ -11,10 +11,10 @@ import { useDevHooks } from './devHooks';
 import { ErrorState } from './components/ErrorState';
 import { t, tPlural, useLocale } from './i18n';
 import { GOLD_INK, INKS } from './lib/inks';
-import { detectKind, loadDocument, prefetchPdfjs, unsupportedError, type SourceDocument } from './lib/loadDocument';
+import { ACCEPT, detectKind, exportFormat, loadDocument, prefetchPdfjs, unsupportedError, type SourceDocument } from './lib/loadDocument';
 import { classifyError, logAppError, type ErrorCode } from './lib/errors';
 import { DocumentReplacedError, PageStore, type PageSnapshot } from './lib/pageStore';
-import { exportFormat, exportRecolored, type ExportFormat, type ExportPage } from './lib/exportFile';
+import { exportRecolored, type ExportFormat, type ExportPage } from './lib/exportFile';
 import { canvasBlob } from './lib/canvasBlob';
 
 export type AppState = 'empty' | 'processing' | 'preview' | 'error' | 'prntr';
@@ -636,7 +636,7 @@ export default function App() {
       <input
         ref={fileInput}
         type="file"
-        accept=".pdf,.png,.jpg,.jpeg,.heic,.heif,application/pdf,image/png,image/jpeg,image/heic,image/heif"
+        accept={ACCEPT}
         style={{ display: 'none' }}
         onChange={onInputChange}
       />
