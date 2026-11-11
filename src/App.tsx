@@ -7,6 +7,7 @@ import { PreviewState } from './components/PreviewState';
 import { PrntrHost, prefetchPrntr } from './components/PrntrHost';
 import type { Certificate } from './prntr/types';
 import { usePrntrSession } from './usePrntrSession';
+import { useDevHooks } from './devHooks';
 import { ErrorState, type ErrorKind } from './components/ErrorState';
 import { t, tPlural, useLocale } from './i18n';
 import { GOLD_INK, INKS } from './lib/inks';
@@ -67,22 +68,6 @@ const cancelIdle: (handle: number) => void =
 // Dev only: the side panel with jumps and fight controls. A constant-false branch in builds, so the
 // import() is dropped and no chunk is made.
 const DevPanel = import.meta.env.DEV ? lazy(() => import('./components/DevPanel')) : null;
-
-// Dev only (see the ?prntr entrance below): a letter-size page of "text" lines, black for the
-// source, the ink for the recolored copy.
-function devStandIn(ink: string): HTMLCanvasElement {
-  const canvas = document.createElement('canvas');
-  canvas.width = 612;
-  canvas.height = 792;
-  const g = canvas.getContext('2d');
-  if (!g) return canvas;
-  g.fillStyle = '#ffffff';
-  g.fillRect(0, 0, 612, 792);
-  g.fillStyle = ink;
-  g.fillRect(72, 80, 300, 28);
-  for (let y = 140; y < 700; y += 24) g.fillRect(72, y, 300 + ((y * 7) % 170), 10);
-  return canvas;
-}
 
 export default function App() {
   // Re-render everything when the language picker switches locale.
@@ -232,54 +217,27 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKey);
   }, [appState]);
 
-  // Dev-only entrance: ?prntr=N opens Prntr at stage N as soon as the app loads,
-  // with a stand-in page so nothing has to be uploaded first.
-  // import.meta.env.DEV is a build-time constant, so builds drop this whole block;
-  // vite.config.ts fails the build if its marker string survives.
-  const devSkipUsed = useRef(false);
-  useEffect(() => {
-    if (import.meta.env.DEV) {
-      if (appState !== 'empty' || devSkipUsed.current) return;
-      const raw = new URLSearchParams(location.search).get('prntr');
-      if (raw === null) return;
-      const n = Number(raw);
-      if (!Number.isInteger(n) || n < 0) return;
-      devSkipUsed.current = true;
-      console.info('prntr-dev-skip', n);
-      prntr.enter(n, { source: devStandIn('#000000'), recolored: devStandIn(inkRef.current) });
-    }
-  }, [appState]);
-
-  // Dev only: the dev panel's hooks (src/components/DevPanel.tsx). loadStandIn makes the stand-in a
-  // real one-page document, so a won room has an original for the vortex to bring back; enter needs
-  // that document (appState 'preview'). Bound again every render so they never see stale state.
-  useEffect(() => {
-    if (import.meta.env.DEV) {
-      (window as unknown as { __prntrApp?: unknown }).__prntrApp = {
-        appState: () => appState,
-        loadStandIn: () => {
-          lastFile.current = null;
-          startDocument('stand-in.pdf', 'pdf');
-          store.reset(1);
-          store.setSource(0, devStandIn('#000000'), { width: 612, height: 792 });
-          store.ensureRecolored(0, inkRef.current);
-          setPageCount(1);
-          setProcessedCount(1);
-          setPagesVersion((v) => v + 1);
-          setAppState('preview');
-        },
-        enter: (stage: number) => prntr.enter(stage),
-      };
-    }
-  });
-  useEffect(() => {
-    if (import.meta.env.DEV) {
-      console.info('prntr-dev-app');
-      return () => {
-        delete (window as unknown as { __prntrApp?: unknown }).__prntrApp;
-      };
-    }
-  }, []);
+  // Dev only: the ?prntr=N entrance and the dev panel's hooks (src/devHooks.ts). import.meta.env.DEV is a
+  // build-time constant, so the hook is called on every render or on none, and a build drops the call,
+  // this block and the module; vite.config.ts fails the build if its marker strings survive.
+  if (import.meta.env.DEV) {
+    useDevHooks({
+      appState,
+      inkHex: () => inkRef.current,
+      enterPrntr: prntr.enter,
+      loadStandIn: (page) => {
+        lastFile.current = null;
+        startDocument('stand-in.pdf', 'pdf');
+        store.reset(1);
+        store.setSource(0, page, { width: 612, height: 792 });
+        store.ensureRecolored(0, inkRef.current);
+        setPageCount(1);
+        setProcessedCount(1);
+        setPagesVersion((v) => v + 1);
+        setAppState('preview');
+      },
+    });
+  }
 
   function openPicker() {
     prefetchPdfjs();
