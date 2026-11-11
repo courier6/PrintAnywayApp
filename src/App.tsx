@@ -208,12 +208,7 @@ export default function App() {
       loadStandIn: (page) => {
         lastFile.current = null;
         startDocument('stand-in.pdf', 'pdf');
-        store.reset(1);
-        store.setSource(0, page, { width: 612, height: 792 });
-        store.ensureRecolored(0, inkRef.current);
-        setPageCount(1);
-        setProcessedCount(1);
-        setPagesVersion((v) => v + 1);
+        showSinglePage(page);
         setAppState('preview');
       },
     });
@@ -413,6 +408,16 @@ export default function App() {
     if (clamped !== currentPage) setStatus(t('preview.pageOf', { page: clamped + 1, total: pageCount }));
   }
 
+  // A document that is one ready-made page (the certificate, the dev stand-in): US Letter, in the chosen ink.
+  function showSinglePage(page: HTMLCanvasElement) {
+    store.reset(1);
+    store.setSource(0, page, { width: 612, height: 792 });
+    store.ensureRecolored(0, inkRef.current);
+    setPageCount(1);
+    setProcessedCount(1);
+    setPagesVersion((v) => v + 1);
+  }
+
   // The certificate becomes the loaded document: one page, a PDF to download, recoloured
   // in the chosen ink like any other. A document still processing is dropped (only its
   // rendered pages are kept for the vortex); one entered from nothing (the dev entrance) has
@@ -430,12 +435,7 @@ export default function App() {
     setGoldUnlocked(true);
     setInkIndex(INKS.length);
     inkRef.current = GOLD_INK.hex;
-    store.reset(1);
-    store.setSource(0, page, { width: 612, height: 792 }); // US Letter
-    store.ensureRecolored(0, inkRef.current);
-    setPageCount(1);
-    setProcessedCount(1);
-    setPagesVersion((v) => v + 1);
+    showSinglePage(page);
     setVortexOriginal(original);
   }
 
