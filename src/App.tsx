@@ -27,6 +27,7 @@ const KIND_BY_CODE: Record<ErrorCode, ErrorKind> = {
   'PA-104': 'heic',
   'PA-105': 'image',
   'PA-106': 'memory',
+  'PA-107': 'old-browser',
 };
 
 /** A notice over the preview: a print or download that failed (not one stopped by a new document), an

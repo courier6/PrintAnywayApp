@@ -1,4 +1,4 @@
-import { EmptyPdfError, HeicDecodeError, ImageDecodeError, UnsupportedFileError } from './errors';
+import { BrowserTooOldError, EmptyPdfError, HeicDecodeError, ImageDecodeError, UnsupportedFileError } from './errors';
 
 // pdf.js's modern build calls built-ins only the newest browsers have
 // (Map#getOrInsertComputed, Math.sumPrecise, Uint8Array#toHex, …) without
@@ -20,14 +20,35 @@ function needsLegacyPdfjs(): boolean {
   );
 }
 
+// What the legacy build itself calls without a polyfill (pdf.js 6 states Chrome 125,
+// Firefox ESR and Safari 18 as its minimum). A browser without these opens no PDF.
+function canRunPdfjs(): boolean {
+  return (
+    'withResolvers' in Promise &&
+    typeof AbortSignal !== 'undefined' &&
+    'any' in AbortSignal &&
+    'transferToFixedLength' in ArrayBuffer.prototype &&
+    'toSpliced' in Array.prototype
+  );
+}
+
 // pdfjs is loaded on demand so the landing screen doesn't pay for it.
 async function getPdfjs() {
-  const [pdfjsLib, worker] = needsLegacyPdfjs()
-    ? await Promise.all([
-        import('pdfjs-dist/legacy/build/pdf.mjs'),
-        import('pdfjs-dist/legacy/build/pdf.worker.min.mjs?url'),
-      ])
-    : await Promise.all([import('pdfjs-dist'), import('pdfjs-dist/build/pdf.worker.min.mjs?url')]);
+  if (!canRunPdfjs()) throw new BrowserTooOldError();
+  let loaded;
+  try {
+    loaded = needsLegacyPdfjs()
+      ? await Promise.all([
+          import('pdfjs-dist/legacy/build/pdf.mjs'),
+          import('pdfjs-dist/legacy/build/pdf.worker.min.mjs?url'),
+        ])
+      : await Promise.all([import('pdfjs-dist'), import('pdfjs-dist/build/pdf.worker.min.mjs?url')]);
+  } catch (err) {
+    // A chunk the browser cannot parse is its age too; one it could not fetch is a TypeError.
+    if (err instanceof SyntaxError) throw new BrowserTooOldError(err.message);
+    throw err;
+  }
+  const [pdfjsLib, worker] = loaded;
   pdfjsLib.GlobalWorkerOptions.workerSrc = worker.default;
   return pdfjsLib;
 }
