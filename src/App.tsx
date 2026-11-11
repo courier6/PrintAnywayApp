@@ -334,6 +334,10 @@ export default function App() {
       logAppError(code, err, lastFile.current);
       setErrorInfo({ code, kind: KIND_BY_CODE[code] });
       setAppState('error');
+    } finally {
+      // Every page is a canvas in the store now (or the file failed): the parsed file, which pdf.js's
+      // worker holds whole, has no further use. A newer document has released this one already.
+      if (token === runToken.current) releaseDocument();
     }
   }
 
@@ -389,6 +393,8 @@ export default function App() {
       store.restore(original.pages);
       setPageCount(original.pages.length);
       setPagesVersion((v) => v + 1);
+    } finally {
+      if (token === runToken.current) releaseDocument();
     }
   }
 
