@@ -373,12 +373,18 @@ export default function App() {
     docRef.current = null;
   }
 
-  function selectInk(index: number) {
+  // The chosen ink is a state (what the UI shows) and a ref (what the page loops read between renders):
+  // the only place either is written, so they cannot drift apart.
+  function chooseInk(index: number, hex: string) {
     setInkIndex(index);
+    inkRef.current = hex;
+  }
+
+  function selectInk(index: number) {
+    const hex = inks[index].hex;
+    chooseInk(index, hex);
     // The print pages are in the old ink; the next Print makes them again.
     clearPrintImages();
-    const hex = inks[index].hex;
-    inkRef.current = hex;
     // Visible page synchronously; the rest catch up in idle time.
     store.ensureRecolored(currentPage, hex);
     setPagesVersion((v) => v + 1);
@@ -433,8 +439,7 @@ export default function App() {
     startDocument(`prntr-certificate-${id.slice(-9).replace('-', '')}.pdf`, 'pdf');
     // the certificate comes up in gold, the secret ink, which stays on offer from here on
     setGoldUnlocked(true);
-    setInkIndex(INKS.length);
-    inkRef.current = GOLD_INK.hex;
+    chooseInk(INKS.length, GOLD_INK.hex);
     showSinglePage(page);
     setVortexOriginal(original);
   }
