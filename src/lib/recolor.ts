@@ -39,7 +39,42 @@ function mix(from: number, to: number, t: number): number {
   return Math.round(from + (to - from) * t);
 }
 
+/** How much ink a luminance (0–1) gets: none from WHITE_CLAMP up, all of it from BLACK_CLAMP down, the contrast curve between. */
+function strength(lum: number): number {
+  if (lum >= WHITE_CLAMP) return 0;
+  if (lum <= BLACK_CLAMP) return 1;
+  return Math.pow((WHITE_CLAMP - lum) / (WHITE_CLAMP - BLACK_CLAMP), CONTRAST);
+}
+
+/** A colour of a ramp and the ink strength (0–1) it sits at; a ramp runs from strength 0 to 1. */
+type Stop = readonly [at: number, hex: string];
+
 const lutCache = new Map<string, Uint8Array>();
+
+/** 256-entry luminance→RGB lookup table for a ramp: each luminance's strength, placed between the two stops around it. */
+function rampLut(stops: readonly Stop[]): Uint8Array {
+  const key = stops.map(([at, hex]) => `${at}${hex}`).join();
+  const cached = lutCache.get(key);
+  if (cached) return cached;
+  const colours = stops.map(([, hex]) => hexToRgb(hex));
+  const lut = new Uint8Array(256 * 3);
+  for (let v = 0; v < 256; v++) {
+    const t = strength(v / 255);
+    let seg = 0;
+    while (seg < stops.length - 2 && t > stops[seg + 1][0]) seg++;
+    const k = (t - stops[seg][0]) / (stops[seg + 1][0] - stops[seg][0]);
+    lut[v * 3] = mix(colours[seg].r, colours[seg + 1].r, k);
+    lut[v * 3 + 1] = mix(colours[seg].g, colours[seg + 1].g, k);
+    lut[v * 3 + 2] = mix(colours[seg].b, colours[seg + 1].b, k);
+  }
+  lutCache.set(key, lut);
+  return lut;
+}
+
+/** One ink: paper white to the ink. */
+function inkLut(inkHex: string): Uint8Array {
+  return rampLut([[0, '#ffffff'], [1, inkHex]]);
+}
 
 /**
  * Gold (src/lib/inks.ts GOLD_INK) is not one colour: its ramp runs paper → pale gold → gold →
@@ -53,25 +88,9 @@ const GOLD_RAMPS: [string, string, string][] = [
 ];
 const SHEEN_PERIOD = 420;
 
-function goldLut(ramp: [string, string, string]): Uint8Array {
-  const key = `gold:${ramp.join(',')}`;
-  const cached = lutCache.get(key);
-  if (cached) return cached;
-  const stops = [{ r: 255, g: 255, b: 255 }, ...ramp.map(hexToRgb)];
-  const lut = new Uint8Array(256 * 3);
-  for (let v = 0; v < 256; v++) {
-    const lum = v / 255;
-    let t = lum >= WHITE_CLAMP ? 0 : lum <= BLACK_CLAMP ? 1 : Math.pow((WHITE_CLAMP - lum) / (WHITE_CLAMP - BLACK_CLAMP), CONTRAST);
-    // t 0 → paper, 0.35 → pale, 0.7 → gold, 1 → deep
-    const seg = t <= 0.35 ? 0 : t <= 0.7 ? 1 : 2;
-    const k = seg === 0 ? t / 0.35 : seg === 1 ? (t - 0.35) / 0.35 : (t - 0.7) / 0.3;
-    t = k;
-    lut[v * 3] = mix(stops[seg].r, stops[seg + 1].r, t);
-    lut[v * 3 + 1] = mix(stops[seg].g, stops[seg + 1].g, t);
-    lut[v * 3 + 2] = mix(stops[seg].b, stops[seg + 1].b, t);
-  }
-  lutCache.set(key, lut);
-  return lut;
+/** A gold ramp: paper at strength 0, pale at 0.35, gold at 0.7, deep at 1. */
+function goldLut([pale, gold, deep]: [string, string, string]): Uint8Array {
+  return rampLut([[0, '#ffffff'], [0.35, pale], [0.7, gold], [1, deep]]);
 }
 
 const lut32Cache = new Map<string, Uint32Array>();
@@ -91,30 +110,6 @@ function inkLut32(inkHex: string): Uint32Array {
   }
   lut32Cache.set(inkHex, packed);
   return packed;
-}
-
-/** 256-entry luminance→RGB lookup table for one ink. */
-function inkLut(inkHex: string): Uint8Array {
-  const cached = lutCache.get(inkHex);
-  if (cached) return cached;
-  const ink = hexToRgb(inkHex);
-  const lut = new Uint8Array(256 * 3);
-  for (let v = 0; v < 256; v++) {
-    const lum = v / 255;
-    if (lum >= WHITE_CLAMP) {
-      lut[v * 3] = lut[v * 3 + 1] = lut[v * 3 + 2] = 255;
-    } else {
-      const t =
-        lum <= BLACK_CLAMP
-          ? 1
-          : Math.pow((WHITE_CLAMP - lum) / (WHITE_CLAMP - BLACK_CLAMP), CONTRAST);
-      lut[v * 3] = mix(255, ink.r, t);
-      lut[v * 3 + 1] = mix(255, ink.g, t);
-      lut[v * 3 + 2] = mix(255, ink.b, t);
-    }
-  }
-  lutCache.set(inkHex, lut);
-  return lut;
 }
 
 /**
