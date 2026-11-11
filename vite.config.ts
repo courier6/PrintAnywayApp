@@ -414,5 +414,8 @@ function prntrGuard(): Plugin {
 export default defineConfig({
   // Served from https://printanyway.app/
   base: '/',
+  // The browser floor is pdf.js's own minimum (its legacy build): Chrome 125, Firefox ESR, Safari 18.
+  // Raise these when a pdf.js upgrade raises its minimum.
+  build: { target: ['chrome125', 'edge125', 'firefox140', 'safari18'] },
   plugins: [i18nPlugin(), pdfjsData(), prntrGuard(), contentSecurityPolicy(), devScreenshots(), react()],
 });
