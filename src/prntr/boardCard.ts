@@ -141,7 +141,17 @@ export function buildBoardCard(): BoardCard {
   goSet.append(goBtn, clearBtn);
   sureSet.append(sureEl, yesBtn, cancelBtn);
   okSet.append(okBtn);
-  buttonsEl.append(goSet, sureSet, okSet);
+  // WORLD shows CONTINUE alone, so the first set's room (two lines of buttons on a phone) is kept by a copy of it
+  // that is never seen, pressed or read out
+  const roomSet = el('div', 'prntr-board-set is-off');
+  roomSet.setAttribute('aria-hidden', 'true');
+  for (const text of [goBtn.textContent, clearBtn.textContent]) {
+    const b = button('prntr-board-room', text ?? '');
+    b.disabled = true;
+    b.tabIndex = -1;
+    roomSet.append(b);
+  }
+  buttonsEl.append(goSet, sureSet, okSet, roomSet);
   listEl.append(rowsEl, emptyEl, outEl);
   localEl.append(listEl);
   bodyEl.append(localEl, worldEl, soonEl);
@@ -151,7 +161,8 @@ export function buildBoardCard(): BoardCard {
     for (const set of [goSet, sureSet, okSet]) set.classList.toggle('is-off', set !== on);
   };
   showSet(goSet);
-  // CLEAR THE BOARD keeps its place where there is nothing to clear (an empty board, WORLD): greyed, not gone
+  // CLEAR THE BOARD keeps its place on an empty local board, greyed; on WORLD it is not shown at all (prntr.css),
+  // and it stays disabled there
   let world = false;
   let filled = false;
   let worldRows = false;
