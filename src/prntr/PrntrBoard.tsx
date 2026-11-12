@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { reducedMotion } from './anim';
 import { cleanName, clearBoard, pinRow, rankOf, readBoard, today, type BoardRow, type BoardWrite } from './board';
-import { NOTE_NOT_CLEARED, NOTE_REFUSED, buildBoardCard, outLine, type BoardView } from './boardCard';
+import { NOTE_NOT_CLEARED, NOTE_REFUSED, WORLD_NAME_REFUSED, WORLD_NOT_SENT, buildBoardCard, outLine, worldLine, type BoardView, type WorldView } from './boardCard';
 import { BOARD_FRAME_BAND, frameShades, paintBoardFrame } from './boardFrame';
+import { beatsWorld, readWorld, sendRun, type WorldRow } from './worldBoard';
 
 /** A finished run as the app side gets it: won or lost, its score, the badge's name (NULL when none was given), and
  * what became of it on the board when the room ended (`board`, from settleRun). */
@@ -32,8 +33,12 @@ interface Props {
  * gold swatch stay in sight around it. A ranking run the room has not written (the badge left
  * it NULL) asks for the name first (§15.3): OK or Enter writes it, with NULL for an empty field. CONTINUE, a press
  * outside the card or Esc closes it (unanswered, the name's run is not written); CLEAR THE BOARD asks YOU SURE?, YES
- * clears and closes, CANCEL is the board again. The switch under the title (§18) changes the view to WORLD TOP 10,
- * which is COMING SOON, and back. Silent: the run's audio has gone with Prntr.
+ * clears and closes, CANCEL is the board again. The switch under the title (§18) changes the view to WORLD TOP 10 and
+ * back. Silent: the run's audio has gone with Prntr.
+ *
+ * The world's ten (PRNTR-WORLD-BOARD.md §4) are read once per board: for a cleared run as soon as it has its name, for
+ * any other board when WORLD is first pressed. A cleared run that would be on them is sent, once, with the name the
+ * local board shows; a run whose name was asked and never given is not sent. A send that fails is not tried again.
  */
 export function PrntrBoard({ run, inkHex, onClose }: Props) {
   const dimRef = useRef<HTMLDivElement>(null);
@@ -43,6 +48,10 @@ export function PrntrBoard({ run, inkHex, onClose }: Props) {
   // what the board shows, kept so CANCEL can show it again: the first paint, then the board once the name is in
   const shownRef = useRef<Paint | null>(null);
   if (shownRef.current === null) shownRef.current = firstPaint(run);
+  // the world's side of this run, kept outside the effect so a rebuilt card neither asks nor sends twice
+  const worldRef = useRef<World | null>(null);
+  if (worldRef.current === null || worldRef.current.run !== run) worldRef.current = { run, view: { kind: 'wait' }, read: null, settled: false };
+  const paintWorldRef = useRef<(say: string) => void>(() => {});
 
   useEffect(() => {
     const dim = dimRef.current;
@@ -70,6 +79,40 @@ export function PrntrBoard({ run, inkHex, onClose }: Props) {
       c.goBtn.focus();
       setLive(say);
     };
+    // ---- the world's ten ----
+    const world = worldRef.current!;
+    const setWorld = (view: WorldView, say = '') => {
+      world.view = view;
+      paintWorldRef.current(say);
+    };
+    paintWorldRef.current = (say) => {
+      c.showWorld(world.view);
+      if (say) setLive(say);
+    };
+    c.showWorld(world.view);
+    /** Asks the server for the ten, once. */
+    const readOnce = () =>
+      (world.read ??= readWorld().then((rows) => {
+        setWorld(rows ? { kind: 'rows', rows, rank: -1, out: '', own: false } : { kind: 'down' });
+        return rows;
+      }));
+    /** A cleared run, once it has the name the local board shows: sent when it would be on the ten, once. */
+    const settleWorld = (name: string) => {
+      if (world.settled) return;
+      world.settled = true;
+      void readOnce().then(async (rows) => {
+        if (rows === null) return;
+        const off = (shown: WorldRow[], out: string, say = '') => setWorld({ kind: 'rows', rows: shown, rank: -1, out, own: false }, say);
+        const notOn = outLine({ name, score: run.score }, 'NOT ON IT.');
+        if (!beatsWorld(rows, run.score)) return off(rows, notOn);
+        const sent = await sendRun(name, run.score);
+        if (sent === null) off(rows, WORLD_NOT_SENT, 'The world board gave no answer. The run was not sent.');
+        else if (sent.kind === 'name') off(rows, WORLD_NAME_REFUSED, 'The world board does not take that name. The run stays local.');
+        else if (sent.kind === 'off') off(sent.rows, notOn);
+        else setWorld({ kind: 'rows', rows: sent.rows, rank: sent.rank, out: worldLine(sent.rank), own: true }, `Number ${sent.rank + 1} in the world.`);
+      });
+    };
+
     const first = shownRef.current!;
     if (first.ask) {
       c.showOut('', '');
@@ -78,6 +121,8 @@ export function PrntrBoard({ run, inkHex, onClose }: Props) {
       setLive(first.say);
     } else {
       show(first);
+      // named by the badge, or NULL and not on the local board (so its name is not asked)
+      if (run.won) settleWorld(run.player);
     }
 
     // the name: written once, with the rank it gets; then the board as after any write
@@ -90,6 +135,7 @@ export function PrntrBoard({ run, inkHex, onClose }: Props) {
         ? { rows: kept.rows, rank: kept.rank, out: '', note: '', say: `${row.name}, ${row.score}${how}, number ${kept.rank + 1}.`, ask: false }
         : { rows: readBoard(), rank: -1, out: outLine(row, 'NOT KEPT.'), note: NOTE_REFUSED, say: `${row.name}, ${row.score}${how}. ${NOTE_REFUSED}`, ask: false };
       show(shownRef.current);
+      if (run.won) settleWorld(row.name);
     };
     c.okBtn.addEventListener('click', answer, { signal });
     c.nameInput.addEventListener(
@@ -106,7 +152,8 @@ export function PrntrBoard({ run, inkHex, onClose }: Props) {
     // the switch (§18): the view changes in place; the run's row, a note and the clear stay with LOCAL
     const view = (v: BoardView) => {
       c.showView(v);
-      setLive(v === 'world' ? 'World top 10. Coming soon.' : 'Local leaderboard.');
+      if (v === 'world') void readOnce();
+      setLive(v === 'world' ? sayWorld(world.view) : 'Local leaderboard.');
     };
     c.localTab.addEventListener('click', () => view('local'), { signal });
     c.worldTab.addEventListener('click', () => view('world'), { signal });
@@ -153,6 +200,7 @@ export function PrntrBoard({ run, inkHex, onClose }: Props) {
     const ro = new ResizeObserver(draw);
     ro.observe(card);
     return () => {
+      paintWorldRef.current = () => {};
       controller.abort();
       ro.disconnect();
       card.remove();
@@ -175,6 +223,23 @@ export function PrntrBoard({ run, inkHex, onClose }: Props) {
       </span>
     </div>
   );
+}
+
+/** The world's side of one finished run: what the WORLD view shows, the one read of the ten, and whether the run has
+ * been settled (sent, or found not to be on them). */
+interface World {
+  run: BoardRun;
+  view: WorldView;
+  read: Promise<WorldRow[] | null> | null;
+  settled: boolean;
+}
+
+/** The WORLD view, said. */
+function sayWorld(w: WorldView): string {
+  if (w.kind === 'wait') return 'World top 10. Calling.';
+  if (w.kind === 'down') return 'World top 10. No answer.';
+  const rows = w.rows.length === 0 ? 'Nobody yet.' : `${w.rows.length} ${w.rows.length === 1 ? 'row' : 'rows'}.`;
+  return `World top 10. ${rows}${w.out === '' ? '' : ` ${w.out.trim()}`}`;
 }
 
 interface Paint {

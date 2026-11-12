@@ -357,8 +357,9 @@ function devScreenshots(): Plugin {
  * from this site only, so nothing a dependency or a hostile file does can send a document elsewhere in the
  * background. A <meta> tag because GitHub Pages sets no headers.
  *
- * Prntr's global leaderboard (PRNTR-BOARD.md, phase 2) will call a server for its data: that server's origin
- * has to be added to connect-src then, or the board fails on the built site while working on the dev server.
+ * The one other origin is Prntr's world board (src/prntr/worldBoard.ts, board-worker/): the game reads the world's
+ * ten from it and sends a cleared run's name and score. The tag is build only, so a host missing here fails on the
+ * built site while working on the dev server.
  */
 const CONTENT_SECURITY_POLICY = [
   "default-src 'none'",
@@ -367,7 +368,7 @@ const CONTENT_SECURITY_POLICY = [
   "style-src 'self' 'unsafe-inline'", // index.html's style attribute
   "img-src 'self' blob: data:", // the print pages are object URLs, the favicon a data URL
   "font-src 'self'",
-  "connect-src 'self'", // pdf.js's decoders, CMaps and fonts, fetched when a document needs them
+  "connect-src 'self' https://board.printanyway.app", // pdf.js's decoders, CMaps and fonts; Prntr's world board
   "base-uri 'none'",
   "form-action 'none'",
 ].join('; ');
@@ -401,6 +402,12 @@ function prntrGuard(): Plugin {
         // Every dev-only block logs a `prntr-dev-…` marker; none may survive the build.
         if (/prntr-dev-/.test(readFileSync(resolve(assets, f), 'utf8'))) {
           throw new Error(`prntr: dev-only code leaked into the build: assets/${f}`);
+        }
+      }
+      for (const f of files) {
+        // The world board's address on the dev server (worldBoard.ts: WORLD_URL) is chosen by import.meta.env.DEV.
+        if (/localhost:8787/.test(readFileSync(resolve(assets, f), 'utf8'))) {
+          throw new Error(`prntr: the world board's dev address is in the build: assets/${f}`);
         }
       }
       const chunks = files.filter((f) => /^Prntr-.*\.js$/.test(f));
