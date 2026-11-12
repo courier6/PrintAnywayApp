@@ -119,6 +119,10 @@ export interface RoomSounds {
   burst(): void;
   /** The first aid kit shot: a clasp's snap and a rising three-note chime. */
   heal(): void;
+  /** Points off a shot (PRNTR-POINTS.md): a square note sliding up an octave in 80 ms, 40 ms after the gunshot so the
+   * bang does not cover it. `step` (0–7) is how far up the D major scale from D6 the streak has climbed; a shot on the
+   * machine (`skill`) adds the same chirp a fifth higher, 70 ms later. */
+  points(step: number, skill: boolean): void;
   /** The safe's rifle magazine shot: it slides into the gun and seats, the catch clicks, the bolt is racked; about 0.5 s. */
   magIn(): void;
   /** A tube shot to pieces: a pop, the hose's hiss, its bits clattering down. */
@@ -183,6 +187,7 @@ const SILENT: RoomSounds = {
   sizzle: noop,
   tubeBurst: noop,
   heal: noop,
+  points: noop,
   magIn: noop,
   fanfare: noop,
 };
@@ -223,6 +228,10 @@ interface ToneOpts {
   /** Where it plays into: the master by default, or a gain of the cue's own, so the cue can be cut short. */
   to?: AudioNode;
 }
+
+/** The points' streak: semitones above D6 for steps 0–7, the D major scale. */
+const POINTS_SCALE = [0, 2, 4, 5, 7, 9, 11, 12];
+const POINTS_BASE = 1174.7;
 
 export function createRoomSounds(audio: PrntrAudio): RoomSounds {
   const ctx = audio.context;
@@ -806,6 +815,13 @@ export function createRoomSounds(audio: PrntrAudio): RoomSounds {
         tone(t + 0.06 + i * 0.09, 0.3, { f0, gain: 0.22, attack: 0.005, decay: 0.08 });
         tone(t + 0.06 + i * 0.09, 0.12, { type: 'square', f0: f0 / 2, gain: 0.06, attack: 0.005, release: 0.03 });
       });
+    },
+    // points: a square chirp up an octave, on the streak's step of D major; a shot on the machine adds the fifth above
+    points(step, skill) {
+      const t = now() + 0.04;
+      const f = POINTS_BASE * 2 ** (POINTS_SCALE[Math.max(0, Math.min(POINTS_SCALE.length - 1, step))] / 12);
+      tone(t, 0.08, { type: 'square', f0: f, f1: f * 2, gain: 0.09, attack: 0.001, release: 0.03 });
+      if (skill) tone(t + 0.07, 0.08, { type: 'square', f0: f * 2 ** (7 / 12), f1: f * 2 ** (19 / 12), gain: 0.09, attack: 0.001, release: 0.03 });
     },
     // the rifle magazine into the gun, a longer, heavier reload: steel sliding along the well for 90 ms, the seat (a
     // clunk lower than the reload's) with the catch's click on it, then the bolt pulled back (a scrape at 0.3 s) and let

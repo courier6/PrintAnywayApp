@@ -29,10 +29,36 @@ npm install
 npm run check      # types
 npm test           # every rule once, against a local copy with an empty database
 npm run dev        # the local copy the game's dev server calls (http://localhost:8787)
+npm run seed       # ten made-up winners on the local copy
+npm run reset      # no rows on the local copy
 npm run deploy     # production
 ```
 
-Before `npm run dev` the first time: `npx wrangler d1 migrations apply DB --local --env dev`.
+## Working on it locally
+
+`npm run dev:all` in the repository's root starts the site's dev server (http://localhost:5173) and the local copy
+together, and Ctrl-C stops both. `npm run dev` there starts the site alone: its WORLD view then reads `NO ANSWER`.
+
+The local copy is the same code as production with its own database on this machine (`.wrangler/state`, made by
+`npm run dev` the first time), so nothing done locally reaches the real board. It differs in three settings
+(`env.dev` in `wrangler.jsonc`): it answers `http://localhost:5173` only (not `127.0.0.1`, not another port), its
+limits are higher, and its refused names are stand-ins (`BADWORD` anywhere in a name, `NOPE` or `42` as a whole
+word). `npm run seed` and `npm run reset` work while it runs; the game reads the board again when its card next
+opens. The seeded tenth scores 1338, one over a bare win: a win with any bonus points takes its place, and a bare
+win is not sent.
+
+## Changing the live board
+
+A visitor's open tab keeps running the game it loaded, so a new Worker has to go on answering the game that is
+already published. The order is always:
+
+1. `npm run check` and `npm test` here.
+2. A new migration, if the table changes: `npx wrangler d1 migrations apply prntr-board --remote`.
+3. `npm run deploy`, then `curl https://board.printanyway.app/top`.
+4. The site's release, if the game changed too.
+
+A change the published game could not read (a renamed field, a new required one) is made in two releases: the
+Worker answers both shapes, the site moves over, then the old shape is removed.
 
 Removing a row: `npx wrangler d1 execute prntr-board --remote --command "DELETE FROM runs WHERE id = 12"`
 (`SELECT id, name, score, at FROM runs ORDER BY score DESC, id ASC` lists them).
