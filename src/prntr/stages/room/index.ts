@@ -42,6 +42,10 @@ const SHED_COLORS: Record<'page' | ThrownKind, PalKey[]> = {
   nut: ['g', 'g', 'K', 'G'],
   bolt: ['g', 'g', 'K', 'G'],
 };
+/** The points' sound climbs: an award within STREAK_MS of the last plays one step higher, to step STREAK_MAX and no
+ * further; after a longer pause it starts over. */
+const STREAK_MS = 1000;
+const STREAK_MAX = 7;
 const SHOTS = 6;
 /** The hearts are lives, as in the arcade: slots, lives at the start, and the
  * one life a continue buys. A hit costs a life: the room freezes under a red dim for DEATH_MS
@@ -980,6 +984,9 @@ export const room: Stage = {
     let sprays: Spray[] = [];
     let bits: Bit[] = [];
     let popups: Popup[] = [];
+    /** The points' streak: its step now (−1 before the first award), and when the last award was. */
+    let streak = -1;
+    let awardAt = -Infinity;
     let drops: Drop[] = [];
     let attackIndex = 0;
     /** Ink attacks the rotation has picked: the first tries the black cartridge. */
@@ -1499,9 +1506,13 @@ export const room: Stage = {
       drawScore();
     };
     /** A shot's points shown where it landed: `+n` centred on x, over y (the top of what was shot); `skill` for a shot
-     * on the machine. The score is not touched here: bonus() and hit() do that. */
+     * on the machine. Its sound is a step higher for each award within STREAK_MS of the last. The score is not touched
+     * here: bonus() and hit() do that. */
     const award = (n: number, x: number, y: number, now: number, skill = false) => {
       popups.push({ text: `+${n}`, x, y, born: now, skill });
+      streak = now - awardAt <= STREAK_MS ? Math.min(STREAK_MAX, streak + 1) : 0;
+      awardAt = now;
+      sounds.points(streak, skill);
     };
     /** The bits a thing shot out of the air throws from the middle of its rect. None under reduced motion. */
     const shed = (kind: 'page' | ThrownKind, r: { x: number; y: number; w: number; h: number }, now: number) => {
@@ -2767,6 +2778,8 @@ export const room: Stage = {
           const now = performance.now();
           return popups.filter((p) => now - p.born < POINTS_MS).map((p) => ({ text: p.text, x: pointsX(p), y: pointsY(p, now), skill: p.skill }));
         },
+        /** The step of the points' streak (−1 before the first award). */
+        streak: () => streak,
         ghosts: () => ghosts.length,
         name: () => lifeName.textContent,
         clock: () => ({ ...scene.clock }),
