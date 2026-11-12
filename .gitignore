@@ -26,3 +26,7 @@ dns/
 
 # TypeScript incremental-build cache
 *.tsbuildinfo
+
+# The world board's Worker: Wrangler's local state and local variables
+.wrangler/
+.dev.vars

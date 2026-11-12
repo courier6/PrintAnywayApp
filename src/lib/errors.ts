@@ -1,7 +1,7 @@
 // Error codes surface subtly in the error card so a user report ("it said
 // PA-102") is enough for the owner to know what failed. Diagnostics stay in
-// the browser console — this app makes no network calls. (Prntr's global
-// leaderboard, once built, will be the first: see CONTENT_SECURITY_POLICY in vite.config.ts.)
+// the browser console — the app sends nothing of a document anywhere. (The one
+// call the page makes is Prntr's world board: src/prntr/worldBoard.ts.)
 export type ErrorCode =
   | 'PA-100' // unknown / unclassified
   | 'PA-101' // unsupported file type
