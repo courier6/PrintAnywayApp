@@ -5,7 +5,7 @@ import { DocContent, docFine } from './docpage';
 import { ashFlecks, burnFine, flakes, frontFire } from './burnpage';
 import { ART_BREAK_SHOTS, BADGE_AT, CAPS_TOP, CLOCK_AT, FIRE_TICK_MS, GLASS, KIT_AT, KNOB, MACHINE_AT, MACHINE_PIECES, NOZZLES, SPR, drawFireFront, drawFlames, drawMarks, drawRoom, drawTubes, drawWindowWreck, figEmitters, figLeaf, fireEmitters, fireRect, inCavity, inDoorway, knobX, lampX, markBox, monsteraEmitters, tubeX, type Broken, type Emitter, type ExitSign, type Hole, type Mark, type Rect, type SceneState, type Tube } from './scene';
 import { ART_AT, ART_SUB, renderVictory } from './art';
-import { MAG_BOB, MAG_BOB_MS, MAG_BOX, MAG_SPIN_MS, MAG_STEPS, SAFE, SAFE_CODE, keyAt, paintKeypad } from './safe';
+import { FONT, MAG_BOB, MAG_BOB_MS, MAG_BOX, MAG_SPIN_MS, MAG_STEPS, SAFE, SAFE_CODE, keyAt, paintKeypad } from './safe';
 import { PAL, type PalKey } from './palette';
 import { createRoomSounds, type FireSound, type Hum } from './sounds';
 import { RIPPLE_MS, RIPPLE_SPEED, RippleView, rippleAt } from './ripple';
@@ -27,6 +27,21 @@ const MODEL = 'SP-7331';
 const HIT_POINTS = 10;
 const PAGE_POINTS = 1;
 const STAPLE_POINTS = 1;
+/** A thing shot out of the air, and the three timed shots on the machine (a spraying tube, the glass under the slam, the
+ * scan's lamp), show their points: `+N` in the keypad's 3 × 5 digits, its bottom row POINTS_GAP px above the thing,
+ * rises POINTS_RISE px over POINTS_MS, fast then slow, and is gone (PRNTR-POINTS.md). White off a thrown thing, yellow
+ * off the machine. Under reduced motion it stays where it starts. */
+const POINTS_MS = 700;
+const POINTS_RISE = 12;
+const POINTS_GAP = 2;
+/** A thing shot out of the air throws SHED_BITS bits in its own colours from where it was. */
+const SHED_BITS = 6;
+const SHED_COLORS: Record<'page' | ThrownKind, PalKey[]> = {
+  page: ['w', 'w', 'K', 'i'],
+  staple: ['G', 'W', 'W'],
+  nut: ['g', 'g', 'K', 'G'],
+  bolt: ['g', 'g', 'K', 'G'],
+};
 const SHOTS = 6;
 /** The hearts are lives, as in the arcade: slots, lives at the start, and the
  * one life a continue buys. A hit costs a life: the room freezes under a red dim for DEATH_MS
@@ -576,6 +591,16 @@ interface Bit {
   color: PalKey;
 }
 
+/** A shot's points on the front layer: the text, the column of its middle and the row of the shot thing's top where it
+ * starts, when, and whether it is off the machine (yellow) or off a thrown thing (white). */
+interface Popup {
+  text: string;
+  x: number;
+  y: number;
+  born: number;
+  skill: boolean;
+}
+
 /** A nut bouncing off the glass, or a staple or a bolt shot off it: what, where it was, and when. */
 interface Drop {
   kind: 'nut' | 'staple' | 'bolt';
@@ -954,6 +979,7 @@ export const room: Stage = {
     let pages: Page[] = [];
     let sprays: Spray[] = [];
     let bits: Bit[] = [];
+    let popups: Popup[] = [];
     let drops: Drop[] = [];
     let attackIndex = 0;
     /** Ink attacks the rotation has picked: the first tries the black cartridge. */
@@ -1472,6 +1498,44 @@ export const room: Stage = {
       score = Math.min(BOARD_SCORE_MAX, score + n);
       drawScore();
     };
+    /** A shot's points shown where it landed: `+n` centred on x, over y (the top of what was shot); `skill` for a shot
+     * on the machine. The score is not touched here: bonus() and hit() do that. */
+    const award = (n: number, x: number, y: number, now: number, skill = false) => {
+      popups.push({ text: `+${n}`, x, y, born: now, skill });
+    };
+    /** The bits a thing shot out of the air throws from the middle of its rect. None under reduced motion. */
+    const shed = (kind: 'page' | ThrownKind, r: { x: number; y: number; w: number; h: number }, now: number) => {
+      if (reduced) return;
+      const colors = SHED_COLORS[kind];
+      for (let i = 0; i < SHED_BITS; i++) {
+        const a = Math.random() * 2 * Math.PI;
+        const v = 25 + Math.random() * 45;
+        bits.push({ x: r.x + r.w / 2 + (Math.random() - 0.5) * 4, y: r.y + r.h / 2 + (Math.random() - 0.5) * 4, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 20, g: 220, born: now, life: 250 + Math.random() * 300, size: 1, color: colors[Math.floor(Math.random() * colors.length)] });
+      }
+    };
+    /** A popup's left column, kept inside the frame with its outline. */
+    const pointsX = (p: Popup) => {
+      const w = p.text.length * 4 - 1;
+      return Math.max(1, Math.min(W - w - 1, Math.round(p.x - w / 2)));
+    };
+    /** The row under a popup's bottom row now (its glyphs are the five rows above it). */
+    const pointsY = (p: Popup, now: number) => {
+      const u = Math.max(0, Math.min(1, (now - p.born) / POINTS_MS));
+      const rise = reduced ? 0 : Math.round(POINTS_RISE * (1 - (1 - u) * (1 - u)));
+      return Math.max(6, Math.round(p.y) - POINTS_GAP - rise);
+    };
+    const drawPoints = (p: Popup, now: number) => {
+      const x0 = pointsX(p);
+      const y0 = pointsY(p, now) - 5;
+      const cells: [number, number][] = [];
+      for (let i = 0; i < p.text.length; i++) {
+        FONT[p.text[i]].forEach((row, ry) => {
+          for (let rx = 0; rx < 3; rx++) if (row[rx] === '1') cells.push([x0 + i * 4 + rx, y0 + ry]);
+        });
+      }
+      for (const [x, y] of cells) fpix.rect(x - 1, y - 1, x + 2, y + 2, 'K');
+      for (const [x, y] of cells) fpix.rect(x, y, x + 1, y + 1, p.skill ? 'y' : 'W');
+    };
 
     // ---- the gun ----------------------------------------------------------
     // A page rises out of the slot row by row for the first fifth of PAGE_MS (the rect
@@ -1737,7 +1801,11 @@ export const room: Stage = {
       if (page) {
         page.shot = true;
         pagesShot++;
-        bonus(page.burning ? FIRE_PAGE_POINTS : PAGE_POINTS);
+        const n = page.burning ? FIRE_PAGE_POINTS : PAGE_POINTS;
+        const r = pagePose(page, now);
+        bonus(n);
+        award(n, r.x + r.w / 2, r.y, now);
+        shed('page', r, now);
         return;
       }
       // Shootable (the handoff had them unshootable).
@@ -1749,7 +1817,11 @@ export const room: Stage = {
       if (staple) {
         staple.shot = true;
         if (staple.kind === 'staple') staplesShot++;
-        bonus(staple.kind === 'staple' ? STAPLE_POINTS : BOLT_POINTS);
+        const n = staple.kind === 'staple' ? STAPLE_POINTS : BOLT_POINTS;
+        const r = staplePose(staple, now);
+        bonus(n);
+        award(n, r.x + r.w / 2, r.y, now);
+        shed(staple.kind, r, now);
         return;
       }
       // On the glass, on the player's side of it: a landed page slides off at once; a staple or a bolt
@@ -1786,7 +1858,9 @@ export const room: Stage = {
         return x >= Math.min(s.nx, hx) - 3 - NOZZLE_HIT_PAD + sx && x < Math.max(s.nx, hx) + 3 + NOZZLE_HIT_PAD + sx && y >= tb.top - NOZZLE_HIT_PAD + sy && y < TUBE_BASE + NOZZLE_HIT_PAD + sy;
       });
       if (jet) {
+        const mouth = mouthOf(jet, now);
         explodeTube(jet, now);
+        award(TUBE_POINTS, mouth.x + scene.shake.x, mouth.y - 2 + scene.shake.y, now, true);
         hit(TUBE_POINTS, now);
         return;
       }
@@ -1799,6 +1873,7 @@ export const room: Stage = {
           lampStop = m.lamp;
           popBulb(hx, now);
           flashFrames = HIT_FLASH_FRAMES;
+          award(LAMP_POINTS, hx + 1, 81 + scene.shake.y, now, true);
           hit(LAMP_POINTS, now);
           return;
         }
@@ -1809,6 +1884,7 @@ export const room: Stage = {
         if (x >= GLASS.x0 - GLASS_HIT_PAD + sx && x < GLASS.x1 + GLASS_HIT_PAD + sx && y >= GLASS.y0 - GLASS_HIT_PAD + sy && y < GLASS.y1 + GLASS_HIT_PAD + sy) {
           flashFrames = HIT_FLASH_FRAMES;
           stoke(x, y, now);
+          award(SLAM_GLASS_POINTS, x, y, now, true);
           hit(SLAM_GLASS_POINTS, now);
           return;
         }
@@ -2671,7 +2747,11 @@ export const room: Stage = {
         drops: () => drops.length,
         /** The pages on the glass: where each landed, and whether it is sliding off yet. */
         landed: () => pages.filter((p) => p.landedAt !== null).map((p) => ({ x: p.x1, y: p.y1, sliding: performance.now() - p.landedAt! >= PAGE_LANDED_MS })),
-        thrown: () => staples.map((s) => ({ kind: s.kind, x: s.x, y: s.y, at: s.at, shot: s.shot, hit: s.hit })),
+        thrown: () => {
+          const now = performance.now();
+          // pose: where a thing in flight is now (null once shot or landed, or not yet out)
+          return staples.map((s) => ({ kind: s.kind, x: s.x, y: s.y, at: s.at, shot: s.shot, hit: s.hit, pose: s.shot || s.hit || now < s.at ? null : staplePose(s, now) }));
+        },
         /** The pages in the air or on the glass: each one's origin, lane, start, whether it is the player's and its pose now. */
         pages: () => {
           const now = performance.now();
@@ -2682,6 +2762,11 @@ export const room: Stage = {
         fightPhase: () => fightPhase(),
         /** How many things in flight have been shot down (staples, nuts, bolts, pages): a shot one of them took. */
         shotDown: () => staples.filter((s) => s.shot).length + pages.filter((p) => p.shot).length,
+        /** The points showing now: each number's text, left column, the row under its bottom row, and whether it is a machine shot's. */
+        points: () => {
+          const now = performance.now();
+          return popups.filter((p) => now - p.born < POINTS_MS).map((p) => ({ text: p.text, x: pointsX(p), y: pointsY(p, now), skill: p.skill }));
+        },
         ghosts: () => ghosts.length,
         name: () => lifeName.textContent,
         clock: () => ({ ...scene.clock }),
@@ -3500,6 +3585,9 @@ export const room: Stage = {
         const y = Math.floor(b.y + b.vy * bt + 0.5 * b.g * bt * bt);
         fpix.rect(x, y, x + b.size, y + b.size, b.color);
       }
+      // The points off the shots, over the bits.
+      popups = popups.filter((p) => now - p.born < POINTS_MS);
+      for (const p of popups) drawPoints(p, now);
       cpix.clear();
       const aiming = phase === 'fight' || phase === 'continue' || phase === 'over';
       const at = pointer ?? (aiming && tap && now - tap.at < TOUCH_CROSS_MS ? tap : null);
