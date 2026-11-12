@@ -221,8 +221,9 @@
   flex-direction: column;
   align-items: center;
   /* The lockup's unit: the name's size. Every gap below is set so that the space between the visible ink (the
-     mark's base, the name's caps, the hairline) is a multiple of u, the name's cap height (≈ 0.75em): 1u from the
-     mark to the caps, 0.55u from the caps to the hairline. The phone card changes this size alone. */
+     mark's base, the name's caps, the rules) is a multiple of u, the name's cap height (≈ 0.75em): 1u from the
+     mark to the caps, 0.55u from the caps to the upper rule. The phone card changes this size and the rules'
+     thickness. */
   font-size: 30px;
 }
 /* The SNARC, its viewBox cut to its ink (the full box had 16 of 96 units empty, which made the gap under it
@@ -246,12 +247,16 @@
   white-space: nowrap;
   text-transform: uppercase;
 }
-/* A hairline under the name, like a letterhead: as wide as the name's ink plus ½u each side. */
+/* Two rules under the name, a letterhead's double rule (the sp-rules sheet's #4): 5 px each with 5 px between
+   them, as wide as the name's ink plus ½u each side. One element: its two borders are the rules, its height
+   the gap. */
 .prntr-card-rule {
+  box-sizing: content-box;
   width: 11.25em;
-  height: 1px;
+  height: 5px;
   margin-top: 0.294em;
-  background: #4A4A4A;
+  border-top: 5px solid #4A4A4A;
+  border-bottom: 5px solid #4A4A4A;
 }
 
 .prntr-title-wrap {
@@ -442,6 +447,8 @@
 @media (max-width: 640px) {
   .prntr-card-brand { font-size: 18px; }
   .prntr-card-logo path { stroke-width: 2; }
+  /* the rules scale with the name (18 of 30): 3 px each, 3 px between */
+  .prntr-card-rule { height: 3px; border-width: 3px 0; }
   .prntr-title { gap: 2px; font-size: min(112px, 23.4vw, calc(56px * var(--s, 5))); }
   .prntr-prompt { font-size: 16px; letter-spacing: 0.06em; }
   .prntr-footer { font-size: 8px; gap: 8px; }
