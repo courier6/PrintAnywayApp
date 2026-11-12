@@ -1636,22 +1636,47 @@
   cursor: default;
 }
 
-/* The local view's parts sit in a box that lays out as if it were not there; on WORLD the box, the clear and the
-   note go, and the world's place comes. */
+/* The card is one size on LOCAL and WORLD, whatever the board holds (PRNTR-BOARD.md §19): the two views lie in one
+   cell, and the local one is always ten rows and the run's out line tall (16 + 1.2 row sizes and the list's gap). On
+   WORLD it keeps its place unseen, and so does a note. */
+.prntr-board-body {
+  display: grid;
+  justify-items: center;
+  width: 100%;
+}
+
+.prntr-board-body > * {
+  grid-area: 1 / 1;
+}
+
 .prntr-board-local {
-  display: contents;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+  z-index: 1;
+  min-height: calc(17.2 * var(--prntr-board-row) + 12px);
 }
 
 .prntr-board-card.is-world .prntr-board-local,
-.prntr-board-card.is-world .prntr-board-clear,
-.prntr-board-card.is-world .prntr-board-note,
+.prntr-board-card.is-world .prntr-board-note {
+  visibility: hidden;
+}
+
 .prntr-board-card:not(.is-world) .prntr-board-soon {
   display: none;
 }
 
+/* The rows, NOBODY YET. and the out line share a left edge. */
+.prntr-board-list {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+}
+
 /* The world's place until there is a world board (the world-ten sheet's #6): COMING SOON on a ribbon in the title's
-   yellow, its ends notched in three steps, over the opening's cut mark in the same yellow. As tall as ten rows, so a
-   full board's card keeps its height between the views. */
+   yellow, its ends notched in three steps, over the opening's cut mark in the same yellow. As tall as the cell. */
 .prntr-board-soon {
   display: flex;
   flex-direction: column;
@@ -1660,7 +1685,6 @@
   gap: 1.1em;
   box-sizing: border-box;
   width: 100%;
-  min-height: 16em;
   font-size: var(--prntr-board-row);
 }
 
@@ -1701,6 +1725,8 @@
 }
 
 .prntr-board-rows {
+  /* ten rows' room, however few are kept */
+  min-height: 16em;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -1749,16 +1775,36 @@
   animation: none;
 }
 
+/* NOBODY YET., in the middle of the ten rows' room. */
 .prntr-board-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  align-self: stretch;
+  min-height: calc(16 * var(--prntr-board-row));
   font-size: 13px;
   color: #BDBDBD;
 }
 
+/* The buttons: three sets in one cell (CONTINUE and CLEAR THE BOARD; YOU SURE?, YES and CANCEL; OK). The one asked
+   for is seen; the others keep their room, so the cell is as tall as the tallest of them at any width. */
 .prntr-board-buttons {
+  display: grid;
+  justify-items: center;
+}
+
+.prntr-board-set {
+  grid-area: 1 / 1;
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
+  align-content: flex-start;
+  align-items: center;
   gap: 12px;
+}
+
+.prntr-board-set.is-off {
+  visibility: hidden;
 }
 
 .prntr-board-buttons button {
@@ -1783,11 +1829,25 @@
   color: #FFD91A !important;
 }
 
-/* The clear's question: YOU SURE? in the title's yellow over YES (red: it takes everything down
-   and leaves) and CANCEL (white). */
+/* Nothing to clear (an empty board, WORLD): greyed in its place, as a tab that cannot be pressed. */
+.prntr-board-buttons .prntr-board-clear:disabled {
+  border-color: #5E5A52;
+  color: #5E5A52;
+  cursor: default;
+}
+
+/* The clear's question: YOU SURE? in the title's yellow before YES (red: it takes everything down
+   and leaves) and CANCEL (white), on the buttons' line; on a phone, on its own line over them. */
 .prntr-board-sure {
   font-size: 13px;
+  line-height: 1.6;
   color: #FFD91A;
+}
+
+@media (max-width: 599px) {
+  .prntr-board-sure {
+    flex-basis: 100%;
+  }
 }
 
 .prntr-board-yes {
@@ -1806,6 +1866,11 @@
   font-size: 9px;
   line-height: 1.6;
   color: #BDBDBD;
+}
+
+/* no note, no room for one (and none of the card's gap) */
+.prntr-board-note:empty {
+  display: none;
 }
 
 /* The name asked for a ranking run the badge left NULL (PRNTR-BOARD.md §15.3, §17): a field in the name's place of

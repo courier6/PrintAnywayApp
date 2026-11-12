@@ -36,7 +36,8 @@ export interface BoardCard {
   /** The switch under the title (§18): LOCAL, the view the card comes up on, and WORLD. */
   localTab: HTMLButtonElement;
   worldTab: HTMLButtonElement;
-  /** Shows a view: its title, its tab pressed. WORLD is COMING SOON over the cut mark, with CONTINUE alone. */
+  /** Shows a view: its title, its tab pressed. WORLD is COMING SOON over the cut mark; the local view keeps its place
+   * unseen under it, so the card is one size on both (§19). */
   showView: (view: BoardView) => void;
   goBtn: HTMLButtonElement;
   clearBtn: HTMLButtonElement;
@@ -49,7 +50,8 @@ export interface BoardCard {
   showRows: (rows: BoardRow[], newRank: number) => void;
   /** The grey line under the rows ('' hides it) and the note. */
   showOut: (text: string, note: string) => void;
-  /** The clear's question in the buttons' place, or the buttons back. WORLD cannot be pressed while it is asked. */
+  /** The clear's question (YOU SURE?, YES, CANCEL) in the buttons' place, or the buttons back. WORLD cannot be pressed
+   * while it is asked. */
   asking: (on: boolean) => void;
   /** The board as it will be with `run` on it at `rank`: its row marked, the name's field in the name's place, and OK
    * alone in the buttons' place; WORLD cannot be pressed meanwhile. showRows ends it. */
@@ -57,9 +59,11 @@ export interface BoardCard {
 }
 
 /**
- * The board's card (PRNTR-BOARD.md §14–§18): the title, the LOCAL / WORLD switch, then the view. LOCAL: the rows (or
- * NOBODY YET.), the run's out line, the name's field in its row with OK, CONTINUE, CLEAR THE BOARD and the clear's
- * question (YOU SURE?, YES, CANCEL), then the note. WORLD (WORLD TOP 10): COMING SOON over the cut mark, and CONTINUE.
+ * The board's card (PRNTR-BOARD.md §14–§19): the title, the LOCAL / WORLD switch, the view, the buttons, the note.
+ * LOCAL: the rows (or NOBODY YET.), the run's out line, the name's field in its row. WORLD (WORLD TOP 10): COMING SOON
+ * over the cut mark. The card is one size on both views and in every state (§19): the two views share one place, ten
+ * rows and the out line tall, and the buttons are three sets sharing one place (CONTINUE and CLEAR THE BOARD; YOU SURE?,
+ * YES and CANCEL; OK), one of them seen.
  */
 export function buildBoardCard(): BoardCard {
   const card = el('div', 'prntr-board-card');
@@ -68,8 +72,11 @@ export function buildBoardCard(): BoardCard {
   const localTab = button('prntr-board-tab', 'LOCAL');
   const worldTab = button('prntr-board-tab', 'WORLD');
   tabsEl.append(localTab, worldTab);
-  // the local view's own parts, in a box that lays out as if it were not there, so one class on the card hides them
+  // the two views in one place: the local one keeps its room on WORLD, unseen, so the card cannot change size
+  const bodyEl = el('div', 'prntr-board-body');
   const localEl = el('div', 'prntr-board-local');
+  // the rows, NOBODY YET. and the out line, sharing a left edge
+  const listEl = el('div', 'prntr-board-list');
   // the world's place until there is a world board: a ribbon over the cut mark
   const soonEl = el('div', 'prntr-board-soon');
   soonEl.append(el('div', 'prntr-board-ribbon', 'COMING SOON'));
@@ -98,13 +105,34 @@ export function buildBoardCard(): BoardCard {
   nameInput.setAttribute('aria-label', 'Your name');
   const okBtn = button('prntr-board-ok', 'OK');
   const note = el('div', 'prntr-board-note');
-  buttonsEl.append(okBtn, goBtn, clearBtn, yesBtn, cancelBtn);
-  localEl.append(rowsEl, emptyEl, outEl, sureEl);
-  card.append(title, tabsEl, localEl, soonEl, buttonsEl, note);
-  sureEl.hidden = yesBtn.hidden = cancelBtn.hidden = okBtn.hidden = true;
+  // the buttons in three sets sharing one place; the two that are not asked for keep their room, unseen
+  const goSet = el('div', 'prntr-board-set');
+  const sureSet = el('div', 'prntr-board-set');
+  const okSet = el('div', 'prntr-board-set');
+  goSet.append(goBtn, clearBtn);
+  sureSet.append(sureEl, yesBtn, cancelBtn);
+  okSet.append(okBtn);
+  buttonsEl.append(goSet, sureSet, okSet);
+  listEl.append(rowsEl, emptyEl, outEl);
+  localEl.append(listEl);
+  bodyEl.append(localEl, soonEl);
+  card.append(title, tabsEl, bodyEl, buttonsEl, note);
+
+  const showSet = (on: HTMLElement) => {
+    for (const set of [goSet, sureSet, okSet]) set.classList.toggle('is-off', set !== on);
+  };
+  showSet(goSet);
+  // CLEAR THE BOARD keeps its place where there is nothing to clear (an empty board, WORLD): greyed, not gone
+  let world = false;
+  let filled = false;
+  const syncClear = () => {
+    clearBtn.disabled = world || !filled;
+  };
 
   const showView = (view: BoardView) => {
-    card.classList.toggle('is-world', view === 'world');
+    world = view === 'world';
+    syncClear();
+    card.classList.toggle('is-world', world);
     title.textContent = TITLES[view];
     localTab.setAttribute('aria-pressed', String(view === 'local'));
     worldTab.setAttribute('aria-pressed', String(view === 'world'));
@@ -121,8 +149,9 @@ export function buildBoardCard(): BoardCard {
     });
     rowsEl.hidden = rows.length === 0;
     emptyEl.hidden = rows.length > 0;
-    clearBtn.hidden = rows.length === 0;
-    okBtn.hidden = true;
+    filled = rows.length > 0;
+    syncClear();
+    showSet(goSet);
     worldTab.disabled = false;
   };
   const showOut = (text: string, noteText: string) => {
@@ -131,11 +160,7 @@ export function buildBoardCard(): BoardCard {
     note.textContent = noteText;
   };
   const asking = (on: boolean) => {
-    sureEl.hidden = !on;
-    yesBtn.hidden = !on;
-    cancelBtn.hidden = !on;
-    goBtn.hidden = on;
-    if (on) clearBtn.hidden = true;
+    showSet(on ? sureSet : goSet);
     // a question is the local board's: it is answered before the view can change
     worldTab.disabled = on;
   };
@@ -147,9 +172,7 @@ export function buildBoardCard(): BoardCard {
     // `02 ` and ` 0420 11-11-2026` around the field, which is the name's twelve glyphs wide
     li.replaceChildren(line.slice(0, 3), nameInput, line.slice(3 + BOARD_NAME_MAX));
     outEl.hidden = true;
-    okBtn.hidden = false;
-    goBtn.hidden = true;
-    clearBtn.hidden = true;
+    showSet(okSet);
     worldTab.disabled = true;
   };
   return { card, localTab, worldTab, showView, goBtn, clearBtn, yesBtn, cancelBtn, nameInput, okBtn, showRows, showOut, asking, askName };
