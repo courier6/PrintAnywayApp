@@ -11,6 +11,7 @@ import { createRoomSounds, type FireSound, type Hum } from './sounds';
 import { RIPPLE_MS, RIPPLE_SPEED, RippleView, rippleAt } from './ripple';
 import { startStormSound } from '../storm';
 import { BOARD_NAME_MAX, BOARD_SCORE_MAX, cleanName, readBoard } from '../../board';
+import { CLEARED_SCORE_MIN } from '../../boardRules';
 
 // ---------------------------------------------------------------------------
 // Tunables. The attack cycle is "tune freely" (handoff §2.7), slowed down and made
@@ -20,7 +21,7 @@ import { BOARD_NAME_MAX, BOARD_SCORE_MAX, cleanName, readBoard } from '../../boa
 
 /** The machine's life: the fight ends when its damage reaches this. (No longer the HUD's label: that is the local
  * board's best, PRNTR-SCORE.md.) */
-const HI = 1337;
+const HI = CLEARED_SCORE_MIN;
 /** The machine's model number, on its health bar. Invented (Simple Products; 1337 backwards). */
 const MODEL = 'SP-7331';
 const HIT_POINTS = 10;
