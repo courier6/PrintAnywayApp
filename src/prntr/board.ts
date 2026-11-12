@@ -5,15 +5,13 @@
  * switched off throw, and the board then simply reads as empty or refuses to keep a row.
  */
 
+import { BOARD_NAME_MAX, BOARD_SCORE_MAX } from './boardRules';
+
+/** The name and score rules live in boardRules.ts, which the world board's server reads too. */
+export { BOARD_NAME_MAX, BOARD_SCORE_MAX, cleanName } from './boardRules';
+
 export const BOARD_KEY = 'prntr.board';
 export const BOARD_MAX = 10;
-/** As the badge's name (PRNTR-BADGE.md §8.3): A–Z, 0–9 and spaces, twelve at most. */
-export const BOARD_NAME_MAX = 12;
-export const BOARD_SCORE_MAX = 9999;
-
-/** A name as the badge and the board take it: upper case, A–Z, 0–9 and single spaces, trimmed, BOARD_NAME_MAX at most. */
-export const cleanName = (s: string) =>
-  s.toUpperCase().replace(/[^A-Z0-9 ]/g, '').replace(/ +/g, ' ').trim().slice(0, BOARD_NAME_MAX);
 
 export interface BoardRow {
   name: string;

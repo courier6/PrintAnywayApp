@@ -1,0 +1,59 @@
+// Prntr's world board (PRNTR-WORLD-BOARD.md). Production is the top level; `--env dev` is the copy that runs on
+// this machine for the tests and for the game's dev server (npm run dev, npm test). Bindings are not inherited by
+// an environment, so `dev` repeats them.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "prntr-board",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-11-01",
+  // Wrangler's own usage telemetry is off for this project.
+  "send_metrics": false,
+  // Only the hostname below answers: no workers.dev address and no preview addresses.
+  "workers_dev": false,
+  "preview_urls": false,
+  "routes": [{ "pattern": "board.printanyway.app", "custom_domain": true }],
+  // No request logs are kept.
+  "observability": { "enabled": false },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "prntr-board",
+      // From `wrangler d1 create prntr-board`: an identifier, not a secret.
+      "database_id": "20ed7893-a1ac-44c4-9711-31e861bf9741",
+      "migrations_dir": "migrations"
+    }
+  ],
+  // Per sender's address and per Cloudflare location; the counts are approximate (Cloudflare's wording).
+  "ratelimits": [
+    { "name": "WRITES", "namespace_id": "1001", "simple": { "limit": 6, "period": 60 } },
+    { "name": "READS", "namespace_id": "1002", "simple": { "limit": 60, "period": 60 } }
+  ],
+  "vars": {
+    "ALLOWED_ORIGINS": "https://printanyway.app",
+    "ACCEPTING": "1"
+  },
+  // BLOCKED (the refused names) is a secret: `wrangler secret put BLOCKED`. Until it is set, POST /run answers 503.
+  "env": {
+    "dev": {
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "prntr-board-dev",
+          "database_id": "00000000-0000-0000-0000-000000000000",
+          "migrations_dir": "migrations"
+        }
+      ],
+      // Higher than production so the tests' own requests fit; test.mjs then runs WRITES out on purpose.
+      "ratelimits": [
+        { "name": "WRITES", "namespace_id": "2001", "simple": { "limit": 100, "period": 60 } },
+        { "name": "READS", "namespace_id": "2002", "simple": { "limit": 600, "period": 60 } }
+      ],
+      "vars": {
+        "ALLOWED_ORIGINS": "http://localhost:5173,http://localhost:4173",
+        "ACCEPTING": "1",
+        // Stand-ins for the tests, not the real list.
+        "BLOCKED": "BADWORD, =NOPE =42\n# NOPENOPE: a comment, not an entry"
+      }
+    }
+  }
+}

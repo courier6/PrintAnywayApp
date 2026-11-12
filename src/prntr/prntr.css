@@ -1637,9 +1637,9 @@
   cursor: default;
 }
 
-/* The card is one size on LOCAL and WORLD, whatever the board holds (PRNTR-BOARD.md §19): the two views lie in one
-   cell, and the local one is always ten rows and the run's out line tall (16 + 1.2 row sizes and the list's gap). On
-   WORLD it keeps its place unseen, and so does a note. */
+/* The card is one size on LOCAL and WORLD, whatever the boards hold (PRNTR-BOARD.md §19): the views lie in one cell,
+   and a view of rows is always ten rows and the run's out line tall (16 + 1.2 row sizes and the list's gap). The view
+   not shown keeps its place unseen, and on WORLD so does a note. */
 .prntr-board-body {
   display: grid;
   justify-items: center;
@@ -1650,7 +1650,8 @@
   grid-area: 1 / 1;
 }
 
-.prntr-board-local {
+.prntr-board-local,
+.prntr-board-world {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1660,21 +1661,22 @@
 }
 
 .prntr-board-card.is-world .prntr-board-local,
-.prntr-board-card.is-world .prntr-board-note {
+.prntr-board-card.is-world .prntr-board-note,
+.prntr-board-card:not(.is-world.has-world) .prntr-board-world {
   visibility: hidden;
 }
 
-/* On LOCAL the world's place stays behind the rows as a watermark (the board-local sheet's #2): no ribbon, the mark
-   half as large again and in a tone of the mat. */
-.prntr-board-card:not(.is-world) .prntr-board-soon {
+/* Behind rows, the local ones or the world's, the ribbon's place stays as a watermark (the board-local sheet's #2):
+   no ribbon, the mark half as large again and in a tone of the mat. */
+.prntr-board-card:is(:not(.is-world), .has-world) .prntr-board-soon {
   pointer-events: none;
 }
 
-.prntr-board-card:not(.is-world) .prntr-board-ribbon {
+.prntr-board-card:is(:not(.is-world), .has-world) .prntr-board-ribbon {
   display: none;
 }
 
-.prntr-board-card:not(.is-world) .prntr-board-mark {
+.prntr-board-card:is(:not(.is-world), .has-world) .prntr-board-mark {
   width: calc(14.4em * 160 / 138);
   height: 14.4em;
   color: #2D2049;
@@ -1688,8 +1690,9 @@
   gap: 12px;
 }
 
-/* The world's place until there is a world board (the world-ten sheet's #6): COMING SOON on a ribbon in the title's
-   yellow, its ends notched in three steps, over the opening's cut mark in the same yellow. As tall as the cell. */
+/* The world's place while it has no rows to show (the world-ten sheet's #6): a ribbon in the title's yellow, its ends
+   notched in three steps, over the opening's cut mark in the same yellow. It reads CALLING... while the server is
+   asked and NO ANSWER when it gave none. As tall as the cell. */
 .prntr-board-soon {
   display: flex;
   flex-direction: column;
@@ -1736,6 +1739,11 @@
   font-size: var(--prntr-board-row);
   color: #BDBDBD;
   text-align: left;
+}
+
+/* The run's place in the world (NO. 4 IN THE WORLD), in its row's colour. */
+.prntr-board-run.is-out.is-own {
+  color: var(--prntr-board-own, #FFD91A);
 }
 
 .prntr-board-rows {
@@ -1808,7 +1816,8 @@
 }
 
 /* The buttons: three sets in one cell (CONTINUE and CLEAR THE BOARD; YOU SURE?, YES and CANCEL; OK). The one asked
-   for is seen; the others keep their room, so the cell is as tall as the tallest of them at any width. */
+   for is seen; the others keep their room, so the cell is as tall as the tallest of them at any width. A fourth,
+   never seen, is a copy of the first's two buttons: it keeps their room on WORLD, where CONTINUE is alone. */
 .prntr-board-buttons {
   display: grid;
   justify-items: center;
@@ -1850,11 +1859,17 @@
   color: #FFD91A !important;
 }
 
-/* Nothing to clear (an empty board, WORLD): greyed in its place, as a tab that cannot be pressed. */
+/* Nothing to clear (an empty board): greyed in its place, as a tab that cannot be pressed. */
 .prntr-board-buttons .prntr-board-clear:disabled {
   border-color: #5E5A52;
   color: #5E5A52;
   cursor: default;
+}
+
+/* WORLD has nothing of the player's to clear: the button is gone and CONTINUE stands in the middle. The cell
+   keeps its height from the sets not shown, one of them an unseen copy of these two buttons (boardCard.ts). */
+.prntr-board-card.is-world .prntr-board-clear {
+  display: none;
 }
 
 /* The clear's question: YOU SURE? in the title's yellow before YES (red: it takes everything down
