@@ -4,10 +4,11 @@ import { CUT_MARK } from './stages/opening';
 /** The card's two views (PRNTR-BOARD.md §18): the board kept in this browser, and the world's top ten. */
 export type BoardView = 'local' | 'world';
 const TITLES: Record<BoardView, string> = { local: 'LOCAL LEADERBOARD', world: 'WORLD TOP 10' };
-/** The opening's cut mark, small, in the card's colours: its black as the title's yellow, its dark red as the mat. */
+/** The opening's cut mark in the card's colours: its black as the element's colour (the title's yellow on WORLD, a
+ * tone of the mat behind the local rows), its dark red as the mat. */
 const BOARD_MARK = CUT_MARK.replace('prntr-card-cutmark', 'prntr-board-mark')
   .replace(/prntr-cut-sil/g, 'prntr-board-sil')
-  .replace(/#000/g, '#FFD91A')
+  .replace(/#000/g, 'currentColor')
   .replace(/#5C0A12/g, '#1E1433');
 
 export const NOTE_REFUSED = "COULDN'T KEEP IT HERE. THE BROWSER SAID NO.";
@@ -78,7 +79,8 @@ export function buildBoardCard(): BoardCard {
   const localEl = el('div', 'prntr-board-local');
   // the rows, NOBODY YET. and the out line, sharing a left edge
   const listEl = el('div', 'prntr-board-list');
-  // the world's place until there is a world board: a ribbon over the cut mark
+  // the world's place until there is a world board: a ribbon over the cut mark. On LOCAL the mark alone stays, larger
+  // and dim, behind the rows
   const soonEl = el('div', 'prntr-board-soon');
   soonEl.append(el('div', 'prntr-board-ribbon', 'COMING SOON'));
   soonEl.insertAdjacentHTML('beforeend', BOARD_MARK);
@@ -134,6 +136,9 @@ export function buildBoardCard(): BoardCard {
     world = view === 'world';
     syncClear();
     card.classList.toggle('is-world', world);
+    // behind the local rows the mark is a backdrop, not a picture to read out
+    if (world) soonEl.removeAttribute('aria-hidden');
+    else soonEl.setAttribute('aria-hidden', 'true');
     title.textContent = TITLES[view];
     localTab.setAttribute('aria-pressed', String(view === 'local'));
     worldTab.setAttribute('aria-pressed', String(view === 'world'));

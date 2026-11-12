@@ -1664,8 +1664,20 @@
   visibility: hidden;
 }
 
+/* On LOCAL the world's place stays behind the rows as a watermark (the board-local sheet's #2): no ribbon, the mark
+   half as large again and in a tone of the mat. */
 .prntr-board-card:not(.is-world) .prntr-board-soon {
+  pointer-events: none;
+}
+
+.prntr-board-card:not(.is-world) .prntr-board-ribbon {
   display: none;
+}
+
+.prntr-board-card:not(.is-world) .prntr-board-mark {
+  width: calc(14.4em * 160 / 138);
+  height: 14.4em;
+  color: #2D2049;
 }
 
 /* The rows, NOBODY YET. and the out line share a left edge. */
@@ -1703,11 +1715,12 @@
   );
 }
 
-/* The mark's box is 160 × 138. */
+/* The mark's box is 160 × 138; its ink is the element's colour. */
 .prntr-board-mark {
   display: block;
   width: calc(9.6em * 160 / 138);
   height: 9.6em;
+  color: #FFD91A;
 }
 
 .prntr-board-run {
