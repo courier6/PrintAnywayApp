@@ -8,6 +8,7 @@
   },
   "scripts": {
     "dev": "vite",
+    "dev:all": "node tools/dev-all.mjs",
     "build": "tsc && tsc -p tsconfig.node.json && vite build",
     "preview": "vite preview"
   },
