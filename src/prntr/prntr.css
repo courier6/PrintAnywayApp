@@ -221,8 +221,9 @@
   flex-direction: column;
   align-items: center;
   /* The lockup's unit: the name's size. Every gap below is set so that the space between the visible ink (the
-     mark's base, the name's caps, the hairline) is a multiple of u, the name's cap height (≈ 0.75em): 1u from the
-     mark to the caps, 0.55u from the caps to the hairline. The phone card changes this size alone. */
+     mark's base, the name's caps, the rules) is a multiple of u, the name's cap height (≈ 0.75em): 1u from the
+     mark to the caps, 0.55u from the caps to the upper rule. The phone card changes this size and the rules'
+     thickness. */
   font-size: 30px;
 }
 /* The SNARC, its viewBox cut to its ink (the full box had 16 of 96 units empty, which made the gap under it
@@ -246,12 +247,16 @@
   white-space: nowrap;
   text-transform: uppercase;
 }
-/* A hairline under the name, like a letterhead: as wide as the name's ink plus ½u each side. */
+/* Two rules under the name, a letterhead's double rule (the sp-rules sheet's #4): 5 px each with 5 px between
+   them, as wide as the name's ink plus ½u each side. One element: its two borders are the rules, its height
+   the gap. */
 .prntr-card-rule {
+  box-sizing: content-box;
   width: 11.25em;
-  height: 1px;
+  height: 5px;
   margin-top: 0.294em;
-  background: #4A4A4A;
+  border-top: 5px solid #4A4A4A;
+  border-bottom: 5px solid #4A4A4A;
 }
 
 .prntr-title-wrap {
@@ -442,6 +447,8 @@
 @media (max-width: 640px) {
   .prntr-card-brand { font-size: 18px; }
   .prntr-card-logo path { stroke-width: 2; }
+  /* the rules scale with the name (18 of 30): 3 px each, 3 px between */
+  .prntr-card-rule { height: 3px; border-width: 3px 0; }
   .prntr-title { gap: 2px; font-size: min(112px, 23.4vw, calc(56px * var(--s, 5))); }
   .prntr-prompt { font-size: 16px; letter-spacing: 0.06em; }
   .prntr-footer { font-size: 8px; gap: 8px; }
@@ -1534,8 +1541,9 @@
   touch-action: pan-y;
   user-select: none;
   -webkit-user-select: none;
-  /* A row is 31 characters with the letter spacing, the marker's column and a cleared row's star: 35.9 of this
-     size wide on a desktop and a little more at a phone's size, so the rows keep a gutter inside the frame's band. */
+  /* A row is 31 characters with the letter spacing after the marker's column (a cleared row's star, the own row's
+     arrow): 34.5 of this size wide. The card is 35.9 wide and the phone's divisor 36.4, so the rows keep a gutter
+     inside the frame's band. */
   --band: 36px;
   --prntr-board-row: clamp(7px, calc((100vw - 64px - 2 * var(--band)) / 36.4), 13px);
 }
@@ -1629,22 +1637,59 @@
   cursor: default;
 }
 
-/* The local view's parts sit in a box that lays out as if it were not there; on WORLD the box, the clear and the
-   note go, and the world's place comes. */
+/* The card is one size on LOCAL and WORLD, whatever the board holds (PRNTR-BOARD.md §19): the two views lie in one
+   cell, and the local one is always ten rows and the run's out line tall (16 + 1.2 row sizes and the list's gap). On
+   WORLD it keeps its place unseen, and so does a note. */
+.prntr-board-body {
+  display: grid;
+  justify-items: center;
+  width: 100%;
+}
+
+.prntr-board-body > * {
+  grid-area: 1 / 1;
+}
+
 .prntr-board-local {
-  display: contents;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+  z-index: 1;
+  min-height: calc(17.2 * var(--prntr-board-row) + 12px);
 }
 
 .prntr-board-card.is-world .prntr-board-local,
-.prntr-board-card.is-world .prntr-board-clear,
-.prntr-board-card.is-world .prntr-board-note,
+.prntr-board-card.is-world .prntr-board-note {
+  visibility: hidden;
+}
+
+/* On LOCAL the world's place stays behind the rows as a watermark (the board-local sheet's #2): no ribbon, the mark
+   half as large again and in a tone of the mat. */
 .prntr-board-card:not(.is-world) .prntr-board-soon {
+  pointer-events: none;
+}
+
+.prntr-board-card:not(.is-world) .prntr-board-ribbon {
   display: none;
 }
 
+.prntr-board-card:not(.is-world) .prntr-board-mark {
+  width: calc(14.4em * 160 / 138);
+  height: 14.4em;
+  color: #2D2049;
+}
+
+/* The rows, NOBODY YET. and the out line share a left edge. */
+.prntr-board-list {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+}
+
 /* The world's place until there is a world board (the world-ten sheet's #6): COMING SOON on a ribbon in the title's
-   yellow, its ends notched in three steps, over the opening's cut mark in the same yellow. As tall as ten rows, so a
-   full board's card keeps its height between the views. */
+   yellow, its ends notched in three steps, over the opening's cut mark in the same yellow. As tall as the cell. */
 .prntr-board-soon {
   display: flex;
   flex-direction: column;
@@ -1653,7 +1698,6 @@
   gap: 1.1em;
   box-sizing: border-box;
   width: 100%;
-  min-height: 16em;
   font-size: var(--prntr-board-row);
 }
 
@@ -1671,11 +1715,12 @@
   );
 }
 
-/* The mark's box is 160 × 138. */
+/* The mark's box is 160 × 138; its ink is the element's colour. */
 .prntr-board-mark {
   display: block;
   width: calc(9.6em * 160 / 138);
   height: 9.6em;
+  color: #FFD91A;
 }
 
 .prntr-board-run {
@@ -1687,13 +1732,15 @@
 /* The run that is not on the board: a grey line under the rows, in the rows' type and column. */
 .prntr-board-run.is-out {
   margin-top: -0.4em;
-  padding-left: 1.2em;
+  padding-left: 1.6em;
   font-size: var(--prntr-board-row);
   color: #BDBDBD;
   text-align: left;
 }
 
 .prntr-board-rows {
+  /* ten rows' room, however few are kept */
+  min-height: 16em;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -1713,45 +1760,72 @@
   color: var(--prntr-board-own, #FFD91A);
 }
 
-/* A cleared run's row ends in a gold star: a 7 × 7 pixel star cut from a square of the row's size. */
+/* A cleared run's row starts with a gold star, in the marker's column: a 7 × 7 pixel star cut from a square of the
+   row's size. */
 .prntr-board-rows li:not(.is-lost)::after {
   content: '';
-  display: inline-block;
+  position: absolute;
+  left: 0;
+  top: 0.26em;
   width: 1em;
   height: 1em;
-  margin-left: 0.34em;
-  vertical-align: -0.08em;
   background: #F3CA4A;
   clip-path: polygon(42.857% 0, 57.143% 0, 57.143% 28.571%, 100% 28.571%, 100% 42.857%, 85.714% 42.857%, 85.714% 57.143%, 71.429% 57.143%, 71.429% 71.429%, 85.714% 71.429%, 85.714% 100%, 71.429% 100%, 71.429% 85.714%, 57.143% 85.714%, 57.143% 71.429%, 42.857% 71.429%, 42.857% 85.714%, 28.571% 85.714%, 28.571% 100%, 14.286% 100%, 14.286% 71.429%, 28.571% 71.429%, 28.571% 57.143%, 14.286% 57.143%, 14.286% 42.857%, 0 42.857%, 0 28.571%, 42.857% 28.571%);
 }
 
-/* The rows leave a column for the marker that points at the run's own row. */
+/* The rows leave a column for the marker. The run's own row blinks there: its star if it was cleared, an arrow if it
+   was a game over. */
 .prntr-board-rows li {
   position: relative;
-  padding-left: 1.2em;
+  padding-left: 1.6em;
 }
 
-.prntr-board-rows .is-new::before {
+.prntr-board-rows .is-new:not(.is-lost)::after {
+  animation: prntr-blink 700ms step-end infinite;
+}
+
+.prntr-board-rows .is-new.is-lost::before {
   content: '>';
   position: absolute;
   left: 0;
   animation: prntr-blink 700ms step-end infinite;
 }
 
-.prntr-board-card.is-still .prntr-board-rows .is-new::before {
+.prntr-board-card.is-still .prntr-board-rows .is-new::before,
+.prntr-board-card.is-still .prntr-board-rows .is-new::after {
   animation: none;
 }
 
+/* NOBODY YET., in the middle of the ten rows' room. */
 .prntr-board-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  align-self: stretch;
+  min-height: calc(16 * var(--prntr-board-row));
   font-size: 13px;
   color: #BDBDBD;
 }
 
+/* The buttons: three sets in one cell (CONTINUE and CLEAR THE BOARD; YOU SURE?, YES and CANCEL; OK). The one asked
+   for is seen; the others keep their room, so the cell is as tall as the tallest of them at any width. */
 .prntr-board-buttons {
+  display: grid;
+  justify-items: center;
+}
+
+.prntr-board-set {
+  grid-area: 1 / 1;
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
+  align-content: flex-start;
+  align-items: center;
   gap: 12px;
+}
+
+.prntr-board-set.is-off {
+  visibility: hidden;
 }
 
 .prntr-board-buttons button {
@@ -1776,11 +1850,25 @@
   color: #FFD91A !important;
 }
 
-/* The clear's question: YOU SURE? in the title's yellow over YES (red: it takes everything down
-   and leaves) and CANCEL (white). */
+/* Nothing to clear (an empty board, WORLD): greyed in its place, as a tab that cannot be pressed. */
+.prntr-board-buttons .prntr-board-clear:disabled {
+  border-color: #5E5A52;
+  color: #5E5A52;
+  cursor: default;
+}
+
+/* The clear's question: YOU SURE? in the title's yellow before YES (red: it takes everything down
+   and leaves) and CANCEL (white), on the buttons' line; on a phone, on its own line over them. */
 .prntr-board-sure {
   font-size: 13px;
+  line-height: 1.6;
   color: #FFD91A;
+}
+
+@media (max-width: 599px) {
+  .prntr-board-sure {
+    flex-basis: 100%;
+  }
 }
 
 .prntr-board-yes {
@@ -1799,6 +1887,11 @@
   font-size: 9px;
   line-height: 1.6;
   color: #BDBDBD;
+}
+
+/* no note, no room for one (and none of the card's gap) */
+.prntr-board-note:empty {
+  display: none;
 }
 
 /* The name asked for a ranking run the badge left NULL (PRNTR-BOARD.md §15.3, §17): a field in the name's place of
