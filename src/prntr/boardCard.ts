@@ -46,7 +46,8 @@ export interface BoardCard {
   /** The name asked for (§15.3, §17): the field, in the run's row where it will stand on the board, and OK. */
   nameInput: HTMLInputElement;
   okBtn: HTMLButtonElement;
-  /** The rows, the run's own row marked at newRank (-1: none); a game over's row is grey, a cleared one has a star. */
+  /** The rows, the run's own row marked at newRank (-1: none); a game over's row is grey, a cleared one has a star
+   * before it. The own row's marker blinks: its star, or an arrow on a game over's. */
   showRows: (rows: BoardRow[], newRank: number) => void;
   /** The grey line under the rows ('' hides it) and the note. */
   showOut: (text: string, note: string) => void;

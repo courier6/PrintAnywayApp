@@ -1541,8 +1541,9 @@
   touch-action: pan-y;
   user-select: none;
   -webkit-user-select: none;
-  /* A row is 31 characters with the letter spacing, the marker's column and a cleared row's star: 35.9 of this
-     size wide on a desktop and a little more at a phone's size, so the rows keep a gutter inside the frame's band. */
+  /* A row is 31 characters with the letter spacing after the marker's column (a cleared row's star, the own row's
+     arrow): 34.5 of this size wide. The card is 35.9 wide and the phone's divisor 36.4, so the rows keep a gutter
+     inside the frame's band. */
   --band: 36px;
   --prntr-board-row: clamp(7px, calc((100vw - 64px - 2 * var(--band)) / 36.4), 13px);
 }
@@ -1718,7 +1719,7 @@
 /* The run that is not on the board: a grey line under the rows, in the rows' type and column. */
 .prntr-board-run.is-out {
   margin-top: -0.4em;
-  padding-left: 1.2em;
+  padding-left: 1.6em;
   font-size: var(--prntr-board-row);
   color: #BDBDBD;
   text-align: left;
@@ -1746,32 +1747,39 @@
   color: var(--prntr-board-own, #FFD91A);
 }
 
-/* A cleared run's row ends in a gold star: a 7 × 7 pixel star cut from a square of the row's size. */
+/* A cleared run's row starts with a gold star, in the marker's column: a 7 × 7 pixel star cut from a square of the
+   row's size. */
 .prntr-board-rows li:not(.is-lost)::after {
   content: '';
-  display: inline-block;
+  position: absolute;
+  left: 0;
+  top: 0.26em;
   width: 1em;
   height: 1em;
-  margin-left: 0.34em;
-  vertical-align: -0.08em;
   background: #F3CA4A;
   clip-path: polygon(42.857% 0, 57.143% 0, 57.143% 28.571%, 100% 28.571%, 100% 42.857%, 85.714% 42.857%, 85.714% 57.143%, 71.429% 57.143%, 71.429% 71.429%, 85.714% 71.429%, 85.714% 100%, 71.429% 100%, 71.429% 85.714%, 57.143% 85.714%, 57.143% 71.429%, 42.857% 71.429%, 42.857% 85.714%, 28.571% 85.714%, 28.571% 100%, 14.286% 100%, 14.286% 71.429%, 28.571% 71.429%, 28.571% 57.143%, 14.286% 57.143%, 14.286% 42.857%, 0 42.857%, 0 28.571%, 42.857% 28.571%);
 }
 
-/* The rows leave a column for the marker that points at the run's own row. */
+/* The rows leave a column for the marker. The run's own row blinks there: its star if it was cleared, an arrow if it
+   was a game over. */
 .prntr-board-rows li {
   position: relative;
-  padding-left: 1.2em;
+  padding-left: 1.6em;
 }
 
-.prntr-board-rows .is-new::before {
+.prntr-board-rows .is-new:not(.is-lost)::after {
+  animation: prntr-blink 700ms step-end infinite;
+}
+
+.prntr-board-rows .is-new.is-lost::before {
   content: '>';
   position: absolute;
   left: 0;
   animation: prntr-blink 700ms step-end infinite;
 }
 
-.prntr-board-card.is-still .prntr-board-rows .is-new::before {
+.prntr-board-card.is-still .prntr-board-rows .is-new::before,
+.prntr-board-card.is-still .prntr-board-rows .is-new::after {
   animation: none;
 }
 
