@@ -1816,7 +1816,8 @@
 }
 
 /* The buttons: three sets in one cell (CONTINUE and CLEAR THE BOARD; YOU SURE?, YES and CANCEL; OK). The one asked
-   for is seen; the others keep their room, so the cell is as tall as the tallest of them at any width. */
+   for is seen; the others keep their room, so the cell is as tall as the tallest of them at any width. A fourth,
+   never seen, is a copy of the first's two buttons: it keeps their room on WORLD, where CONTINUE is alone. */
 .prntr-board-buttons {
   display: grid;
   justify-items: center;
@@ -1858,11 +1859,17 @@
   color: #FFD91A !important;
 }
 
-/* Nothing to clear (an empty board, WORLD): greyed in its place, as a tab that cannot be pressed. */
+/* Nothing to clear (an empty board): greyed in its place, as a tab that cannot be pressed. */
 .prntr-board-buttons .prntr-board-clear:disabled {
   border-color: #5E5A52;
   color: #5E5A52;
   cursor: default;
+}
+
+/* WORLD has nothing of the player's to clear: the button is gone and CONTINUE stands in the middle. The cell
+   keeps its height from the sets not shown, one of them an unseen copy of these two buttons (boardCard.ts). */
+.prntr-board-card.is-world .prntr-board-clear {
+  display: none;
 }
 
 /* The clear's question: YOU SURE? in the title's yellow before YES (red: it takes everything down
