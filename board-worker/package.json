@@ -6,7 +6,9 @@
     "node": ">=24"
   },
   "scripts": {
-    "dev": "wrangler dev --env dev",
+    "dev": "node local.mjs migrate && wrangler dev --env dev --port 8787",
+    "seed": "node local.mjs seed",
+    "reset": "node local.mjs reset",
     "check": "tsc",
     "test": "node test.mjs",
     "deploy": "wrangler deploy"

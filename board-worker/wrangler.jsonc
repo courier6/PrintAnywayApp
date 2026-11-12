@@ -35,6 +35,9 @@
   // BLOCKED (the refused names) is a secret: `wrangler secret put BLOCKED`. Until it is set, POST /run answers 503.
   "env": {
     "dev": {
+      // Routes are inherited: without this, `wrangler deploy --env dev` would move the board's hostname to a Worker
+      // with the stand-in list and this machine's origins. The dev environment is never deployed.
+      "routes": [],
       "d1_databases": [
         {
           "binding": "DB",
