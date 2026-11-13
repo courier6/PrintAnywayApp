@@ -1,6 +1,8 @@
 import { Component, Suspense, lazy, useState, type CSSProperties, type ReactNode } from 'react';
+import { whenIdle } from '../prntr/anim';
 import type { BoardRun } from '../prntr/PrntrBoard';
 import type { Certificate } from '../prntr/types';
+import { warmPrntrAudio } from './prntrAudio';
 
 type PrntrModule = typeof import('../prntr/Prntr');
 /** The chunk once it is in (the trigger's prefetch, or an earlier run): rendered directly, not through lazy. */
@@ -20,15 +22,37 @@ const LOADING: CSSProperties = { position: 'fixed', inset: 0, zIndex: 100, backg
  * Warms the Prntr chunk (JS + CSS + @font-face) and its two fonts, so the opening
  * starts at once when the trigger is clicked. Called when the "Other" help item
  * opens. Failures are ignored: the real import retries on entry.
+ * Then, in idle moments, the sound: the audio context is made and the opening's cues are rendered one at a
+ * time, which the click that opens Prntr would otherwise do in its own frame (some 200 ms before anything
+ * shows). A click that comes first finds whatever is missing and makes it, as before.
+ * Last, what a GPU builds the first time it is asked for it, each in a moment of its own: the storm's kinds of
+ * drawing, the ripple's program, the wall print. Without them a first visit pays for each in the frame that first
+ * shows it.
  */
 export function prefetchPrntr(): void {
   void loadPrntr()
-    .then(() =>
+    .then((m) =>
       Promise.all([
         document.fonts.load('700 220px "Comic Neue"'),
         document.fonts.load('16px "Press Start 2P"'),
-      ]),
+      ]).then(() => m),
     )
+    .then((m) => {
+      whenIdle(() => {
+        const looks = () => {
+          m.warmStorm(Math.min(220, 0.27 * window.innerWidth, 56 * m.frameScale(window.innerWidth, window.innerHeight)));
+          whenIdle(() => {
+            m.warmRipple();
+            whenIdle(() => void m.warmPrint());
+          });
+        };
+        const rate = warmPrntrAudio();
+        // no context yet (no gesture the browser can vouch for, or no Web Audio): the click makes the sound, as before
+        if (rate === null) return whenIdle(looks);
+        const next = () => whenIdle(m.warmCue(rate) ? next : looks);
+        whenIdle(next);
+      });
+    })
     .catch(() => undefined);
 }
 
