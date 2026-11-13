@@ -22,6 +22,11 @@
   inset: 0;
   z-index: 100;
   overflow: hidden;
+  /* Out of a browser's forced dark mode (Chrome's Auto Dark Mode), which recolours the DOM layers and leaves the
+     canvases alone: the flash's white wash came out dark, the rounds dark brown. "only" is what opts out; the
+     app's own "light" (app.css) does not. Chrome honours it only where the preferred scheme is dark too. The
+     board over the app (.prntr-board) is its own root and says it too. */
+  color-scheme: only light;
   background: #000000;
   color: #EDEDED;
   outline: none;
@@ -1526,6 +1531,7 @@
   position: fixed;
   inset: 0;
   z-index: 120;
+  color-scheme: only light; /* as .prntr: out of a forced dark mode */
   display: flex;
   align-items: center;
   justify-content: center;
