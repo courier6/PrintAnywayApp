@@ -382,36 +382,51 @@ function renderCredit(sr: number, p: CreditParams): Samples {
   return finish(lofi(x, p.lofi.bits, p.lofi.hold), sr, p.peak, 0.004);
 }
 
+/** Each cue's recipe at a sample rate, in the order they are warmed: the three tails are the long ones. */
+const RECIPES: Record<CueName | TailName, (sr: number) => Samples> = {
+  discoverBLow: (sr) => renderDiscovery(sr, DISCOVERY.discoverBLow),
+  discoverD: (sr) => renderDiscovery(sr, DISCOVERY.discoverD),
+  discoverDLow: (sr) => renderDiscovery(sr, DISCOVERY.discoverDLow),
+  creditA: (sr) => renderCredit(sr, CREDIT.creditA),
+  discoverBLowTail: (sr) => renderTail(sr, DISCOVERY.discoverBLow),
+  discoverDTail: (sr) => renderTail(sr, DISCOVERY.discoverD),
+  discoverDLowTail: (sr) => renderTail(sr, DISCOVERY.discoverDLow),
+};
+const RECIPE_NAMES = Object.keys(RECIPES) as (CueName | TailName)[];
+
 /** Render every cue (and the discovery tails) to raw sample arrays at `sr`. Pure. */
 export function renderAllCues(sr = 44100): Record<CueName | TailName, Samples> {
-  return {
-    discoverBLow: renderDiscovery(sr, DISCOVERY.discoverBLow),
-    discoverD: renderDiscovery(sr, DISCOVERY.discoverD),
-    discoverDLow: renderDiscovery(sr, DISCOVERY.discoverDLow),
-    creditA: renderCredit(sr, CREDIT.creditA),
-    discoverBLowTail: renderTail(sr, DISCOVERY.discoverBLow),
-    discoverDTail: renderTail(sr, DISCOVERY.discoverD),
-    discoverDLowTail: renderTail(sr, DISCOVERY.discoverDLow),
-  };
+  return Object.fromEntries(RECIPE_NAMES.map((name) => [name, RECIPES[name](sr)])) as Record<CueName | TailName, Samples>;
 }
 
 // ---------------------------------------------------------------------------
 // Player
 // ---------------------------------------------------------------------------
 
-/** Rendered once per sample rate; re-entering Prntr never renders again. */
-const rendered = new Map<number, Record<CueName | TailName, Samples>>();
+/** Rendered once per sample rate, cue by cue; re-entering Prntr never renders again. */
+const rendered = new Map<number, Partial<Record<CueName | TailName, Samples>>>();
 
 /** Lives for the session (this chunk's module scope): never the same discovery cue twice in a row. */
 let lastDiscovery: DiscoveryName | null = null;
 
 function samplesFor(sr: number): Record<CueName | TailName, Samples> {
   let all = rendered.get(sr);
-  if (!all) {
-    all = renderAllCues(sr);
-    rendered.set(sr, all);
-  }
-  return all;
+  if (!all) rendered.set(sr, (all = {}));
+  for (const name of RECIPE_NAMES) all[name] ??= RECIPES[name](sr);
+  return all as Record<CueName | TailName, Samples>;
+}
+
+/**
+ * Renders one cue that is not rendered yet at `sr`, and says whether more are left. The host calls it in idle
+ * moments while the game's chunk is warm and not yet entered, so the click that opens Prntr does not render
+ * twelve seconds of sound in its own frame; whatever is still missing then is rendered as before.
+ */
+export function warmCue(sr: number): boolean {
+  let all = rendered.get(sr);
+  if (!all) rendered.set(sr, (all = {}));
+  const name = RECIPE_NAMES.find((n) => !all[n]);
+  if (name) all[name] = RECIPES[name](sr);
+  return RECIPE_NAMES.some((n) => !all[n]);
 }
 
 export function createPrntrAudio(context: AudioContext | null): PrntrAudio {

@@ -1,6 +1,8 @@
 import { Component, Suspense, lazy, useState, type CSSProperties, type ReactNode } from 'react';
+import { whenIdle } from '../prntr/anim';
 import type { BoardRun } from '../prntr/PrntrBoard';
 import type { Certificate } from '../prntr/types';
+import { warmPrntrAudio } from './prntrAudio';
 
 type PrntrModule = typeof import('../prntr/Prntr');
 /** The chunk once it is in (the trigger's prefetch, or an earlier run): rendered directly, not through lazy. */
@@ -20,15 +22,28 @@ const LOADING: CSSProperties = { position: 'fixed', inset: 0, zIndex: 100, backg
  * Warms the Prntr chunk (JS + CSS + @font-face) and its two fonts, so the opening
  * starts at once when the trigger is clicked. Called when the "Other" help item
  * opens. Failures are ignored: the real import retries on entry.
+ * Then, in idle moments, the sound: the audio context is made and the opening's cues are rendered one at a
+ * time, which the click that opens Prntr would otherwise do in its own frame (some 200 ms before anything
+ * shows). A click that comes first finds whatever is missing and makes it, as before.
  */
 export function prefetchPrntr(): void {
   void loadPrntr()
-    .then(() =>
+    .then((m) =>
       Promise.all([
         document.fonts.load('700 220px "Comic Neue"'),
         document.fonts.load('16px "Press Start 2P"'),
-      ]),
+      ]).then(() => m),
     )
+    .then((m) => {
+      whenIdle(() => {
+        const rate = warmPrntrAudio();
+        if (rate === null) return;
+        const next = () => {
+          if (m.warmCue(rate)) whenIdle(next);
+        };
+        whenIdle(next);
+      });
+    })
     .catch(() => undefined);
 }
 

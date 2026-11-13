@@ -13,6 +13,7 @@ import { STAGES } from './stages';
 import type { Certificate, StageContext } from './types';
 
 export { createVortex } from './vortex';
+export { warmCue } from './audio';
 export { PrntrBoard } from './PrntrBoard';
 
 /** After a finished run, how long its last sounds (the fanfare, the game-over sting) may play on. */

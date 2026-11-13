@@ -33,6 +33,12 @@ export function wait(ms: number, signal: AbortSignal): Promise<void> {
   });
 }
 
+/** Runs `work` when the page has a moment to spare: within a second, or after 50 ms where a browser cannot say when that is. */
+export function whenIdle(work: () => void): void {
+  if (typeof window.requestIdleCallback === 'function') window.requestIdleCallback(work, { timeout: 1000 });
+  else window.setTimeout(work, 50);
+}
+
 /**
  * Calls draw(t) once per frame for `ms`, t going 0 → 1, always ending with
  * draw(1) unless aborted. In the reduced mode it draws t = 1 at once.
