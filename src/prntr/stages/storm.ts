@@ -378,6 +378,68 @@ function hash(n: number): number {
   return (x >>> 0) / 4294967296;
 }
 
+/**
+ * Draws once, on a scratch canvas, each kind of thing the storm's canvases draw later: a cloud's picture, the torn
+ * red cloud's pieces under their blurred glow (straight and tilted, solid and ghosted), the far lightning's glow,
+ * the place enlarged cell for cell, the rain's rects. A browser builds a GPU program for each kind the first time
+ * it is drawn and keeps it from then on, and that first time holds every frame back for 100 ms and more: at the
+ * credit's flicker, which is 70 ms long, and at the first far strike. Drawn here, in an idle moment before the game
+ * is opened (the host's prefetch), the wait falls where nothing moves. `font` is the title's size in px, which
+ * sets the glow's blur. The one-pixel read at the end makes the browser draw it all now.
+ */
+export function warmStorm(font: number): void {
+  const P = Math.max(2, Math.round(font / 24));
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = 512;
+  const g = canvas.getContext('2d');
+  const pic = document.createElement('canvas');
+  pic.width = 96;
+  pic.height = 48;
+  const pg = pic.getContext('2d');
+  const small = document.createElement('canvas');
+  small.width = small.height = 32;
+  const sg = small.getContext('2d', { willReadFrequently: true });
+  if (!g || !pg || !sg) return;
+  pg.fillStyle = RED[0];
+  pg.fillRect(0, 0, 96, 48);
+  pg.fillStyle = RED[2];
+  pg.fillRect(8, 8, 40, 24);
+  sg.fillStyle = SIL_FAR;
+  sg.fillRect(0, 0, 32, 32);
+  g.clearRect(0, 0, 512, 512);
+  g.drawImage(pic, 8, 8);
+  g.imageSmoothingEnabled = false;
+  g.shadowColor = RED_GLOW;
+  g.shadowBlur = 6 * P;
+  for (const [rot, alpha] of [[0, 1], [0.2, 1], [0, 0.5], [-0.2, 0.5]]) {
+    g.save();
+    g.globalAlpha = alpha;
+    g.translate(256, 256);
+    g.rotate(rot);
+    g.drawImage(pic, 10, 6, 60, 20, -30, -10, 60, 20);
+    g.restore();
+  }
+  g.shadowBlur = 0;
+  const glow = g.createRadialGradient(128, 384, 0, 128, 384, 10 * P);
+  glow.addColorStop(0, FAR_GLOW);
+  glow.addColorStop(1, 'rgba(150, 170, 220, 0)');
+  g.fillStyle = FAR_FLASH;
+  g.fillRect(0, 0, 512, 512);
+  g.fillStyle = glow;
+  g.fillRect(128 - 10 * P, 384 - 10 * P, 20 * P, 20 * P);
+  g.drawImage(small, 300, 300, 128, 128);
+  g.fillStyle = WATER;
+  g.fillRect(40, 300, P, 3 * P);
+  g.globalAlpha = 0.5;
+  g.fillStyle = ASH;
+  g.fillRect(60, 300, 2, 2);
+  g.globalAlpha = 1;
+  g.getImageData(0, 0, 1, 1);
+  canvas.width = canvas.height = 0;
+  pic.width = pic.height = 0;
+  small.width = small.height = 0;
+}
+
 export function startStorm(root: HTMLElement, h1: HTMLElement, slots: StormSlot[], letterIn: (i: number) => boolean, reduced: boolean, audio: PrntrAudio): Storm {
   const canvas = document.createElement('canvas');
   canvas.className = 'prntr-storm';

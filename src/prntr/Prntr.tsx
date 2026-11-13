@@ -14,6 +14,10 @@ import type { Certificate, StageContext } from './types';
 
 export { createVortex } from './vortex';
 export { warmCue } from './audio';
+export { warmStorm } from './stages/storm';
+export { frameScale } from './stages/room/pixels';
+export { warmRipple } from './stages/room/ripple';
+export { renderVictory as warmPrint } from './stages/room/art';
 export { PrntrBoard } from './PrntrBoard';
 
 /** After a finished run, how long its last sounds (the fanfare, the game-over sting) may play on. */

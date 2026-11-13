@@ -105,6 +105,35 @@ function build(gl: WebGLRenderingContext): WebGLProgram {
   return prog;
 }
 
+/**
+ * Builds the ripple's program once on a context of its own and lets the context go. A browser keeps a built program
+ * by its source, so the two views a room makes get theirs from that store; the first WebGL context of a page is
+ * the slow one besides. Called by the host's prefetch, in an idle moment before the game is opened, so that neither
+ * wait falls in the frame that builds the room. Nothing happens where there is no WebGL.
+ */
+export function warmRipple(): void {
+  try {
+    const canvas = document.createElement('canvas');
+    canvas.width = canvas.height = 1;
+    const gl = canvas.getContext('webgl', CONTEXT);
+    if (!gl) return;
+    build(gl);
+    for (let i = 0; i < 2; i++) {
+      gl.activeTexture(gl.TEXTURE0 + i);
+      gl.bindTexture(gl.TEXTURE_2D, gl.createTexture());
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, CLEAR_PIXEL);
+    }
+    gl.drawArrays(gl.TRIANGLES, 0, 6);
+    // one pixel read back, so that the program is built now and not when a frame first needs it
+    gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(4));
+    gl.getExtension('WEBGL_lose_context')?.loseContext();
+  } catch {
+    // a browser that cannot build it here cannot in the room either, where the slam goes without its ripple
+  }
+}
+
 /** A layer's pixels (an ImageData uploads without a read back from the GPU) and the rect it covers, in virtual px. */
 export interface RippleLayer {
   src: ImageData | HTMLCanvasElement;
