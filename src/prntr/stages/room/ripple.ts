@@ -72,6 +72,39 @@ void main() {
   gl_FragColor = c;
 }`;
 
+/** One clear pixel, for a texture that has nothing to show. An ImageData like the layers themselves: Firefox writes
+ * a console warning for every texture given no data at all, and another for every upload of plain bytes while
+ * premultiplying is on. */
+const CLEAR_PIXEL = new ImageData(1, 1);
+
+/** The context every ripple canvas asks for. */
+const CONTEXT: WebGLContextAttributes = { alpha: true, premultipliedAlpha: true, antialias: false, depth: false, stencil: false };
+
+/** The ripple's program, linked and in use on `gl`, its two triangles over the whole canvas bound. Throws if the
+ * browser cannot compile it. */
+function build(gl: WebGLRenderingContext): WebGLProgram {
+  const shader = (type: number, src: string) => {
+    const s = gl.createShader(type)!;
+    gl.shaderSource(s, src);
+    gl.compileShader(s);
+    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(`prntr: ripple shader: ${gl.getShaderInfoLog(s)}`);
+    return s;
+  };
+  const prog = gl.createProgram()!;
+  gl.attachShader(prog, shader(gl.VERTEX_SHADER, VERT));
+  gl.attachShader(prog, shader(gl.FRAGMENT_SHADER, FRAG));
+  gl.linkProgram(prog);
+  if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(`prntr: ripple program: ${gl.getProgramInfoLog(prog)}`);
+  gl.useProgram(prog);
+  // two triangles over the whole canvas
+  gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1]), gl.STATIC_DRAW);
+  const a = gl.getAttribLocation(prog, 'a');
+  gl.enableVertexAttribArray(a);
+  gl.vertexAttribPointer(a, 2, gl.FLOAT, false, 0, 0);
+  return prog;
+}
+
 /** A layer's pixels (an ImageData uploads without a read back from the GPU) and the rect it covers, in virtual px. */
 export interface RippleLayer {
   src: ImageData | HTMLCanvasElement;
@@ -79,59 +112,63 @@ export interface RippleLayer {
   y: number;
   w: number;
   h: number;
+  /** True in a frame that has drawn nothing on the layer: its texture is then one clear pixel and the layer is not
+   * uploaded. A canvas the size of the frame that nothing has drawn on is the slowest thing a browser can be asked to
+   * upload (some 3.5 ms a frame at 2640 × 1760), and the page layer is that for most of every ripple. */
+  empty?: () => boolean;
 }
 
-/** A WebGL canvas that redraws `top` (and `under` where `top` is see-through) bent by the ripple. */
+/**
+ * A WebGL canvas that redraws `top` (and `under` where `top` is see-through) bent by the ripple.
+ * It is on the page for the whole room and shown for the 1.6 s of a slam's ripple. Its context and program are made
+ * with the room, before the room shows, so that work never falls in a frame the player is watching. The canvas is one
+ * pixel large until a slam begins (wake), when it takes the frame's size and draws once unbent, out of sight, so
+ * the textures are on the GPU before the landing shows them. After the ripple it is one pixel again and its
+ * textures are emptied (rest): at the screen's resolution the canvas is the size of the whole frame, twice over
+ * with its front buffer, and the page layer's texture is as large again.
+ */
 export class RippleView {
   readonly canvas: HTMLCanvasElement;
+  /** Null when the browser gives no WebGL (or the program fails): the slam goes without its ripple. */
+  private readonly gl: WebGLRenderingContext | null;
   private lost = false;
+  private awake = false;
   private px = 1;
   private readonly u: Record<string, WebGLUniformLocation | null> = {};
   private readonly tex: WebGLTexture[] = [];
 
-  /** Null when the browser gives no WebGL: the slam goes without its ripple. */
-  static create(className: string, top: RippleLayer, under?: RippleLayer): RippleView | null {
-    const canvas = document.createElement('canvas');
-    canvas.className = className;
-    canvas.setAttribute('aria-hidden', 'true');
-    const gl = canvas.getContext('webgl', { alpha: true, premultipliedAlpha: true, antialias: false, depth: false, stencil: false });
-    if (!gl) return null;
-    try {
-      return new RippleView(canvas, gl, top, under);
-    } catch {
-      return null;
-    }
+  /** The view, its canvas ready for the page. Without WebGL it is a canvas that never shows. */
+  static create(className: string, top: RippleLayer, under?: RippleLayer): RippleView {
+    return new RippleView(className, top, under);
   }
 
   private constructor(
-    canvas: HTMLCanvasElement,
-    private readonly gl: WebGLRenderingContext,
+    className: string,
     private readonly top: RippleLayer,
     private readonly under?: RippleLayer,
   ) {
-    this.canvas = canvas;
+    const canvas = document.createElement('canvas');
+    canvas.className = className;
+    canvas.setAttribute('aria-hidden', 'true');
+    canvas.width = canvas.height = 1;
     canvas.addEventListener('webglcontextlost', () => {
       this.lost = true;
     });
-    const shader = (type: number, src: string) => {
-      const s = gl.createShader(type)!;
-      gl.shaderSource(s, src);
-      gl.compileShader(s);
-      if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(`prntr: ripple shader: ${gl.getShaderInfoLog(s)}`);
-      return s;
-    };
-    const prog = gl.createProgram()!;
-    gl.attachShader(prog, shader(gl.VERTEX_SHADER, VERT));
-    gl.attachShader(prog, shader(gl.FRAGMENT_SHADER, FRAG));
-    gl.linkProgram(prog);
-    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(`prntr: ripple program: ${gl.getProgramInfoLog(prog)}`);
-    gl.useProgram(prog);
-    // two triangles over the whole canvas
-    gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1]), gl.STATIC_DRAW);
-    const a = gl.getAttribLocation(prog, 'a');
-    gl.enableVertexAttribArray(a);
-    gl.vertexAttribPointer(a, 2, gl.FLOAT, false, 0, 0);
+    this.canvas = canvas;
+    let gl: WebGLRenderingContext | null = null;
+    try {
+      gl = this.setup();
+    } catch {
+      gl = null;
+    }
+    this.gl = gl;
+  }
+
+  private setup(): WebGLRenderingContext | null {
+    const { top, under } = this;
+    const gl = this.canvas.getContext('webgl', CONTEXT);
+    if (!gl) return null;
+    const prog = build(gl);
     for (const name of ['uTop', 'uUnder', 'uTopSize', 'uUnderRect', 'uUnderSize', 'uHasUnder', 'uPx', 'uViewH', 'uC', 'uT']) this.u[name] = gl.getUniformLocation(prog, name);
     gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
     for (let i = 0; i < 2; i++) {
@@ -150,38 +187,82 @@ export class RippleView {
     gl.uniform1f(this.u.uHasUnder, under ? 1 : 0);
     if (under) {
       gl.uniform4f(this.u.uUnderRect, under.x, under.y, under.w, under.h);
+      // The grid the under layer is bent on is its size now, when the view is made. For the page layer that is
+      // before the room has sized it (a canvas's own 300 × 150): the grid the page has always had in the ripple.
       gl.uniform2f(this.u.uUnderSize, under.src.width, under.src.height);
     }
+    return gl;
   }
 
-  /** `px` device px to the virtual px: the canvas is the frame's size at the screen's resolution. */
+  /** `px` device px to the virtual px: awake, the canvas is the frame's size at the screen's resolution. */
   resize(px: number): void {
     this.px = px;
-    this.canvas.width = Math.round(this.top.w * px);
-    this.canvas.height = Math.round(this.top.h * px);
+    if (this.awake) this.size();
+  }
+
+  private size(): void {
+    const w = Math.round(this.top.w * this.px);
+    const h = Math.round(this.top.h * this.px);
+    if (this.canvas.width !== w) this.canvas.width = w;
+    if (this.canvas.height !== h) this.canvas.height = h;
+  }
+
+  /** A slam has begun: the canvas takes its size and one frame is drawn unbent, while it is still out of sight. */
+  wake(): void {
+    if (this.awake || !this.gl || this.lost) return;
+    this.awake = true;
+    this.size();
+    this.paint(0, 0, -1);
+  }
+
+  /** The ripple is over: the canvas and its textures give their pixels back. */
+  rest(): void {
+    if (!this.awake) return;
+    this.awake = false;
+    this.canvas.width = this.canvas.height = 1;
+    const gl = this.gl;
+    if (!gl || this.lost || gl.isContextLost()) return;
+    for (let i = 0; i < this.tex.length; i++) this.clear(gl, i);
+  }
+
+  /** Texture `i` as one clear pixel. */
+  private clear(gl: WebGLRenderingContext, i: number): void {
+    gl.activeTexture(gl.TEXTURE0 + i);
+    gl.bindTexture(gl.TEXTURE_2D, this.tex[i]);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, CLEAR_PIXEL);
   }
 
   /** Releases the context (a browser allows a handful at once; the room is entered and left over and over in one
    * session). The view draws nothing after. */
   dispose(): void {
     const gl = this.gl;
+    this.rest();
     this.lost = true;
-    if (gl.isContextLost()) return;
+    if (!gl || gl.isContextLost()) return;
     for (const t of this.tex) gl.deleteTexture(t);
     gl.getExtension('WEBGL_lose_context')?.loseContext();
   }
 
   /** Draws the layers bent by the ripple `t` ms after a landing at virtual (cx, cy). False if it could not. */
   draw(cx: number, cy: number, t: number): boolean {
+    if (this.lost) return false;
+    this.wake();
+    return this.paint(cx, cy, t);
+  }
+
+  private paint(cx: number, cy: number, t: number): boolean {
     const gl = this.gl;
-    if (this.lost || gl.isContextLost()) return false;
+    if (!gl || this.lost || gl.isContextLost()) return false;
     const upload = (i: number, from: ImageData | HTMLCanvasElement) => {
       gl.activeTexture(gl.TEXTURE0 + i);
       gl.bindTexture(gl.TEXTURE_2D, this.tex[i]);
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, from);
     };
     upload(0, this.top.src);
-    if (this.under) upload(1, this.under.src);
+    if (this.under) {
+      if (this.under.empty?.()) this.clear(gl, 1);
+      else upload(1, this.under.src);
+    }
     gl.viewport(0, 0, this.canvas.width, this.canvas.height);
     gl.uniform1f(this.u.uPx, this.px);
     gl.uniform1f(this.u.uViewH, this.canvas.height);

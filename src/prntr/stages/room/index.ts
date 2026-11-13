@@ -705,7 +705,7 @@ export const room: Stage = {
     // (The print's canvas is uploaded as it is: it changes only where a shot holes it. The doc canvas fills the
     // front's hole in the player's page, bent with it.)
     const rippleBack = reduced ? null : RippleView.create('prntr-room-ripple', { src: pix.image, x: 0, y: 0, w: W, h: H }, { src: art, ...ART_AT });
-    const rippleFront = rippleBack && RippleView.create('prntr-room-ripple', { src: fpix.image, x: 0, y: 0, w: W, h: H }, { src: doc, x: 0, y: 0, w: W, h: H });
+    const rippleFront = rippleBack && RippleView.create('prntr-room-ripple', { src: fpix.image, x: 0, y: 0, w: W, h: H }, { src: doc, x: 0, y: 0, w: W, h: H, empty: () => !docInked });
     const light = el('div', 'prntr-room-light');
     const spill = el('div', 'prntr-room-spill');
     // The fire's light: an unpixelated orange glow sized to the flames each frame; one more over the burning
@@ -869,6 +869,8 @@ export const room: Stage = {
     let scale = 1;
     /** Device px to the virtual px on the doc canvas (frameScale makes it whole). */
     let docPx = 1;
+    /** The doc canvas has something on it: it is cleared for the next frame only then (it is the frame at the screen's resolution). */
+    let docInked = false;
     const fit = () => {
       scale = frameScale(root.clientWidth, root.clientHeight);
       frame.style.width = `${W * scale}px`;
@@ -3478,8 +3480,11 @@ export const room: Stage = {
       // What the machine throws goes on the front layer, over the slot's light, and the fire's
       // front flames with it: the flames on the burning machine were behind that glow too.
       fpix.clear();
-      dg.setTransform(1, 0, 0, 1, 0, 0);
-      dg.clearRect(0, 0, doc.width, doc.height);
+      if (docInked) {
+        dg.setTransform(1, 0, 0, 1, 0, 0);
+        dg.clearRect(0, 0, doc.width, doc.height);
+        docInked = false;
+      }
       if (scene.windowOpen) drawWindowWreck(fpix);
       if (scene.fire) drawFireFront(fpix, scene.fire, scene.printer === 'wreck' ? scene.pieces : null, scene.shake);
       // The marks on the glass, under the things in flight, the landed pages and the ink.
@@ -3516,13 +3521,19 @@ export const room: Stage = {
         if (r.h < spr.h) {
           // rising out of the slot: the rows above the slot so far; the player's page shows its content from the first
           fpix.blit(r.x, r.y, { w: spr.w, h: r.h, rows: spr.rows.slice(0, r.h) }, 1, p.doc ? { fine: docFine(1) } : {});
-          if (p.doc) DOC.draw(dg, docPx, r.x, r.y, 1, 'w', { rows: r.h });
+          if (p.doc) {
+            DOC.draw(dg, docPx, r.x, r.y, 1, 'w', { rows: r.h });
+            docInked = true;
+          }
           continue;
         }
         if (gone(p, now)) continue;
         const b = burnOf(p, now), burn = p.burning ? burnFine(13, r.sc, b, p.seed, tick) : undefined;
         fpix.blit(r.x, r.y, spr, r.sc, { ...(p.burning ? { remap: { K: 'G', w: 'r' } } : {}), fine: p.doc ? docFine(r.sc, burn) : burn });
-        if (p.doc) DOC.draw(dg, docPx, r.x, r.y, r.sc, p.burning ? 'r' : 'w', { fine: burn });
+        if (p.doc) {
+          DOC.draw(dg, docPx, r.x, r.y, r.sc, p.burning ? 'r' : 'w', { fine: burn });
+          docInked = true;
+        }
         if (p.burning) flying.push(...frontFire(r.x, r.y, r.w, r.h, r.sc, b, p.seed, tick));
       }
       if (flying.length) drawFlames(fpix, 'pages', flying, reduced ? 0 : now);
@@ -3536,7 +3547,10 @@ export const room: Stage = {
         const ly = Math.floor(p.y1 - 26 + slide);
         const b = burnOf(p, now), burn = p.burning ? burnFine(13, 4, b, p.seed + 100, tick) : undefined;
         fpix.blit(lx, ly, SPR.PAGE_PRINTED, 4, { skew: 10, ...(p.burning ? { remap: { K: 'G', w: 'r' } } : {}), fine: p.doc ? docFine(4, burn) : burn });
-        if (p.doc) DOC.draw(dg, docPx, lx, ly, 4, p.burning ? 'r' : 'w', { skew: 10, fine: burn });
+        if (p.doc) {
+          DOC.draw(dg, docPx, lx, ly, 4, p.burning ? 'r' : 'w', { skew: 10, fine: burn });
+          docInked = true;
+        }
         if (p.burning) {
           landed.push(...frontFire(lx + 3, ly, 40, 52, 4, b, 700 + p.x1, tick));
           ashFlecks((x, y, k) => fpix.set(x, y, k), p.landedAt, now, lx, ly, 52, p.seed + 100, (t) => burnOf(p, t));
@@ -3614,6 +3628,14 @@ export const room: Stage = {
       cpix.present(cg);
       // The slam's ripple: the pixel world bent, drawn over the 2D layers it comes from (hidden meanwhile).
       const rt = slamAt === null ? -1 : now - slamAt - SLAM_IMPACT_MS;
+      // The two views are the frame's size only from a slam's lift to its ripple's end (ripple.ts).
+      if (slamAt !== null && rt < RIPPLE_MS) {
+        rippleBack?.wake();
+        rippleFront?.wake();
+      } else {
+        rippleBack?.rest();
+        rippleFront?.rest();
+      }
       const bent = rt >= 0 && rt < RIPPLE_MS && !!rippleBack?.draw(SLAM_AT.x, SLAM_AT.y, rt) && !!rippleFront?.draw(SLAM_AT.x, SLAM_AT.y, rt);
       frame.classList.toggle('is-rippling', bent);
       poseTears(now);
@@ -3658,6 +3680,11 @@ export const room: Stage = {
         'abort',
         () => {
           stop();
+          // The host takes the root off the page in this same task: the room's canvases are emptied, so their pixels
+          // are given back now and not at some later garbage collection (the doc layer alone is the frame at the
+          // screen's resolution).
+          for (const c of [canvas, cursor, front, lit, doc, art]) c.width = c.height = 0;
+          DOC.release();
           resolve({ kind: 'start' });
         },
         { once: true },

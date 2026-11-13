@@ -180,6 +180,8 @@ export default function Prntr({ source, recolored, inkHex, stage, audioContext, 
       window.clearTimeout(refuseTimer.current);
       releaseRunAudio(audio, finished);
       root.remove();
+      // the run's copies of the page go with it: emptied, their pixels are given back now
+      for (const copy of [ctx.page.source, ctx.page.recolored]) copy.width = copy.height = 0;
       document.body.style.overflow = prevOverflow;
     };
   }, [stage, audioContext]);

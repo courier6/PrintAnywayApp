@@ -25,7 +25,19 @@ const BAYER = [
   [15, 7, 13, 5],
 ];
 
+/** The print, once it has been rendered: the same picture every time, so every room after the first takes this one. */
+let victory: HTMLCanvasElement | null = null;
+
+/** The print on the wall, rendered once per page load (read it, do not draw on it: the room copies it onto its own canvas). */
 export function renderVictory(): HTMLCanvasElement {
+  if (victory) return victory;
+  const made = paintVictory();
+  // kept only once it has been painted: a browser short of canvas memory gives no context, and the next room tries again
+  if (made.painted) victory = made.canvas;
+  return made.canvas;
+}
+
+function paintVictory(): { canvas: HTMLCanvasElement; painted: boolean } {
   const W = ART_AT.w * ART_SUB;
   const H = ART_AT.h * ART_SUB;
   const make = () => {
@@ -41,7 +53,7 @@ export function renderVictory(): HTMLCanvasElement {
   const g = fig.getContext('2d');
   const pg = prow.getContext('2d');
   const og = out.getContext('2d', { willReadFrequently: true });
-  if (!g || !pg || !og) return out;
+  if (!g || !pg || !og) return { canvas: out, painted: false };
   const u = W / 176; // the shapes below are drawn in a 176 × 128 space
   g.scale(u, u);
   pg.scale(u, u);
@@ -190,5 +202,8 @@ export function renderVictory(): HTMLCanvasElement {
     }
   }
   og.putImageData(img, 0, 0);
-  return out;
+  // the two layers are done with: emptied, their pixels are given back now
+  fig.width = fig.height = 0;
+  prow.width = prow.height = 0;
+  return { canvas: out, painted: true };
 }
