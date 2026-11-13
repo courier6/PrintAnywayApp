@@ -419,7 +419,8 @@ export function startStorm(root: HTMLElement, h1: HTMLElement, slots: StormSlot[
   let cuteX = 0;
   let cuteY = 0;
   let ready = false;
-  /** The place under the flash, drawn once per size in the white and the blue flash. */
+  /** The place under the flash, drawn once per size in the white and the blue flash, one canvas pixel to the cell of Q:
+   * the flash canvas takes it enlarged, cell for cell, when a strike lights it. */
   const place: Record<'white' | 'blue', HTMLCanvasElement> = { white: document.createElement('canvas'), blue: document.createElement('canvas') };
 
   /**
@@ -436,14 +437,15 @@ export function startStorm(root: HTMLElement, h1: HTMLElement, slots: StormSlot[
    * so the place keeps its size whatever the cell (s = P / Q); the whole thing fades out to nothing
    * towards the edges of the screen, the building the brightest. (The woods sheet of 2026-10-28, #6.)
    */
-  const drawPlace = (lit: string, into: HTMLCanvasElement) => {
+  const drawPlace = (lit: string, b: HTMLCanvasElement) => {
     const s = P / Q;
     const cw = Math.ceil(W / Q);
     const ch = Math.ceil(H / Q);
-    const b = document.createElement('canvas');
     b.width = cw;
     b.height = ch;
-    const c = b.getContext('2d');
+    // drawn once and read back for its fade: kept in memory (willReadFrequently), where the read is a copy and not a
+    // round trip to the GPU
+    const c = b.getContext('2d', { willReadFrequently: true });
     if (!c) return;
     const cell = (x: number, y: number, w: number, h: number, color: string) => {
       c.fillStyle = color;
@@ -609,12 +611,6 @@ export function startStorm(root: HTMLElement, h1: HTMLElement, slots: StormSlot[
       }
     }
     c.putImageData(img, 0, 0);
-    into.width = W;
-    into.height = H;
-    const ig = into.getContext('2d');
-    if (!ig) return;
-    ig.imageSmoothingEnabled = false;
-    ig.drawImage(b, 0, 0, cw * Q, ch * Q);
   };
 
   const measure = () => {
@@ -629,17 +625,26 @@ export function startStorm(root: HTMLElement, h1: HTMLElement, slots: StormSlot[
     P = Math.max(2, Math.round(F / 24));
     Q = Math.max(1, Math.round(F / 54));
     U = Math.max(2, Math.round(P / 2));
-    // the mask: each letter drawn as the page draws it (same face, size, place and wobble)
+    // the mask: each letter drawn as the page draws it (same face, size, place and wobble), on a canvas the size of
+    // the word's box (the slots, half a letter's height out on every side) and kept in memory (willReadFrequently): it is
+    // drawn once and read once, and read back from the GPU that read stalled the title's first letter
+    const rects = slots.map((s) => s.el.getBoundingClientRect());
+    const pad = Math.ceil(F / 2);
+    const bx = Math.max(0, Math.floor(Math.min(...rects.map((r) => r.left))) - pad);
+    const by = Math.max(0, Math.floor(Math.min(...rects.map((r) => r.top))) - pad);
+    const bw = Math.max(1, Math.min(W, Math.ceil(Math.max(...rects.map((r) => r.right))) + pad) - bx);
+    const bh = Math.max(1, Math.min(H, Math.ceil(Math.max(...rects.map((r) => r.bottom))) + pad) - by);
     const m = document.createElement('canvas');
-    m.width = W;
-    m.height = H;
-    const mg = m.getContext('2d');
+    m.width = bw;
+    m.height = bh;
+    const mg = m.getContext('2d', { willReadFrequently: true });
     if (!mg) return;
+    mg.translate(-bx, -by);
     mg.font = `${style.fontWeight} ${F}px ${style.fontFamily}`;
     mg.textBaseline = 'alphabetic';
     mg.fillStyle = '#fff';
-    slots.forEach((s) => {
-      const r = s.el.getBoundingClientRect();
+    slots.forEach((s, i) => {
+      const r = rects[i];
       const lw = s.el.offsetWidth;
       const lh = s.el.offsetHeight;
       const met = mg.measureText(s.ch);
@@ -652,19 +657,19 @@ export function startStorm(root: HTMLElement, h1: HTMLElement, slots: StormSlot[
       mg.fillText(s.ch, -lw / 2, -lh / 2 + baseline);
       mg.restore();
     });
-    const d = mg.getImageData(0, 0, W, H).data;
+    const d = mg.getImageData(0, 0, bw, bh).data;
+    m.width = m.height = 0;
     top = new Int16Array(W).fill(-1);
     bottom = new Int16Array(W).fill(-1);
     letter = new Int8Array(W).fill(-1);
-    for (let x = 0; x < W; x++) {
-      for (let y = 0; y < H; y++) {
-        if (d[(y * W + x) * 4 + 3] > 128) {
-          if (top[x] < 0) top[x] = y;
-          bottom[x] = y;
+    for (let y = 0; y < bh; y++) {
+      for (let x = 0, i = y * bw * 4 + 3; x < bw; x++, i += 4) {
+        if (d[i] > 128) {
+          if (top[bx + x] < 0) top[bx + x] = by + y;
+          bottom[bx + x] = by + y;
         }
       }
     }
-    const rects = slots.map((s) => s.el.getBoundingClientRect());
     wordLeft = W;
     wordRight = 0;
     wordTop = H;
@@ -746,12 +751,29 @@ export function startStorm(root: HTMLElement, h1: HTMLElement, slots: StormSlot[
   };
   /** Snap to the pixel grid. */
   const snap = (v: number) => Math.floor(v / P) * P;
-  /** A cloud's cells drawn into a buffer in its shades, then put on the canvas: in the red
-   * weather with the door's glow around it. */
-  const buf = document.createElement('canvas');
-  const bg = buf.getContext('2d');
-  const paint = (cells: boolean[][], shades: Shades, lit: boolean) => {
-    if (!bg) return;
+  /** A cloud's cells drawn into a picture in its shades (or lit all over), then put on the canvas: in the red
+   * weather with the door's glow around it. A picture is painted once and kept, by the cloud's cells and its shades:
+   * the clouds change only with the size, and measure() makes new cells then. */
+  const pictures = new Map<boolean[][], Map<string, HTMLCanvasElement>>();
+  /** The canvases this storm holds beside the two on the page; emptied when they are done with, which gives their
+   * pixels back at once and not at some later garbage collection. */
+  const release = (...canvases: HTMLCanvasElement[]) => {
+    for (const c of canvases) c.width = c.height = 0;
+  };
+  const forget = () => {
+    for (const set of pictures.values()) release(...set.values());
+    pictures.clear();
+  };
+  const picture = (cells: boolean[][], shades: Shades, lit: boolean): HTMLCanvasElement | null => {
+    let set = pictures.get(cells);
+    if (!set) pictures.set(cells, (set = new Map()));
+    const key = lit ? CLOUD_LIT : shades[0];
+    const kept = set.get(key);
+    if (kept) return kept;
+    const buf = document.createElement('canvas');
+    const bg = buf.getContext('2d');
+    if (!bg) return null;
+    set.set(key, buf);
     const rows = cells.length;
     const cols = cells[0].length;
     buf.width = cols * U;
@@ -777,10 +799,11 @@ export function startStorm(root: HTMLElement, h1: HTMLElement, slots: StormSlot[
         bg.fillRect(c * U, r * U, U, U);
       }
     }
+    return buf;
   };
   const drawCloud = (cells: boolean[][], x: number, y: number, shades: Shades, lit: boolean) => {
-    paint(cells, shades, lit);
-    g.drawImage(buf, x, y);
+    const pic = picture(cells, shades, lit);
+    if (pic) g.drawImage(pic, x, y);
   };
 
   // ---- the torn red cloud ------------------------------------------------
@@ -800,7 +823,7 @@ export function startStorm(root: HTMLElement, h1: HTMLElement, slots: StormSlot[
   let pieces: Piece[] = [];
   let rollAt = 0;
   /** Cut the picture into 6–9 bands of random height and 2–3 blocks cut across them. */
-  const tear = () => {
+  const tear = (buf: HTMLCanvasElement) => {
     const w = buf.width;
     const h = buf.height;
     pieces = [];
@@ -834,8 +857,9 @@ export function startStorm(root: HTMLElement, h1: HTMLElement, slots: StormSlot[
     }
   };
   const drawTorn = (now: number) => {
-    paint(cute, RED, false);
-    if (!pieces.length) tear();
+    const buf = picture(cute, RED, false);
+    if (!buf) return;
+    if (!pieces.length) tear(buf);
     // re-rolled every ~60 ms; under reduced motion once
     if (now - rollAt >= 60 && (!reduced || rollAt === 0)) roll(now);
     const t = reduced ? 0 : (now - rollAt) / 1000;
@@ -890,7 +914,7 @@ export function startStorm(root: HTMLElement, h1: HTMLElement, slots: StormSlot[
     const m = document.createElement('canvas');
     m.width = w;
     m.height = h;
-    const mg = m.getContext('2d');
+    const mg = m.getContext('2d', { willReadFrequently: true });
     if (!mg || w <= 2 * V || h <= 2 * V) return [];
     mg.font = `${style.fontWeight} ${F}px ${style.fontFamily}`;
     mg.textBaseline = 'alphabetic';
@@ -1162,11 +1186,20 @@ export function startStorm(root: HTMLElement, h1: HTMLElement, slots: StormSlot[
     if (flashAt && ft < FLASH_MS) {
       if (ft === 0 || flash.dataset.lit !== (flashBlue ? 'blue' : 'white')) {
         flash.dataset.lit = flashBlue ? 'blue' : 'white';
+        const lit = place[flashBlue ? 'blue' : 'white'];
         fg.clearRect(0, 0, W, H);
-        fg.drawImage(place[flashBlue ? 'blue' : 'white'], 0, 0);
+        fg.imageSmoothingEnabled = false;
+        fg.drawImage(lit, 0, 0, lit.width * Q, lit.height * Q);
       }
-      flash.style.opacity = String(0.8 * (1 - ft / FLASH_MS));
-    } else flash.style.opacity = '0';
+      fade(String(0.8 * (1 - ft / FLASH_MS)));
+    } else fade('0');
+  };
+  /** The flash canvas's opacity, written only when it changes: between strikes it is 0 for seconds on end. */
+  let faded = '';
+  const fade = (opacity: string) => {
+    if (opacity === faded) return;
+    faded = opacity;
+    flash.style.opacity = opacity;
   };
 
   const loop = (now: number) => {
@@ -1183,11 +1216,14 @@ export function startStorm(root: HTMLElement, h1: HTMLElement, slots: StormSlot[
       window.removeEventListener('resize', onResize);
       canvas.remove();
       flash.remove();
+      forget();
+      release(canvas, flash, place.white, place.blue);
       return;
     }
     raf = requestAnimationFrame(loop);
   };
   const onResize = () => {
+    forget();
     measure();
     wet = new Uint8Array(W);
     drops.length = 0;
@@ -1197,6 +1233,9 @@ export function startStorm(root: HTMLElement, h1: HTMLElement, slots: StormSlot[
   };
   onResize();
   window.addEventListener('resize', onResize);
+  // A browser that loses its GPU (a driver reset, a remote desktop taking over) hands every canvas back blank. This
+  // one is redrawn each frame; the kept cloud pictures are not, so they are painted again.
+  canvas.addEventListener('contextrestored', forget);
   raf = requestAnimationFrame(loop);
 
   return {
@@ -1229,6 +1268,8 @@ export function startStorm(root: HTMLElement, h1: HTMLElement, slots: StormSlot[
       window.removeEventListener('resize', onResize);
       canvas.remove();
       flash.remove();
+      forget();
+      release(canvas, flash, place.white, place.blue);
     },
   };
 }
