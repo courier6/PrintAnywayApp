@@ -74,31 +74,58 @@ export interface BlitOptions {
 }
 
 /**
+ * Each palette key's colour as one 32-bit pixel, by the key's char code: its bytes in memory are R, G, B, 255, whatever
+ * the machine's byte order, since it is read back through the same kind of view it is written through.
+ */
+const PACKED = new Uint32Array(128);
+{
+  const bytes = new Uint8ClampedArray(4);
+  const word = new Uint32Array(bytes.buffer);
+  for (const k of Object.keys(PAL) as PalKey[]) {
+    bytes.set([...RGB[k], 255]);
+    PACKED[k.charCodeAt(0)] = word[0];
+  }
+}
+/** '.', a sprite map's transparent cell. */
+const CLEAR = 46;
+/** A row narrower than this is written pixel by pixel; from here on one fill() per row is the faster. */
+const FILL_FROM = 8;
+
+/**
  * A 240×160 RGBA frame buffer, written pixel by pixel and put on the canvas in one
  * putImageData. The canvas is 240×160 and CSS scales it up with nearest-neighbour
  * (`image-rendering: pixelated`), so nothing in the pixel layer is ever smoothed.
+ * The room is redrawn whole every frame, so the writes go through a 32-bit view of the buffer: one store per
+ * pixel, and a rect's row in one fill.
  */
 export class Pix {
   readonly image = new ImageData(W, H);
   private readonly d = this.image.data;
+  private readonly p = new Uint32Array(this.image.data.buffer);
 
   set(x: number, y: number, key: PalKey): void {
     if (x < 0 || y < 0 || x >= W || y >= H) return;
-    const i = (y * W + x) * 4;
+    const i = y * W + x;
+    if ((i | 0) === i) {
+      this.p[i] = PACKED[key.charCodeAt(0)];
+      return;
+    }
+    // a fractional place: byte by byte, as before the 32-bit view (nowhere, or astride two pixels at a quarter step)
     const c = RGB[key];
-    this.d[i] = c[0];
-    this.d[i + 1] = c[1];
-    this.d[i + 2] = c[2];
-    this.d[i + 3] = 255;
+    const b = i * 4;
+    this.d[b] = c[0];
+    this.d[b + 1] = c[1];
+    this.d[b + 2] = c[2];
+    this.d[b + 3] = 255;
   }
 
   fill(key: PalKey): void {
-    this.rect(0, 0, W, H, key);
+    this.p.fill(PACKED[key.charCodeAt(0)]);
   }
 
   /** Every pixel transparent (the cursor layer starts each frame empty). */
   clear(): void {
-    this.d.fill(0);
+    this.p.fill(0);
   }
 
   /** A rect made transparent (the hole in the wall the print is seen through). Half-open. */
@@ -110,12 +137,47 @@ export class Pix {
 
   /** Half-open like the designer's Python: x0..x1-1, y0..y1-1. */
   rect(x0: number, y0: number, x1: number, y1: number, key: PalKey): void {
-    for (let y = Math.max(0, y0); y < Math.min(H, y1); y++) {
-      for (let x = Math.max(0, x0); x < Math.min(W, x1); x++) this.set(x, y, key);
+    const xa = Math.max(0, x0);
+    const ya = Math.max(0, y0);
+    const xb = Math.min(W, x1);
+    const yb = Math.min(H, y1);
+    if ((xa | 0) !== xa || (ya | 0) !== ya) {
+      // a fractional corner: pixel by pixel through set(), which draws at whole coordinates only
+      for (let y = ya; y < yb; y++) {
+        for (let x = xa; x < xb; x++) this.set(x, y, key);
+      }
+      return;
+    }
+    if (!(xb > xa)) return;
+    const c = PACKED[key.charCodeAt(0)];
+    const p = this.p;
+    const xe = Math.ceil(xb);
+    if (xe - xa < FILL_FROM) {
+      for (let y = ya; y < yb; y++) {
+        for (let i = y * W + xa, end = y * W + xe; i < end; i++) p[i] = c;
+      }
+    } else {
+      for (let y = ya; y < yb; y++) p.fill(c, y * W + xa, y * W + xe);
     }
   }
 
   blit(x: number, y: number, sprite: Sprite, scale = 1, opts: BlitOptions = {}): void {
+    if (scale === 1 && !opts.white && !opts.remap && !opts.skew && !opts.tilt && !opts.fine && (x | 0) === x && (y | 0) === y) {
+      // a plain sprite at a whole place (most of what the room draws): straight from the map's char codes
+      const p = this.p;
+      for (let dy = 0; dy < sprite.h; dy++) {
+        const oy = y + dy;
+        if (oy < 0 || oy >= H) continue;
+        const row = sprite.rows[dy];
+        const at = oy * W + x;
+        for (let dx = 0; dx < sprite.w; dx++) {
+          const code = row.charCodeAt(dx);
+          if (code === CLEAR || x + dx < 0 || x + dx >= W) continue;
+          p[at + dx] = PACKED[code];
+        }
+      }
+      return;
+    }
     for (let dy = 0; dy < sprite.h; dy++) {
       const row = sprite.rows[dy];
       for (let dx = 0; dx < sprite.w; dx++) {
@@ -140,14 +202,10 @@ export class Pix {
   /** This buffer cleared, then `src`'s pixels copied wherever `mask` is opaque (the lit layer: the room's own
    * pixels where a glowing subject shows, whatever is drawn over it; PRNTR-GLOWS.md). */
   copyMasked(src: Pix, mask: Pix): void {
-    const d = this.d, s = src.d, m = mask.d;
+    const d = this.p, s = src.p, m = mask.d;
     d.fill(0);
-    for (let i = 3; i < d.length; i += 4) {
-      if (!m[i]) continue;
-      d[i - 3] = s[i - 3];
-      d[i - 2] = s[i - 2];
-      d[i - 1] = s[i - 1];
-      d[i] = s[i];
+    for (let i = 0, a = 3; i < d.length; i++, a += 4) {
+      if (m[a]) d[i] = s[i];
     }
   }
 
