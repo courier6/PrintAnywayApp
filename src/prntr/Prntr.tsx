@@ -13,6 +13,11 @@ import { STAGES } from './stages';
 import type { Certificate, StageContext } from './types';
 
 export { createVortex } from './vortex';
+export { warmCue } from './audio';
+export { warmStorm } from './stages/storm';
+export { frameScale } from './stages/room/pixels';
+export { warmRipple } from './stages/room/ripple';
+export { renderVictory as warmPrint } from './stages/room/art';
 export { PrntrBoard } from './PrntrBoard';
 
 /** After a finished run, how long its last sounds (the fanfare, the game-over sting) may play on. */
@@ -179,6 +184,8 @@ export default function Prntr({ source, recolored, inkHex, stage, audioContext, 
       window.clearTimeout(refuseTimer.current);
       releaseRunAudio(audio, finished);
       root.remove();
+      // the run's copies of the page go with it: emptied, their pixels are given back now
+      for (const copy of [ctx.page.source, ctx.page.recolored]) copy.width = copy.height = 0;
       document.body.style.overflow = prevOverflow;
     };
   }, [stage, audioContext]);

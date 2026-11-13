@@ -63,6 +63,12 @@ export class DocContent {
     return fit;
   }
 
+  /** The room is over: the fitted copies are emptied, their pixels given back. */
+  release(): void {
+    for (const fit of this.fits.values()) fit.canvas.width = fit.canvas.height = 0;
+    this.fits.clear();
+  }
+
   /**
    * Draws the content of the page whose sprite's top-left is (x, y) at scale `sc`, on `g` with `k` device px to the
    * virtual px: the content cells in `paper`, the bitmap multiplied onto them; only the first `rows` output rows
